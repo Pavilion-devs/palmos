@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-quicksand: 'Quicksand', ui-sans-serif, sans-serif;
+  --font-anton: 'Anton', ui-sans-serif, sans-serif;
+  --font-marker: 'Permanent Marker', cursive;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #000000;
+  color: #ffffff;
+  margin: 0;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #000;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.text-glow {
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.1);
+}
+
+.palm-hero-mark {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  margin-bottom: 28px;
+  animation: palmFloat 7s ease-in-out infinite;
+}
+
+.palm-stem {
+  position: absolute;
+  left: 41px;
+  top: 22px;
+  width: 3px;
+  height: 58px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.08));
+  transform: rotate(10deg);
+  transform-origin: top center;
+}
+
+.palm-leaf {
+  position: absolute;
+  left: 41px;
+  top: 19px;
+  width: 3px;
+  height: 42px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.08));
+  transform-origin: bottom center;
+  animation: palmSway 4.8s ease-in-out infinite;
+}
+
+.palm-leaf-1 {
+  transform: rotate(-72deg);
+}
+
+.palm-leaf-2 {
+  transform: rotate(-52deg);
+  animation-delay: 90ms;
+}
+
+.palm-leaf-3 {
+  transform: rotate(-32deg);
+  animation-delay: 180ms;
+}
+
+.palm-leaf-4 {
+  transform: rotate(-12deg);
+  animation-delay: 270ms;
+}
+
+.palm-leaf-5 {
+  transform: rotate(8deg);
+  animation-delay: 360ms;
+}
+
+.palm-leaf-6 {
+  transform: rotate(28deg);
+  animation-delay: 450ms;
+}
+
+.palm-leaf-7 {
+  transform: rotate(48deg);
+  animation-delay: 540ms;
+}
+
+.palm-leaf-8 {
+  transform: rotate(68deg);
+  animation-delay: 630ms;
+}
+
+.palm-leaf-9 {
+  height: 34px;
+  transform: rotate(88deg);
+  animation-delay: 720ms;
+}
+
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes palmFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes palmSway {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}

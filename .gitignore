@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Build output
+frontend/dist/
+frontend/node_modules/
+
+# OS
+.DS_Store
+
+# Planning / internal docs — keep locally, don't ship
+architecture-handoff.md
+dashboard.md
+live-dashboard-scope.md
+plan.md
+scope.md
+terminal-demo.md
+prd.md
+sdk.md
+dashboard-cards-reuse-plan.md
+dashboard-rewire-handoff.md
+dashboard-ui.md
+onboarding-engine.md
+
+# Render deployment config (deploying via Vercel/GitHub instead)
+render.yaml
+
+# Separate experimental scaffold — not part of PalmOS
+cards/
+
+# Internal assets
+image.png
+
+# Temp / runtime
+/tmp/
+*.db3
+bun.lock
