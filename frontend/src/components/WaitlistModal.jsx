@@ -132,7 +132,7 @@ export default function WaitlistModal({ open, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-10 min-w-10 items-center justify-center text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
             aria-label="Close waitlist form"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -155,7 +155,7 @@ export default function WaitlistModal({ open, onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="mt-5 min-h-10 w-full border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+              className="mt-5 min-h-10 w-full cursor-pointer border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
             >
               Done
             </button>
@@ -229,7 +229,7 @@ export default function WaitlistModal({ open, onClose }) {
               type="submit"
               disabled={pending}
               aria-busy={pending}
-              className="min-h-10 w-full border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
+              className="min-h-10 w-full cursor-pointer border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
             >
               {pending ? 'Joining...' : 'Join waitlist'}
             </button>

@@ -1,7 +1,13 @@
+import ScrollReveal from './motion/ScrollReveal'
+
 export default function SiteFooter() {
   return (
     <section className="relative w-full overflow-hidden border-neutral-900 border-t bg-[#F5F2EB] px-6 pt-16 pb-0 text-black md:px-12">
-      <div className="mb-16 grid grid-cols-1 gap-8 font-sans text-xs font-semibold tracking-tight uppercase md:mb-24 md:grid-cols-3 md:gap-4 md:text-sm">
+      <ScrollReveal
+        className="mb-16 grid grid-cols-1 gap-8 font-sans text-xs font-semibold tracking-tight uppercase md:mb-24 md:grid-cols-3 md:gap-4 md:text-sm"
+        direction="up"
+        amount={0.3}
+      >
         <div className="flex flex-col space-y-0.5">
           <a
             href="#"
@@ -25,9 +31,13 @@ export default function SiteFooter() {
           <p>PalmOS</p>
           <p>©2026 - Hackathon Entry</p>
         </div>
-      </div>
+      </ScrollReveal>
 
-      <div className="relative flex w-full flex-col items-center leading-none select-none pb-4 md:pb-8">
+      <ScrollReveal
+        className="relative flex w-full flex-col items-center leading-none select-none pb-4 md:pb-8"
+        direction="still"
+        amount={0.25}
+      >
         <div className="w-full text-center">
           <h2 className="font-anton block w-full origin-bottom scale-y-[1.4] text-[25vw] leading-[0.8] tracking-[-0.03em] uppercase transform">
             PALM
@@ -44,7 +54,7 @@ export default function SiteFooter() {
             wallets not blank checks
           </p>
         </div>
-      </div>
+      </ScrollReveal>
     </section>
   )
 }

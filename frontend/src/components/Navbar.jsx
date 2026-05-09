@@ -24,7 +24,7 @@ export default function Navbar({ onJoinWaitlist }) {
       <button
         type="button"
         onClick={onJoinWaitlist}
-        className="group flex items-center gap-2 border border-neutral-700 px-5 py-2 text-xs font-medium uppercase tracking-wide transition-all duration-300 hover:bg-white hover:text-black"
+        className="group flex cursor-pointer items-center gap-2 border border-neutral-700 px-5 py-2 text-xs font-medium uppercase tracking-wide transition-all duration-300 hover:bg-white hover:text-black"
       >
         <span>Join waitlist</span>
         <ArrowUpRight

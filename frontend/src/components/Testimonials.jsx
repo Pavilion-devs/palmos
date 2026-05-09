@@ -1,5 +1,7 @@
 import { CheckCircle, Clock, XCircle } from 'lucide-react'
 import { outcomeCards } from '../content'
+import ScrollReveal from './motion/ScrollReveal'
+import { LANDING_TIMING } from './motion/landingMotion'
 
 const statusConfig = {
   green: { icon: CheckCircle, border: 'border-green-500/30', dot: 'bg-green-500', text: 'text-green-400' },
@@ -10,18 +12,24 @@ const statusConfig = {
 export default function Testimonials() {
   return (
     <section id="outcomes" className="px-6 py-12 md:px-12">
-      <h2 className="mb-16 text-center text-4xl font-medium tracking-tighter md:text-5xl">
+      <ScrollReveal
+        as="h2"
+        className="mb-16 text-center text-4xl font-medium tracking-tighter md:text-5xl"
+        amount={0.45}
+      >
         three policy paths
-      </h2>
+      </ScrollReveal>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        {outcomeCards.map((card) => {
+        {outcomeCards.map((card, index) => {
           const config = statusConfig[card.color]
           const Icon = config.icon
           return (
-            <div
+            <ScrollReveal
               key={card.status}
               className={`flex h-full flex-col justify-between border ${config.border} bg-neutral-900/20 p-8 transition-colors duration-300 hover:border-neutral-600`}
+              delay={index * LANDING_TIMING.itemStagger}
+              amount={0.35}
             >
               <div>
                 <div className="mb-6 flex items-center gap-3">
@@ -38,7 +46,7 @@ export default function Testimonials() {
                 <Icon className={`h-4 w-4 ${config.text}`} strokeWidth={1.5} />
                 <span className="text-sm font-light text-neutral-500">{card.policy}</span>
               </div>
-            </div>
+            </ScrollReveal>
           )
         })}
       </div>

@@ -13,6 +13,20 @@ import WaitlistModal from './components/WaitlistModal'
 import Dashboard from './components/dashboard/Dashboard'
 import useHashRoute from './hooks/useHashRoute'
 
+/* --------------------------------------------------------------------------
+ * LANDING MOTION STORYBOARD
+ *
+ * Static shell: navbar is visible immediately.
+ *
+ *    0ms   hero palm mark fades in + floats in place
+ *   80ms   hero headline rises into focus
+ *  200ms   hero eyebrow appears
+ *  300ms   hero body copy appears
+ *  420ms   hero CTA appears
+ * scroll   each section fades, blurs out, and rises into place
+ * scroll   repeated cards/steps/logos cascade by index
+ * -------------------------------------------------------------------------- */
+
 const PUBLIC_ACCESS_MODE =
   import.meta.env.VITE_PALMOS_PUBLIC_ACCESS_MODE === '1' ||
   import.meta.env.PROD
@@ -38,7 +52,7 @@ function LandingPage() {
         <SectionDivider />
         <Testimonials />
         <CrewSection />
-        <Newsletter />
+        <Newsletter onBookDemo={() => setWaitlistOpen(true)} />
         <SiteFooter />
       </main>
       <WaitlistModal

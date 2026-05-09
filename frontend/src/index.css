@@ -146,3 +146,16 @@ details > summary::-webkit-details-marker {
     filter: brightness(1.35);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .palm-hero-mark,
+  .palm-leaf {
+    animation: none;
+  }
+}
