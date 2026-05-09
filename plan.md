@@ -89,6 +89,7 @@ PalmOS has four first-class user jobs:
    - PalmOS checks policy before payment.
    - PalmOS pays PUSD only when allowed or approved.
    - PalmOS blocks unknown vendors, exhausted budgets, and invalid wallet states.
+   - Later, the same policy engine can also route approved sensitive treasury movement through a private Umbra settlement rail without replacing the public PUSD API-payment path.
 
 4. **Operate approvals and audit**
    - Dashboard shows agent wallets, budgets, calls, approvals, blocked attempts, and receipts.
@@ -107,6 +108,48 @@ Core primitives:
 - `PaidCall`
 - `Approval`
 - `AuditEvent`
+- `SettlementRail`
+- `PrivacyProof`
+
+## Later Private Settlement Direction
+
+PalmOS should remain the operating system. Umbra should become an optional privacy execution layer after the normal Palm/PUSD product path works and is deployed.
+
+Reference plan:
+
+```text
+umbra-migration.md
+```
+
+Target mental model:
+
+```text
+agent -> PalmOS policy/approval -> Umbra private settlement -> PalmOS reconciliation/audit
+```
+
+This means agents can eventually have private transactions, but only after PalmOS enforces the same controls it already applies to normal PUSD agent payments:
+
+- agent identity
+- policy limits
+- session budget
+- allowed destination/service
+- approval threshold
+- XMTP/dashboard approval where needed
+- final audit and reconciliation
+
+Implementation rules:
+
+- Do not touch or destabilize the PUSD rail first.
+- Add Umbra under `src/integrations/umbra/*`.
+- Build one focused proof command first: `npm run palmos:umbra-private`.
+- Route the private settlement through PalmOS policy before calling Umbra.
+- Store Umbra proof fields in the same paid-call/audit model, including settlement rail, privacy path, final transaction, report id, and reconciliation result.
+
+This is a later track extension, not an immediate dependency for the Palm USD hackathon submission. The priority remains:
+
+```text
+PUSD agent payments -> backend deployment -> submission polish -> optional Umbra private settlement mode
+```
 
 ## Product Rules Going Forward
 
@@ -325,6 +368,7 @@ What is not done yet:
 - Demo video and final Superteam submission answers are not prepared yet.
 - Backend deployment is not done yet. Vercel can host the frontend now, but the full private dashboard needs a separate backend URL before judges can use the real app remotely.
 - Production deployment envs are not finalized yet, especially persistent backend storage, PUSD/OWS/XMTP secrets, and backend CORS/domain config.
+- Umbra private settlement mode is not implemented yet. It is documented in `umbra-migration.md` as a later integration path after the Palm/PUSD core is stable.
 
 ## Existing Codebase Baseline
 
@@ -1338,6 +1382,7 @@ Current phase status as of May 9, 2026:
 | Phase 8.7: Public Landing And Judge Gate | Done for frontend MVP | Public CTAs open Formspree waitlist, judge access is backend-passcode gated, signed cookies are used, and frontend was pushed for Vercel pickup. Backend deployment remains separate. |
 | Phase 8.6: Backend Hardening Before Submission | In progress | Important guards exist; service endpoint hardening, abuse controls, and security review remain. |
 | Phase 9: Submission Polish | Pending | README, architecture walkthrough, demo video, and Superteam submission assets remain. |
+| Phase 10: Umbra Private Settlement Mode | Future | Optional later extension from `umbra-migration.md`. Keep PalmOS as the policy/approval/audit OS and add Umbra as a surgical privacy settlement rail under `src/integrations/umbra/*`. |
 
 ## Immediate Next Steps
 
@@ -1372,6 +1417,14 @@ Current phase status as of May 9, 2026:
    - Prepare demo script.
    - Record product walkthrough video.
    - Prepare Superteam submission copy.
+
+6. Later: Umbra private settlement mode.
+   - Use `umbra-migration.md` as the migration source of truth.
+   - Keep the PUSD rail untouched at first.
+   - Add `src/integrations/umbra/*`.
+   - Build `npm run palmos:umbra-private` as the first proof.
+   - Route the Umbra call through PalmOS policy and approval before execution.
+   - Store privacy proof fields in the paid-call/audit model.
 
 ## Superteam Submission Angle
 
