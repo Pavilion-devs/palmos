@@ -4,11 +4,12 @@ import {
   getWallet,
   importWalletPrivateKey,
   listWallets,
+  signTransaction,
   signMessage,
   type ApiKeyResult,
   type WalletInfo,
 } from '@open-wallet-standard/core'
-import { PublicKey, type Transaction } from '@solana/web3.js'
+import { Connection, PublicKey, type Transaction } from '@solana/web3.js'
 import { mkdir } from 'fs/promises'
 import { execFile as execFileCallback } from 'child_process'
 import { join, resolve } from 'path'
@@ -20,9 +21,10 @@ import {
   checkPusdPaymentReadiness,
   formatPusdReadinessFailure,
 } from '../pusd/readiness.js'
+import { readSolanaRpcUrlFromEnv } from '../pusd/constants.js'
 
 const execFile = promisify(execFileCallback)
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)))
 const OWS_BIN_PATH = join(PACKAGE_ROOT, 'node_modules', '.bin', 'ows')
 
 export type OwsClientConfig = {
@@ -247,6 +249,7 @@ export class OwsClient {
     rpcUrl?: string
   }): Promise<OwsSolanaPaymentResult> {
     await this.ensureHome()
+    const rpcUrl = input.rpcUrl?.trim() || readSolanaRpcUrlFromEnv()
     const wallet = this.getWallet(input.wallet)
     const solanaAddress = readSolanaAddress(wallet)
     if (!solanaAddress) {
@@ -257,7 +260,7 @@ export class OwsClient {
       recipient: input.payment.recipient,
       amount: input.payment.amount,
       mint: input.payment.mint,
-      rpcUrl: input.rpcUrl,
+      rpcUrl,
     })
     if (!readiness.ok) {
       throw new Error(
@@ -268,37 +271,38 @@ export class OwsClient {
     const transaction = await buildUnsignedPusdPaymentTransaction({
       payment: input.payment,
       payer: new PublicKey(solanaAddress),
-      rpcUrl: input.rpcUrl,
+      rpcUrl,
     })
-    const args = [
-      'sign',
-      'send-tx',
-      '--chain',
-      'solana',
-      '--wallet',
+    const signed = signTransaction(
       input.wallet,
-      '--tx',
+      'solana',
       transactionToUnsignedHex(transaction),
-      '--json',
-    ]
-    if (input.rpcUrl?.trim()) {
-      args.push('--rpc-url', input.rpcUrl.trim())
+      this.config.passphrase,
+      0,
+      this.config.vaultPath,
+    )
+    const signatureHex = signed.signature.startsWith('0x')
+      ? signed.signature.slice(2)
+      : signed.signature
+    const signature = Buffer.from(signatureHex, 'hex')
+
+    transaction.addSignature(new PublicKey(solanaAddress), signature)
+    if (!transaction.verifySignatures()) {
+      throw new Error('OWS returned an invalid Solana transaction signature.')
     }
 
-    const { stdout } = await execFile(OWS_BIN_PATH, args, {
-      env: {
-        ...process.env,
-        OWS_PASSPHRASE: this.config.passphrase,
-        HOME: this.config.homeDir,
-      },
-      cwd: PACKAGE_ROOT,
-    })
-    const parsed = parseOwsSignature(stdout)
+    const connection = new Connection(rpcUrl, 'confirmed')
+    const transactionSignature = await connection.sendRawTransaction(
+      transaction.serialize(),
+    )
+    await connection.confirmTransaction(transactionSignature, 'confirmed')
 
     return {
-      stdout,
-      parsedBody: parsed.parsedBody,
-      signature: parsed.signature,
+      stdout: JSON.stringify({ signature: transactionSignature }),
+      parsedBody: {
+        signature: transactionSignature,
+      },
+      signature: transactionSignature,
     }
   }
 

@@ -3,6 +3,8 @@ export const PUSD_SYMBOL = 'PUSD' as const
 export const PUSD_DECIMALS = 6
 export const PUSD_SOLANA_MINT =
   'CZzgUBvxaMLwMhVSLgqJn3npmxoTo6nzMNQPAnwtHF3s'
+export const PUSD_TOKEN_PROGRAM_ID =
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 export const PALMOS_LOCAL_DEMO_MERCHANT_WALLET =
   '4tC7nLrTUz5nYhhWMspiXAuQcGpBVyRzuMNxR19Xaczy'
 

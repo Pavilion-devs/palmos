@@ -1,25 +1,51 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import useDashboardStore from '../../useDashboardStore'
-import DashboardHeader from './DashboardHeader'
-import AgentSidebar from './AgentSidebar'
-import LiveFeed from './LiveFeed'
-import ApprovalQueue from './ApprovalQueue'
-import AuditLog from './AuditLog'
-import PolicyInspector from './PolicyInspector'
-import ActivityTicker from './ActivityTicker'
+import useHashRoute, { navigate, parseDashboardRoute } from '../../hooks/useHashRoute'
 import DashboardOnboarding from './DashboardOnboarding'
-import AgentStatusPanel from './AgentStatusPanel'
+import DashboardShell from './shell/DashboardShell'
+import Topbar from './shell/Topbar'
+import DashboardHomePage from './pages/DashboardHomePage'
+import MyAgentsPage from './pages/MyAgentsPage'
+import AgentDetailPage from './pages/AgentDetailPage'
+import ServicesPage from './pages/ServicesPage'
+import ServiceDetailPage from './pages/ServiceDetailPage'
+import TransactionsPage from './pages/TransactionsPage'
+import TransactionDetailPage from './pages/TransactionDetailPage'
+import ApprovalsPage from './pages/ApprovalsPage'
+import SettingsPage from './pages/SettingsPage'
 
-const TABS = [
-  { id: 'feed', label: 'Live Feed' },
-  { id: 'approvals', label: 'Approvals' },
-  { id: 'audit', label: 'Audit Log' },
-  { id: 'policy', label: 'Policy' },
-]
+const PAGE_META = {
+  home: { subtitle: 'Operations', title: 'Dashboard' },
+  agents: { subtitle: 'Agents', title: 'My Agents' },
+  'agent-detail': { subtitle: 'Agents', title: 'Agent Detail' },
+  services: { subtitle: 'Services', title: 'Service Registry' },
+  'service-detail': { subtitle: 'Services', title: 'Service Detail' },
+  transactions: { subtitle: 'Transactions', title: 'Paid Calls' },
+  'transaction-detail': { subtitle: 'Transactions', title: 'Transaction Detail' },
+  approvals: { subtitle: 'Approvals', title: 'Approval Queue' },
+  settings: { subtitle: 'Settings', title: 'Workspace Controls' },
+}
+
+const STUB_NAV = {
+  home: 'home',
+  agents: 'agents',
+  'agent-detail': 'agents',
+  services: 'services',
+  'service-detail': 'services',
+  transactions: 'transactions',
+  'transaction-detail': 'transactions',
+  approvals: 'approvals',
+  settings: 'settings',
+}
 
 export default function Dashboard() {
+  const hash = useHashRoute()
+  const route = parseDashboardRoute(hash)
+
   const {
     agents,
+    services,
     events,
     pendingApprovals,
     connectionStatus,
@@ -32,16 +58,22 @@ export default function Dashboard() {
     denyRequest,
     approvalsInteractive,
     totalSpent,
-    totalAgentCount,
-    activeCount,
     pendingCount,
+    listAgentCredentials,
+    createAgent,
+    updateAgentPolicy,
+    runAgentLifecycleAction,
+    createAgentCredential,
+    revokeAgentCredential,
+    updateAgentCredential,
+    rotateAgentCredential,
+    registerService,
+    allowServiceForAgent,
+    unallowServiceForAgent,
   } = useDashboardStore()
 
-  const [activeTab, setActiveTab] = useState('feed')
-  const [selectedAgentId, setSelectedAgentId] = useState(() => {
-    return window.localStorage.getItem('palmos.dashboard.selectedAgentId')
-  })
   const [localCreatedAgentId, setLocalCreatedAgentId] = useState(null)
+  const [agentCreateOpen, setAgentCreateOpen] = useState(false)
   const [setupComplete, setSetupComplete] = useState(() => {
     return (
       !window.location.hash.includes('onboarding') &&
@@ -50,166 +82,173 @@ export default function Dashboard() {
     )
   })
 
-  const activeAgentId = agents.some((agent) => agent.id === selectedAgentId)
-    ? selectedAgentId
-    : null
-
-  const filteredEvents = activeAgentId
-    ? events.filter((e) => e.agentId === activeAgentId)
-    : events
-
-  const filteredApprovals = activeAgentId
-    ? pendingApprovals.filter((p) => p.agentId === activeAgentId)
-    : pendingApprovals
-  const focusedAgent =
-    agents.find((agent) => agent.id === activeAgentId) ??
-    agents[0]
-
   const shouldShowOnboarding =
-    !setupComplete ||
+    route.page === 'onboarding' ||
+    (!setupComplete && !(connectionStatus === 'live' && agents.length > 0)) ||
     (connectionStatus === 'live' && agents.length === 0 && !localCreatedAgentId)
 
   if (shouldShowOnboarding) {
     return (
       <DashboardOnboarding
         onComplete={(setup) => {
-          setSelectedAgentId(setup.agentId ?? null)
           setLocalCreatedAgentId(setup.agentId ?? null)
           setSetupComplete(true)
+          if (setup.agentId) {
+            navigate(`#dashboard/agents/${setup.agentId}`)
+          } else {
+            navigate('#dashboard')
+          }
         }}
       />
     )
   }
 
+  function handleCreateAgent() {
+    if (createAgent) {
+      navigate('#dashboard/agents')
+      setAgentCreateOpen(true)
+      return
+    }
+    navigate('#dashboard/onboarding')
+    setSetupComplete(false)
+  }
+
+  function getFocusedAgentId() {
+    if (route.page === 'agent-detail') return route.agentId
+    return agents[0]?.id ?? null
+  }
+
+  function handlePrimaryAction() {
+    const focusedAgentId = getFocusedAgentId()
+    if (!focusedAgentId) {
+      handleCreateAgent()
+      return
+    }
+    onPrimaryAction(focusedAgentId)
+  }
+
+  const meta = PAGE_META[route.page] ?? PAGE_META.home
+  const activeNav = STUB_NAV[route.page] ?? 'home'
+
+  const topbarRightSlot =
+    route.page === 'agents' ? (
+      <button
+        type="button"
+        onClick={handleCreateAgent}
+        className="hidden items-center gap-2 border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white sm:inline-flex"
+      >
+        <Plus className="h-3 w-3" aria-hidden="true" />
+        New agent
+      </button>
+    ) : null
+
+  const topbar = (
+    <Topbar
+      pageSubtitle={meta.subtitle}
+      pageTitle={meta.title}
+      connectionStatus={connectionStatus}
+      generatedAt={generatedAt}
+      isActionPending={isActionPending}
+      actionLabel={route.page === 'home' ? primaryActionLabel : null}
+      onAction={route.page === 'home' ? handlePrimaryAction : null}
+      rightSlot={topbarRightSlot}
+    />
+  )
+
   return (
-    <div className="flex h-screen flex-col bg-black text-white">
-      <DashboardHeader
-        totalAgentCount={totalAgentCount}
-        activeCount={activeCount}
-        totalSpent={totalSpent}
-        pendingCount={pendingCount}
-        connectionStatus={connectionStatus}
-        isActionPending={isActionPending}
-        generatedAt={generatedAt}
-        actionLabel={primaryActionLabel}
-        onAction={() => {
-          if (!focusedAgent) {
-            window.location.hash = '#dashboard/onboarding'
-            setSetupComplete(false)
-            return
-          }
-
-          onPrimaryAction(focusedAgent.id)
-        }}
-        onResetSetup={() => {
-          window.localStorage.removeItem('palmos.dashboard.setup')
-          window.localStorage.removeItem('palmos.dashboard.selectedAgentId')
-          window.localStorage.removeItem('palmos.dashboard.agentToken')
-          window.location.hash = '#dashboard/onboarding'
-          setLocalCreatedAgentId(null)
-          setSetupComplete(false)
-        }}
-      />
-
-      {syncError && (
-        <div className="border-b border-red-500/20 bg-red-500/5 px-5 py-2">
-          <p className="text-xs text-red-300">{syncError}</p>
-        </div>
+    <DashboardShell
+      activePage={activeNav}
+      pendingCount={pendingCount}
+      topbar={topbar}
+      syncError={syncError}
+    >
+      {route.page === 'home' && (
+        <DashboardHomePage
+          agents={agents}
+          services={services}
+          events={events}
+          pendingApprovals={pendingApprovals}
+          totalSpent={totalSpent}
+          pendingCount={pendingCount}
+          onApprove={approveRequest}
+          onDeny={denyRequest}
+          approvalsInteractive={approvalsInteractive}
+        />
       )}
 
-      <div className="flex min-h-0 flex-1">
-        {/* Left sidebar — agent list */}
-        <AgentSidebar
+      {route.page === 'agents' && (
+        <MyAgentsPage
           agents={agents}
-          selectedAgentId={activeAgentId}
-          onSelectAgent={(id) => {
-            const nextId = id === activeAgentId ? null : id
-            setSelectedAgentId(nextId)
-            if (nextId) {
-              window.localStorage.setItem('palmos.dashboard.selectedAgentId', nextId)
-            } else {
-              window.localStorage.removeItem('palmos.dashboard.selectedAgentId')
-            }
-          }}
+          onCreateAgent={handleCreateAgent}
+          createAgent={createAgent}
+          createOpen={agentCreateOpen}
+          onCreateOpenChange={setAgentCreateOpen}
         />
+      )}
 
-        {/* Main content area */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          {/* Tab bar */}
-          <div className="flex items-center gap-0 border-b border-neutral-800 bg-neutral-950">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative px-5 py-3 text-xs font-medium uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white ${
-                  activeTab === tab.id
-                    ? 'text-white'
-                    : 'text-neutral-600 hover:text-neutral-400'
-                }`}
-              >
-                {tab.label}
-                {tab.id === 'approvals' && pendingCount > 0 && (
-                  <span className="ml-2 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-yellow-500/20 px-1 font-mono text-[10px] text-yellow-400">
-                    {pendingCount}
-                  </span>
-                )}
-                {activeTab === tab.id && (
-                  <span className="absolute bottom-0 left-0 h-px w-full bg-white" />
-                )}
-              </button>
-            ))}
+      {route.page === 'agent-detail' && (
+        <AgentDetailPage
+          agentId={route.agentId}
+          agents={agents}
+          services={services}
+          events={events}
+          pendingApprovals={pendingApprovals}
+          onRunAgent={onPrimaryAction}
+          isActionPending={isActionPending}
+          updateAgentPolicy={updateAgentPolicy}
+          runAgentLifecycleAction={runAgentLifecycleAction}
+          listAgentCredentials={listAgentCredentials}
+          createAgentCredential={createAgentCredential}
+          revokeAgentCredential={revokeAgentCredential}
+          updateAgentCredential={updateAgentCredential}
+          rotateAgentCredential={rotateAgentCredential}
+          allowServiceForAgent={allowServiceForAgent}
+          unallowServiceForAgent={unallowServiceForAgent}
+        />
+      )}
 
-            {activeAgentId && (
-              <div className="ml-auto flex items-center gap-2 pr-5">
-                <span className="text-[10px] uppercase tracking-widest text-neutral-600">
-                  Filtered: {agents.find((a) => a.id === activeAgentId)?.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedAgentId(null)}
-                  className="min-h-10 px-2 text-xs text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </div>
+      {route.page === 'services' && (
+        <ServicesPage services={services} registerService={registerService} />
+      )}
 
-          <AgentStatusPanel agent={focusedAgent} />
+      {route.page === 'service-detail' && (
+        <ServiceDetailPage
+          serviceId={route.serviceId}
+          services={services}
+          agents={agents}
+          events={events}
+          allowServiceForAgent={allowServiceForAgent}
+        />
+      )}
 
-          {/* Tab content */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {activeTab === 'feed' && <LiveFeed events={filteredEvents} />}
-            {activeTab === 'approvals' && (
-              <ApprovalQueue
-                approvals={filteredApprovals}
-                onApprove={approveRequest}
-                onDeny={denyRequest}
-                interactive={approvalsInteractive}
-              />
-            )}
-            {activeTab === 'audit' && <AuditLog events={filteredEvents} />}
-            {activeTab === 'policy' && (
-              <PolicyInspector
-                agents={agents}
-                selectedAgentId={activeAgentId}
-                onSelectAgent={(id) => {
-                  setSelectedAgentId(id)
-                  if (id) {
-                    window.localStorage.setItem('palmos.dashboard.selectedAgentId', id)
-                  } else {
-                    window.localStorage.removeItem('palmos.dashboard.selectedAgentId')
-                  }
-                }}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+      {route.page === 'transactions' && (
+        <TransactionsPage events={events} agents={agents} services={services} />
+      )}
 
-      {/* Bottom activity ticker */}
-      <ActivityTicker events={events} />
-    </div>
+      {route.page === 'transaction-detail' && (
+        <TransactionDetailPage
+          executionId={route.executionId}
+          events={events}
+          agents={agents}
+          services={services}
+        />
+      )}
+
+      {route.page === 'approvals' && (
+        <ApprovalsPage
+          pendingApprovals={pendingApprovals}
+          events={events}
+          agents={agents}
+          services={services}
+          onApprove={approveRequest}
+          onDeny={denyRequest}
+          approvalsInteractive={approvalsInteractive}
+        />
+      )}
+
+      {route.page === 'settings' && (
+        <SettingsPage agents={agents} services={services} events={events} />
+      )}
+    </DashboardShell>
   )
 }

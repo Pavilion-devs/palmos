@@ -29,6 +29,13 @@ function buildApiUrl(path) {
   return `${API_BASE_URL}${path}`
 }
 
+function fetchDashboardApi(path, options = {}) {
+  return fetch(buildApiUrl(path), {
+    ...options,
+    credentials: 'include',
+  })
+}
+
 async function readApiPayload(response, fallbackMessage) {
   const payload = await response.json().catch(() => null)
 
@@ -67,25 +74,35 @@ export default function useDashboardStore() {
     }
 
     try {
-      const [response, servicesResponse] = await Promise.all([
-        fetch(buildApiUrl('/api/dashboard/snapshot'), {
-          cache: 'no-store',
-        }),
-        fetch(buildApiUrl('/api/dashboard/services'), {
-          cache: 'no-store',
-        }),
+      const [snapshotResult, servicesResult] = await Promise.allSettled([
+        fetchDashboardApi('/api/dashboard/snapshot', { cache: 'no-store' }),
+        fetchDashboardApi('/api/dashboard/services', { cache: 'no-store' }),
       ])
+
+      if (snapshotResult.status === 'rejected') {
+        throw snapshotResult.reason
+      }
+
       const snapshot = await readApiPayload(
-        response,
+        snapshotResult.value,
         'Unable to load live dashboard snapshot',
       )
-      const servicesPayload = await readApiPayload(
-        servicesResponse,
-        'Unable to load PalmOS services',
-      )
-      applySnapshot(snapshot, {
-        services: servicesPayload.services ?? [],
-      })
+
+      // Services degrade gracefully — a failure keeps the previous lane data
+      let servicesOverride
+      if (servicesResult.status === 'fulfilled') {
+        try {
+          const servicesPayload = await readApiPayload(
+            servicesResult.value,
+            'Unable to load PalmOS services',
+          )
+          servicesOverride = servicesPayload.services ?? []
+        } catch {
+          // leave servicesOverride undefined; applySnapshot preserves previous value
+        }
+      }
+
+      applySnapshot(snapshot, { services: servicesOverride })
     } catch (error) {
       const message =
         error instanceof Error
@@ -116,7 +133,7 @@ export default function useDashboardStore() {
     }))
 
     try {
-      const response = await fetch(buildApiUrl(`/api/dashboard/agents/${agentId}/run`), {
+      const response = await fetchDashboardApi(`/api/dashboard/agents/${agentId}/run`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,8 +172,8 @@ export default function useDashboardStore() {
       }))
 
       try {
-        const response = await fetch(
-          buildApiUrl(`/api/dashboard/approvals/${executionId}/${decision}`),
+        const response = await fetchDashboardApi(
+          `/api/dashboard/approvals/${executionId}/${decision}`,
           {
             method: 'POST',
             headers: {
@@ -187,6 +204,218 @@ export default function useDashboardStore() {
     [applySnapshot],
   )
 
+  const listAgentCredentials = useCallback(async (agentId) => {
+    const response = await fetchDashboardApi(
+      `/api/dashboard/agents/${agentId}/credentials`,
+      { cache: 'no-store' },
+    )
+    const payload = await readApiPayload(
+      response,
+      'Unable to load agent credentials',
+    )
+    return payload.credentials ?? []
+  }, [])
+
+  const createAgentCredential = useCallback(
+    async (agentId, label) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agents/${agentId}/credentials`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(label ? { label } : {}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to create agent credential',
+      )
+      await refreshSnapshot()
+      return { credential: payload.credential, token: payload.token }
+    },
+    [refreshSnapshot],
+  )
+
+  const revokeAgentCredential = useCallback(
+    async (credentialId) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agent-credentials/${credentialId}/revoke`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to revoke agent credential',
+      )
+      await refreshSnapshot()
+      return payload.credential
+    },
+    [refreshSnapshot],
+  )
+
+  const updateAgentCredential = useCallback(
+    async (credentialId, input) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agent-credentials/${credentialId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to update agent credential',
+      )
+      await refreshSnapshot()
+      return payload.credential
+    },
+    [refreshSnapshot],
+  )
+
+  const rotateAgentCredential = useCallback(
+    async (credentialId, label) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agent-credentials/${credentialId}/rotate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(label ? { label } : {}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to rotate agent credential',
+      )
+      await refreshSnapshot()
+      return { credential: payload.credential, token: payload.token }
+    },
+    [refreshSnapshot],
+  )
+
+  const createAgent = useCallback(
+    async (setup) => {
+      const response = await fetchDashboardApi('/api/dashboard/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setup }),
+      })
+      const payload = await readApiPayload(
+        response,
+        'Unable to create PalmOS agent',
+      )
+      applySnapshot(payload.snapshot, {
+        services: liveState.data.services,
+      })
+      return payload.agent
+    },
+    [applySnapshot, liveState.data.services],
+  )
+
+  const updateAgentPolicy = useCallback(
+    async (agentId, patch) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agents/${agentId}/policy`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to update agent policy',
+      )
+      applySnapshot(payload.snapshot, {
+        services: liveState.data.services,
+      })
+      return payload.agent
+    },
+    [applySnapshot, liveState.data.services],
+  )
+
+  const runAgentLifecycleAction = useCallback(
+    async (agentId, action) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agents/${agentId}/actions/${action}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to update agent lifecycle',
+      )
+      applySnapshot(payload.snapshot, {
+        services: liveState.data.services,
+      })
+      return payload.agent
+    },
+    [applySnapshot, liveState.data.services],
+  )
+
+  const registerService = useCallback(
+    async (input) => {
+      const response = await fetchDashboardApi('/api/dashboard/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      const payload = await readApiPayload(
+        response,
+        'Unable to register PalmOS service',
+      )
+      await refreshSnapshot()
+      return payload.service
+    },
+    [refreshSnapshot],
+  )
+
+  const allowServiceForAgent = useCallback(
+    async (agentId, serviceId) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agents/${agentId}/services/${serviceId}/allow`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to allow service for agent',
+      )
+      await refreshSnapshot()
+      return payload.service
+    },
+    [refreshSnapshot],
+  )
+
+  const unallowServiceForAgent = useCallback(
+    async (agentId, serviceId) => {
+      const response = await fetchDashboardApi(
+        `/api/dashboard/agents/${agentId}/services/${serviceId}/unallow`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      const payload = await readApiPayload(
+        response,
+        'Unable to remove service from agent',
+      )
+      await refreshSnapshot()
+      return payload.service
+    },
+    [refreshSnapshot],
+  )
+
   useEffect(() => {
     const timer = setTimeout(() => {
       void refreshSnapshot()
@@ -208,11 +437,11 @@ export default function useDashboardStore() {
     isActionPending: liveState.actionPending,
     approveRequest:
       liveState.connectionStatus === 'live' && !liveState.actionPending
-        ? (executionId) => void submitApprovalDecision(executionId, 'approve')
+        ? (executionId) => submitApprovalDecision(executionId, 'approve')
         : () => {},
     denyRequest:
       liveState.connectionStatus === 'live' && !liveState.actionPending
-        ? (executionId) => void submitApprovalDecision(executionId, 'reject')
+        ? (executionId) => submitApprovalDecision(executionId, 'reject')
         : () => {},
     approvalsInteractive:
       liveState.connectionStatus === 'live' && !liveState.actionPending,
@@ -222,5 +451,16 @@ export default function useDashboardStore() {
       : liveState.data.totalAgentCount > 0
         ? 'Run Agent'
         : 'Create Agent',
+    listAgentCredentials,
+    createAgent,
+    updateAgentPolicy,
+    runAgentLifecycleAction,
+    createAgentCredential,
+    revokeAgentCredential,
+    updateAgentCredential,
+    rotateAgentCredential,
+    registerService,
+    allowServiceForAgent,
+    unallowServiceForAgent,
   }
 }

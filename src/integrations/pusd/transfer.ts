@@ -13,7 +13,11 @@ import {
 } from '@solana/spl-token'
 import type { PusdPaymentRequiredResponse } from './paymentInstructions.js'
 import { parsePusdAmountToBaseUnits } from './amount.js'
-import { PUSD_DECIMALS, readSolanaRpcUrlFromEnv } from './constants.js'
+import {
+  PUSD_DECIMALS,
+  PUSD_TOKEN_PROGRAM_ID,
+  readSolanaRpcUrlFromEnv,
+} from './constants.js'
 
 const MEMO_PROGRAM_ID = new PublicKey(
   'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
@@ -48,12 +52,20 @@ export async function buildUnsignedPusdPaymentTransaction(
     input.commitment ?? 'confirmed',
   )
   const mint = new PublicKey(input.payment.mint)
+  const tokenProgramId = new PublicKey(PUSD_TOKEN_PROGRAM_ID)
   const recipientOwner = new PublicKey(input.payment.recipient)
   const payerOwner = input.payer
-  const payerTokenAccount = await getAssociatedTokenAddress(mint, payerOwner)
+  const payerTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    payerOwner,
+    false,
+    tokenProgramId,
+  )
   const recipientTokenAccount = await getAssociatedTokenAddress(
     mint,
     recipientOwner,
+    false,
+    tokenProgramId,
   )
   const amount = parsePusdAmountToBaseUnits(input.payment.amount)
   const transaction = new Transaction()
@@ -71,6 +83,7 @@ export async function buildUnsignedPusdPaymentTransaction(
         recipientTokenAccount,
         recipientOwner,
         mint,
+        tokenProgramId,
       ),
     )
   }
@@ -83,6 +96,8 @@ export async function buildUnsignedPusdPaymentTransaction(
       payerOwner,
       amount,
       PUSD_DECIMALS,
+      [],
+      tokenProgramId,
     ),
   )
   transaction.add(

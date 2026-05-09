@@ -54,8 +54,15 @@ function buildApiUrl(path) {
   return API_BASE_URL ? `${API_BASE_URL}${path}` : path
 }
 
+function fetchDashboardApi(path, options = {}) {
+  return fetch(buildApiUrl(path), {
+    ...options,
+    credentials: 'include',
+  })
+}
+
 async function requestNextTurn(turn, value) {
-  const response = await fetch(buildApiUrl('/api/dashboard/onboarding/turn'), {
+  const response = await fetchDashboardApi('/api/dashboard/onboarding/turn', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -76,7 +83,7 @@ async function requestNextTurn(turn, value) {
 }
 
 async function createDashboardAgent(setup) {
-  const response = await fetch(buildApiUrl('/api/dashboard/agents'), {
+  const response = await fetchDashboardApi('/api/dashboard/agents', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

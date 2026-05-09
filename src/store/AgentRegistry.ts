@@ -17,6 +17,8 @@ export type AgentStatus =
   | 'ready'
   | 'approval_pending'
   | 'restricted'
+  | 'suspended'
+  | 'archived'
   | 'stale'
   | 'failed'
 

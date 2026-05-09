@@ -2,6 +2,8 @@ const LIVE_STATUS_MAP = {
   ready: 'active',
   approval_pending: 'pending',
   restricted: 'blocked',
+  suspended: 'blocked',
+  archived: 'revoked',
   stale: 'revoked',
   failed: 'denied',
   draft: 'idle',
@@ -96,6 +98,37 @@ function shortTxHash(value) {
   }
 
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+const SOLANA_BASE58_PATTERN = /^[1-9A-HJ-NP-Za-km-z]+$/
+
+function isProbablyRealSolanaSignature(value) {
+  if (!value || typeof value !== 'string') {
+    return false
+  }
+  if (value.length < 80) {
+    return false
+  }
+  return SOLANA_BASE58_PATTERN.test(value)
+}
+
+function deriveSettlementMode(record, txHashFull) {
+  if (
+    record.status === 'approval_pending' ||
+    record.status === 'waiting_for_execution'
+  ) {
+    return 'approval_pending'
+  }
+
+  if (record.status === 'blocked' || record.status === 'failed') {
+    return 'blocked'
+  }
+
+  if (record.status === 'executed') {
+    return isProbablyRealSolanaSignature(txHashFull) ? 'real' : 'local'
+  }
+
+  return 'unknown'
 }
 
 function getPolicyVendorLabel(agentSnapshot, vendorId) {
@@ -201,34 +234,51 @@ function mapPaidCallResult(record) {
 }
 
 function buildEvent(agentSnapshot, record) {
-  const requiresApproval =
+  const requiredApproval =
     parseAmount(record.amount) >
     parseAmount(agentSnapshot?.agent?.policyConfig?.autoApproveUnder)
   const alerts = getMatchingXMTPAlerts(agentSnapshot, record.executionId)
   const approvedByOperator =
-    requiresApproval &&
+    requiredApproval &&
     record.status === 'executed' &&
     alerts.some((item) => item.type === 'approval.requested')
+  const xmtpSent = alerts.some(
+    (item) => item.type === 'approval.requested' && item.status === 'sent',
+  )
+  const xmtpResolutionSent = alerts.some(
+    (item) => item.type === 'approval.resolved' && item.status === 'sent',
+  )
   const txHashFull = buildTxHash(record)
   const baseAction = buildActionLabel(agentSnapshot, record)
 
   return {
     id: record.executionId,
     atMs: parseTimestamp(record.updatedAt || record.createdAt),
+    createdAtMs: parseTimestamp(record.createdAt),
     timestamp: formatClock(record.updatedAt || record.createdAt),
     agentId: record.agentId,
     agentName: agentSnapshot?.agent?.displayName ?? humanizeToken(record.agentId),
     type: 'spend',
     action: approvedByOperator ? `${baseAction} - APPROVED by operator` : baseAction,
     amount: parseAmount(record.amount),
+    assetSymbol: record.assetSymbol ?? 'PUSD',
     result: mapPaidCallResult(record),
     reason: buildReason(agentSnapshot, record),
     vendor: getPolicyVendorLabel(agentSnapshot, record.vendorId),
+    vendorId: record.vendorId ?? null,
+    serviceId: record.serviceId ?? null,
+    chainId: record.chainId ?? null,
     txHash: shortTxHash(txHashFull),
     txHashFull,
     status: record.status,
     errorCode: record.errorCode ?? null,
+    errorMessage: record.errorMessage ?? null,
     badgeLabel: buildPaidCallBadge(record, approvedByOperator),
+    settlementMode: deriveSettlementMode(record, txHashFull),
+    requiredApproval,
+    approvedByOperator,
+    xmtpSent,
+    xmtpResolutionSent,
   }
 }
 
@@ -431,6 +481,7 @@ function deriveAgent(agentSnapshot) {
     id: agent.agentId,
     name: agent.displayName,
     letter: toInitial(agent.displayName),
+    lifecycleStatus: agent.status,
     status: LIVE_STATUS_MAP[agent.status] ?? 'idle',
     chain: formatChainLabel(agent.policyConfig?.allowedChains?.[0] ?? 'unknown'),
     trustTier: agent.trustTier,
@@ -453,6 +504,9 @@ function deriveAgent(agentSnapshot) {
         : 'n/a',
       vendors: (agent.policyConfig?.allowedVendors ?? []).map(
         (vendor) => vendor.label ?? humanizeToken(vendor.vendorId),
+      ),
+      allowedVendorIds: (agent.policyConfig?.allowedVendors ?? []).map(
+        (vendor) => vendor.vendorId,
       ),
       autoApproveMax: autoApproveUnder,
       approvalRange: formatApprovalRange(
@@ -533,6 +587,9 @@ export function adaptShowcaseSnapshot(snapshot) {
             agentName,
             action: buildActionLabel(agentSnapshot, record),
             vendor: getPolicyVendorLabel(agentSnapshot, record.vendorId),
+            vendorId: record.vendorId ?? null,
+            serviceId: record.serviceId ?? null,
+            assetSymbol: record.assetSymbol ?? 'PUSD',
             amount: parseAmount(record.amount),
             reason: buildReason(agentSnapshot, record),
             createdAt: parseTimestamp(record.createdAt),

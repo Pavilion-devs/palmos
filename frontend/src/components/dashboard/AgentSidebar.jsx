@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import useNow from '../../hooks/useNow'
 
 const STATUS_STYLES = {
@@ -47,21 +48,36 @@ function DeadManTimer({ lastCheckIn, deadManSeconds }) {
   )
 }
 
-export default function AgentSidebar({ agents, selectedAgentId, onSelectAgent }) {
+export default function AgentSidebar({
+  agents,
+  selectedAgentId,
+  onSelectAgent,
+  onCreateAgent,
+}) {
   return (
     <aside className="flex w-[260px] shrink-0 flex-col border-r border-neutral-800 bg-neutral-950">
-      <div className="border-b border-neutral-800 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
         <span className="text-[10px] font-medium uppercase tracking-widest text-neutral-600">
           Agent Registry
         </span>
+        {onCreateAgent && (
+          <button
+            type="button"
+            onClick={onCreateAgent}
+            className="flex items-center gap-1 border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+          >
+            <Plus className="h-3 w-3" aria-hidden="true" />
+            New
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {agents.length === 0 && (
           <div className="px-4 py-5">
-            <p className="text-xs text-neutral-500">No live agents loaded yet.</p>
+            <p className="text-xs text-neutral-500">No agents registered yet.</p>
             <p className="mt-1 text-[10px] uppercase tracking-widest text-neutral-700">
-              Start the worker to provision them.
+              Run onboarding to create one.
             </p>
           </div>
         )}

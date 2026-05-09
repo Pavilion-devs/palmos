@@ -1,7 +1,12 @@
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { TOKEN_2022_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token'
 import { formatPusdBaseUnits, parsePusdAmountToBaseUnits } from './amount.js'
-import { PUSD_DECIMALS, readPusdMintFromEnv, readSolanaRpcUrlFromEnv } from './constants.js'
+import {
+  PUSD_DECIMALS,
+  PUSD_TOKEN_PROGRAM_ID,
+  readPusdMintFromEnv,
+  readSolanaRpcUrlFromEnv,
+} from './constants.js'
 
 export type PusdReadinessCheckStatus = 'passed' | 'failed' | 'warning'
 
@@ -30,6 +35,7 @@ export type PusdPaymentReadinessReport = {
   mint: string
   amount: string
   amountBaseUnits: string
+  tokenProgramId: string
   payerTokenAccount: string
   recipientTokenAccount: string
   solBalanceLamports?: number
@@ -62,15 +68,32 @@ export async function checkPusdPaymentReadiness(
   const recipient = toPublicKey(input.recipient, 'recipient')
   const mint = toPublicKey(input.mint ?? readPusdMintFromEnv(env), 'PUSD mint')
   const amountBaseUnits = parsePusdAmountToBaseUnits(input.amount)
-  const payerTokenAccount = await getAssociatedTokenAddress(mint, payer)
-  const recipientTokenAccount = await getAssociatedTokenAddress(mint, recipient)
+  const tokenProgramId = new PublicKey(PUSD_TOKEN_PROGRAM_ID)
+  const payerTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    payer,
+    false,
+    tokenProgramId,
+  )
+  const recipientTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    recipient,
+    false,
+    tokenProgramId,
+  )
   const checks: PusdReadinessCheck[] = []
   const minSolLamports = input.minSolLamports ?? 10_000
 
   addCheck(checks, {
     checkId: 'pusd.addresses.valid',
     status: 'passed',
-    summary: 'Payer, recipient, and mint are valid Solana public keys.',
+    summary: 'Payer, recipient, mint, and token program are valid Solana public keys.',
+    details: {
+      tokenProgramId: tokenProgramId.toBase58(),
+      tokenProgram: tokenProgramId.equals(TOKEN_2022_PROGRAM_ID)
+        ? 'spl-token-2022'
+        : 'spl-token',
+    },
   })
 
   const payerAccount = await connection.getAccountInfo(payer)
@@ -210,6 +233,7 @@ export async function checkPusdPaymentReadiness(
     mint: mint.toBase58(),
     amount: input.amount,
     amountBaseUnits: amountBaseUnits.toString(),
+    tokenProgramId: tokenProgramId.toBase58(),
     payerTokenAccount: payerTokenAccount.toBase58(),
     recipientTokenAccount: recipientTokenAccount.toBase58(),
     solBalanceLamports,

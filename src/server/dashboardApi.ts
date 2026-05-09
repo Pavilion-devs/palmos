@@ -1,5 +1,7 @@
 import express from 'express'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
+import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import {
   authenticateAgentCredential,
@@ -156,6 +158,16 @@ type DashboardOnboardingSetup = {
   managerAddress?: string
 }
 
+type WaitlistSubmission = {
+  id: string
+  createdAt: string
+  name: string
+  email: string
+  roleCompany: string
+  agentUseCase: string
+  source: 'landing'
+}
+
 function readAuthToken(req: express.Request): string | undefined {
   const authorization = req.headers.authorization
   const authorizationValue = Array.isArray(authorization)
@@ -176,6 +188,144 @@ function readRecord(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>
+}
+
+function isPublicAccessMode(env: Record<string, string | undefined>): boolean {
+  return (
+    env.PALMOS_PUBLIC_ACCESS_MODE?.trim() === '1' ||
+    env.PALMOS_PUBLIC_ACCESS_MODE?.trim()?.toLowerCase() === 'true' ||
+    Boolean(env.RENDER?.trim())
+  )
+}
+
+function readCookie(req: express.Request, name: string): string | undefined {
+  const cookieHeader = req.headers.cookie
+  const rawCookie = Array.isArray(cookieHeader) ? cookieHeader.join('; ') : cookieHeader
+  if (!rawCookie) return undefined
+
+  for (const segment of rawCookie.split(';')) {
+    const [key, ...valueParts] = segment.trim().split('=')
+    if (key === name) {
+      return decodeURIComponent(valueParts.join('='))
+    }
+  }
+
+  return undefined
+}
+
+function signJudgeAccessExpiry(expiresAt: number, secret: string): string {
+  const payload = String(expiresAt)
+  const signature = createHmac('sha256', secret)
+    .update(payload)
+    .digest('base64url')
+
+  return `${payload}.${signature}`
+}
+
+function verifyJudgeAccessExpiry(
+  cookieValue: string | undefined,
+  secret: string | undefined,
+): number {
+  if (!cookieValue || !secret) {
+    return 0
+  }
+
+  const [payload, signature] = cookieValue.split('.')
+  const expiresAt = Number(payload)
+  if (!payload || !signature || !Number.isFinite(expiresAt)) {
+    return 0
+  }
+
+  const expectedSignature = createHmac('sha256', secret)
+    .update(payload)
+    .digest('base64url')
+  const supplied = Buffer.from(signature)
+  const expected = Buffer.from(expectedSignature)
+
+  if (supplied.length !== expected.length) {
+    return 0
+  }
+
+  return timingSafeEqual(supplied, expected) ? expiresAt : 0
+}
+
+function readJudgeAccessExpiry(
+  req: express.Request,
+  env: Record<string, string | undefined>,
+): number {
+  const sessionValue = readCookie(req, 'palmos_judge_access')
+  return verifyJudgeAccessExpiry(
+    sessionValue,
+    env.PALMOS_JUDGE_ACCESS_CODE?.trim(),
+  )
+}
+
+function shouldUseCrossSiteJudgeCookie(env: Record<string, string | undefined>): boolean {
+  return (
+    env.PALMOS_CROSS_SITE_COOKIES?.trim() === '1' ||
+    env.PALMOS_CROSS_SITE_COOKIES?.trim()?.toLowerCase() === 'true' ||
+    Boolean(env.RENDER?.trim())
+  )
+}
+
+function createId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function sanitizeEmail(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function readWaitlistSubmission(value: unknown): Omit<WaitlistSubmission, 'id' | 'createdAt' | 'source'> | undefined {
+  const candidate = readRecord(value)
+  const name = readMaybeString(candidate.name)
+  const email = readMaybeString(candidate.email)
+  const roleCompany = readMaybeString(candidate.roleCompany)
+  const agentUseCase = readMaybeString(candidate.agentUseCase)
+
+  if (!name || !email || !roleCompany || !agentUseCase) {
+    return undefined
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return undefined
+  }
+
+  return {
+    name: name.slice(0, 160),
+    email: sanitizeEmail(email).slice(0, 240),
+    roleCompany: roleCompany.slice(0, 200),
+    agentUseCase: agentUseCase.slice(0, 800),
+  }
+}
+
+async function readWaitlist(baseDir: string): Promise<WaitlistSubmission[]> {
+  try {
+    const contents = await readFile(join(baseDir, 'waitlist-submissions.json'), 'utf8')
+    const parsed = JSON.parse(contents)
+    return Array.isArray(parsed) ? parsed as WaitlistSubmission[] : []
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return []
+    }
+
+    throw error
+  }
+}
+
+async function appendWaitlistSubmission(baseDir: string, submission: WaitlistSubmission): Promise<void> {
+  await mkdir(baseDir, { recursive: true })
+  const current = await readWaitlist(baseDir)
+  const deduped = current.filter((item) => item.email !== submission.email)
+  await writeFile(
+    join(baseDir, 'waitlist-submissions.json'),
+    JSON.stringify([...deduped, submission], null, 2),
+    'utf8',
+  )
 }
 
 function sanitizeCredential(record: {
@@ -259,6 +409,40 @@ function readPositiveAmount(value: unknown, fallback: string): string {
   }
 
   return parsed.toFixed(6).replace(/\.?0+$/, '')
+}
+
+function readOptionalPositiveAmount(value: unknown): string | undefined {
+  const raw = readMaybeString(value)
+  if (!raw) return undefined
+
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined
+  }
+
+  return parsed.toFixed(6).replace(/\.?0+$/, '')
+}
+
+function readAgentPolicyPatch(value: unknown): {
+  sessionBudget?: string
+  maxPerTransaction?: string
+  autoApproveUnder?: string
+  heartbeatTimeoutSeconds?: number
+} {
+  const candidate = readRecord(value)
+  const heartbeat = Number(candidate.heartbeatTimeoutSeconds)
+
+  return {
+    sessionBudget: readOptionalPositiveAmount(candidate.sessionBudget),
+    maxPerTransaction: readOptionalPositiveAmount(
+      candidate.maxPerTransaction ?? candidate.maxPerCall,
+    ),
+    autoApproveUnder: readOptionalPositiveAmount(candidate.autoApproveUnder),
+    heartbeatTimeoutSeconds:
+      Number.isFinite(heartbeat) && heartbeat > 0
+        ? Math.round(heartbeat)
+        : undefined,
+  }
 }
 
 function readRegisteredServiceInput(value: unknown): Omit<
@@ -410,7 +594,7 @@ async function main() {
     })
   }
 
-  async function buildDashboardSnapshot(): Promise<ShowcaseSnapshot> {
+  async function runDashboardDeadMansSwitchSweep(): Promise<void> {
     await runDeadMansSwitchSweep({
       agentRegistry: workspace.agentRegistry,
       walletRegistry: workspace.walletRegistry,
@@ -424,7 +608,9 @@ async function main() {
         error instanceof Error ? error.message : error,
       )
     })
+  }
 
+  async function buildDashboardSnapshot(): Promise<ShowcaseSnapshot> {
     return sanitizeSnapshot(
       await buildShowcaseSnapshot({
         baseDir,
@@ -435,18 +621,107 @@ async function main() {
 
   const app = express()
   app.use(express.json())
-  app.use((_req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*')
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS')
     res.setHeader(
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type, X-PalmOS-Agent-Key',
     )
-    if (_req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    if (req.method === 'OPTIONS') {
       res.status(204).end()
       return
     }
     next()
+  })
+
+  app.post('/api/waitlist', async (req, res) => {
+    try {
+      const input = readWaitlistSubmission(req.body)
+      if (!input) {
+        res.status(400).json({
+          ok: false,
+          error: 'invalid_waitlist_submission',
+        })
+        return
+      }
+
+      const submission: WaitlistSubmission = {
+        ...input,
+        id: createId('waitlist'),
+        createdAt: new Date().toISOString(),
+        source: 'landing',
+      }
+      await appendWaitlistSubmission(baseDir, submission)
+
+      res.json({
+        ok: true,
+        message: "You're on the PalmOS waitlist.",
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to join the PalmOS waitlist.',
+      })
+    }
+  })
+
+  app.post('/api/dashboard/judge-access', async (req, res) => {
+    const configuredCode = env.PALMOS_JUDGE_ACCESS_CODE?.trim()
+    const submittedCode = readMaybeString(req.body?.passcode)
+
+    if (!configuredCode || submittedCode !== configuredCode) {
+      res.status(401).json({
+        ok: false,
+        error: 'invalid_judge_code',
+      })
+      return
+    }
+
+    const expiresAt = Date.now() + 1000 * 60 * 60 * 8
+    const maxAge = Math.floor((expiresAt - Date.now()) / 1000)
+    const crossSiteCookie = shouldUseCrossSiteJudgeCookie(env)
+    const secureCookie = crossSiteCookie ? '; Secure' : ''
+    const sameSiteCookie = crossSiteCookie ? '; SameSite=None' : '; SameSite=Lax'
+    const sessionToken = signJudgeAccessExpiry(expiresAt, configuredCode)
+    res.setHeader(
+      'Set-Cookie',
+      `palmos_judge_access=${encodeURIComponent(sessionToken)}; Max-Age=${maxAge}; Path=/; HttpOnly${sameSiteCookie}${secureCookie}`,
+    )
+    res.json({
+      ok: true,
+      expiresAt,
+    })
+  })
+
+  app.use('/api/dashboard', (req, res, next) => {
+    if (!isPublicAccessMode(env)) {
+      next()
+      return
+    }
+
+    if (
+      req.path === '/judge-access' ||
+      req.path === '/health'
+    ) {
+      next()
+      return
+    }
+
+    const expiresAt = readJudgeAccessExpiry(req, env)
+    if (expiresAt > Date.now()) {
+      next()
+      return
+    }
+
+    res.status(401).json({
+      ok: false,
+      error: 'judge_access_required',
+    })
   })
 
   app.get('/api/dashboard/health', async (_req, res) => {
@@ -458,6 +733,15 @@ async function main() {
       pendingCalls: snapshot.summary.approvalPendingCalls,
       localDemoBaseUrl,
       localPusdServer: Boolean(localServer),
+    })
+  })
+
+  app.post('/api/dashboard/control/dead-man-sweep', async (_req, res) => {
+    await runDashboardDeadMansSwitchSweep()
+    const snapshot = await buildDashboardSnapshot()
+    res.json({
+      ok: true,
+      snapshot,
     })
   })
 
@@ -627,6 +911,69 @@ async function main() {
     }
   })
 
+  app.post('/api/dashboard/agents/:agentId/services/:serviceId/unallow', async (req, res) => {
+    try {
+      const agentId = readMaybeString(req.params.agentId)
+      const serviceId = readMaybeString(req.params.serviceId)
+      if (!agentId || !serviceId) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing agent id or service id.',
+        })
+        return
+      }
+
+      const agent = await workspace.agentRegistry.get(agentId)
+      if (!agent) {
+        res.status(404).json({
+          ok: false,
+          error: `Agent ${agentId} was not found.`,
+        })
+        return
+      }
+
+      const catalog = await buildPalmosServiceCatalog()
+      const service = catalog[serviceId]
+      if (!service) {
+        res.status(404).json({
+          ok: false,
+          error: `Service ${serviceId} was not found.`,
+        })
+        return
+      }
+
+      const updatedAgent = {
+        ...agent,
+        updatedAt: new Date().toISOString(),
+        policyConfig: {
+          ...agent.policyConfig,
+          allowedVendors: agent.policyConfig.allowedVendors.filter(
+            (vendor) => vendor.vendorId !== service.vendorId,
+          ),
+        },
+      }
+      await workspace.agentRegistry.put(updatedAgent)
+
+      res.json({
+        ok: true,
+        agent: stripAgentSecrets(updatedAgent),
+        service: {
+          serviceId: service.serviceId,
+          label: service.label,
+          vendorId: service.vendorId,
+        },
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to remove service from agent.',
+      })
+    }
+  })
+
   app.get('/api/sdk/v1/me', async (req, res) => {
     const auth = await authenticateSdkRequest({ req, workspace })
     if (!auth) {
@@ -721,6 +1068,20 @@ async function main() {
           note: readMaybeString(req.body?.note),
         },
       )
+
+      if (result.kind === 'blocked') {
+        res.status(403).json({
+          ok: false,
+          error: result.reason,
+          agentId: auth.agent.agentId,
+          credentialId: auth.credential.credentialId,
+          result: {
+            ...result,
+            agent: stripAgentSecrets(result.agent),
+          },
+        })
+        return
+      }
 
       res.json({
         ok: true,
@@ -822,6 +1183,196 @@ async function main() {
     }
   })
 
+  app.patch('/api/dashboard/agents/:agentId/policy', async (req, res) => {
+    try {
+      const agentId = readMaybeString(req.params.agentId)
+      if (!agentId) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing agent id.',
+        })
+        return
+      }
+
+      const agent = await workspace.agentRegistry.get(agentId)
+      if (!agent) {
+        res.status(404).json({
+          ok: false,
+          error: `Agent ${agentId} was not found.`,
+        })
+        return
+      }
+
+      if (agent.status === 'archived') {
+        res.status(409).json({
+          ok: false,
+          error: 'Archived agents cannot be edited.',
+        })
+        return
+      }
+
+      const patch = readAgentPolicyPatch(req.body)
+      const nextMax = patch.maxPerTransaction ?? agent.policyConfig.maxPerTransaction
+      const nextAuto =
+        patch.autoApproveUnder ?? agent.policyConfig.autoApproveUnder
+      const nextBudget =
+        patch.sessionBudget ?? agent.policyConfig.sessionBudget
+
+      if (Number(nextAuto) > Number(nextMax)) {
+        res.status(400).json({
+          ok: false,
+          error: 'Auto-approve threshold cannot exceed max per call.',
+        })
+        return
+      }
+
+      if (nextBudget && Number(nextBudget) < Number(nextMax)) {
+        res.status(400).json({
+          ok: false,
+          error: 'Session budget must be greater than or equal to max per call.',
+        })
+        return
+      }
+
+      const updatedAgent = {
+        ...agent,
+        updatedAt: new Date().toISOString(),
+        policyConfig: {
+          ...agent.policyConfig,
+          sessionBudget: nextBudget,
+          maxPerTransaction: nextMax,
+          autoApproveUnder: nextAuto,
+          heartbeatTimeoutSeconds:
+            patch.heartbeatTimeoutSeconds ??
+            agent.policyConfig.heartbeatTimeoutSeconds,
+        },
+      }
+      await workspace.agentRegistry.put(updatedAgent)
+      const snapshot = await buildDashboardSnapshot()
+
+      res.json({
+        ok: true,
+        agent: stripAgentSecrets(updatedAgent),
+        snapshot,
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to update agent policy.',
+      })
+    }
+  })
+
+  app.post('/api/dashboard/agents/:agentId/actions/:action', async (req, res) => {
+    try {
+      const agentId = readMaybeString(req.params.agentId)
+      const action = readMaybeString(req.params.action)
+      if (!agentId || !action) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing agent id or action.',
+        })
+        return
+      }
+
+      const agent = await workspace.agentRegistry.get(agentId)
+      if (!agent) {
+        res.status(404).json({
+          ok: false,
+          error: `Agent ${agentId} was not found.`,
+        })
+        return
+      }
+
+      const at = new Date().toISOString()
+      const wallet = agent.walletId
+        ? await workspace.walletRegistry.get(agent.walletId)
+        : undefined
+      let updatedAgent = agent
+
+      if (action === 'suspend') {
+        if (wallet) {
+          await workspace.walletRegistry.put({
+            ...wallet,
+            updatedAt: at,
+            state: 'suspended',
+          })
+        }
+        updatedAgent = {
+          ...agent,
+          updatedAt: at,
+          status: 'suspended',
+          trustTier: 'restricted',
+          walletState: wallet ? 'suspended' : agent.walletState,
+        }
+      } else if (action === 'reactivate') {
+        if (agent.status === 'archived') {
+          res.status(409).json({
+            ok: false,
+            error: 'Archived agents cannot be reactivated.',
+          })
+          return
+        }
+        if (wallet) {
+          await workspace.walletRegistry.put({
+            ...wallet,
+            updatedAt: at,
+            state: 'active_limited',
+          })
+        }
+        updatedAgent = {
+          ...agent,
+          updatedAt: at,
+          status: 'ready',
+          trustTier: agent.trustTier === 'restricted' ? 'new' : agent.trustTier,
+          walletState: wallet ? 'active_limited' : agent.walletState,
+          lastCheckInAt: at,
+        }
+      } else if (action === 'archive') {
+        if (wallet) {
+          await workspace.walletRegistry.put({
+            ...wallet,
+            updatedAt: at,
+            state: 'closed',
+          })
+        }
+        updatedAgent = {
+          ...agent,
+          updatedAt: at,
+          status: 'archived',
+          trustTier: 'restricted',
+          walletState: wallet ? 'closed' : agent.walletState,
+        }
+      } else {
+        res.status(400).json({
+          ok: false,
+          error: 'Unsupported agent action.',
+        })
+        return
+      }
+
+      await workspace.agentRegistry.put(updatedAgent)
+      const snapshot = await buildDashboardSnapshot()
+
+      res.json({
+        ok: true,
+        agent: stripAgentSecrets(updatedAgent),
+        snapshot,
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to update agent lifecycle.',
+      })
+    }
+  })
+
   app.get('/api/dashboard/agents/:agentId/credentials', async (req, res) => {
     try {
       const agentId = readMaybeString(req.params.agentId)
@@ -907,6 +1458,57 @@ async function main() {
     }
   })
 
+  app.patch('/api/dashboard/agent-credentials/:credentialId', async (req, res) => {
+    try {
+      const credentialId = readMaybeString(req.params.credentialId)
+      if (!credentialId) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing credential id.',
+        })
+        return
+      }
+
+      const credential = await workspace.agentCredentialRegistry.get(credentialId)
+      if (!credential) {
+        res.status(404).json({
+          ok: false,
+          error: `Credential ${credentialId} was not found.`,
+        })
+        return
+      }
+
+      const label = readMaybeString(req.body?.label)
+      if (!label) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing credential label.',
+        })
+        return
+      }
+
+      const updated = {
+        ...credential,
+        label,
+        updatedAt: new Date().toISOString(),
+      }
+      await workspace.agentCredentialRegistry.put(updated)
+
+      res.json({
+        ok: true,
+        credential: sanitizeCredential(updated),
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to update agent credential.',
+      })
+    }
+  })
+
   app.post('/api/dashboard/agent-credentials/:credentialId/revoke', async (req, res) => {
     try {
       const credentialId = readMaybeString(req.params.credentialId)
@@ -950,6 +1552,79 @@ async function main() {
     }
   })
 
+  app.post('/api/dashboard/agent-credentials/:credentialId/rotate', async (req, res) => {
+    try {
+      const credentialId = readMaybeString(req.params.credentialId)
+      if (!credentialId) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing credential id.',
+        })
+        return
+      }
+
+      const credential = await workspace.agentCredentialRegistry.get(credentialId)
+      if (!credential) {
+        res.status(404).json({
+          ok: false,
+          error: `Credential ${credentialId} was not found.`,
+        })
+        return
+      }
+
+      if (credential.status === 'revoked') {
+        res.status(409).json({
+          ok: false,
+          error: 'Revoked credentials cannot be rotated.',
+        })
+        return
+      }
+
+      const agent = await workspace.agentRegistry.get(credential.agentId)
+      if (!agent) {
+        res.status(404).json({
+          ok: false,
+          error: `Agent ${credential.agentId} was not found.`,
+        })
+        return
+      }
+
+      const at = new Date().toISOString()
+      const revoked = {
+        ...credential,
+        status: 'revoked' as const,
+        updatedAt: at,
+      }
+      await workspace.agentCredentialRegistry.put(revoked)
+
+      const created = await createAgentCredential(
+        {
+          credentials: workspace.agentCredentialRegistry,
+        },
+        {
+          agentId: credential.agentId,
+          label: readMaybeString(req.body?.label) ?? `${credential.label} rotated`,
+        },
+      )
+
+      res.json({
+        ok: true,
+        agent: stripAgentSecrets(agent),
+        revoked: sanitizeCredential(revoked),
+        credential: sanitizeCredential(created.credential),
+        token: created.token,
+      })
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to rotate agent credential.',
+      })
+    }
+  })
+
   app.post('/api/dashboard/agents/:agentId/run', async (req, res) => {
     try {
       const agentId = readMaybeString(req.params.agentId)
@@ -966,6 +1641,14 @@ async function main() {
         res.status(404).json({
           ok: false,
           error: `Agent ${agentId} was not found.`,
+        })
+        return
+      }
+
+      if (agent.status === 'suspended' || agent.status === 'archived') {
+        res.status(409).json({
+          ok: false,
+          error: `Agent ${agentId} is ${agent.status} and cannot run paid calls.`,
         })
         return
       }
@@ -1010,6 +1693,23 @@ async function main() {
         return
       }
 
+      const agent = await workspace.agentRegistry.get(agentId)
+      if (!agent) {
+        res.status(404).json({
+          ok: false,
+          error: `Agent ${agentId} was not found.`,
+        })
+        return
+      }
+
+      if (agent.status === 'suspended' || agent.status === 'archived') {
+        res.status(409).json({
+          ok: false,
+          error: `Agent ${agentId} is ${agent.status} and cannot run paid calls.`,
+        })
+        return
+      }
+
       const result = await runPusdResearchWorker({
         baseDir,
         workspace,
@@ -1043,21 +1743,42 @@ async function main() {
     try {
       const agents = await workspace.agentRegistry.list()
       const agentId = readMaybeString(req.query.agentId) ?? agents[0]?.agentId
+      const serviceId = readMaybeString(req.query.serviceId)
       const walletName = readMaybeString(req.query.wallet)
       const explicitPayer = readMaybeString(req.query.payer)
       const agent = agentId ? await workspace.agentRegistry.get(agentId) : undefined
+      const agentWallet = agent?.walletId
+        ? await workspace.walletRegistry.get(agent.walletId)
+        : undefined
+      const registeredService = serviceId
+        ? await workspace.serviceRegistry.get(serviceId)
+        : undefined
+      const serviceCatalog = serviceId ? await buildPalmosServiceCatalog() : undefined
+      const catalogService = serviceId ? serviceCatalog?.[serviceId] : undefined
+      if (serviceId && !catalogService) {
+        res.status(404).json({
+          ok: false,
+          error: `Service ${serviceId} was not found or is disabled.`,
+          agentId,
+          serviceId,
+        })
+        return
+      }
       const resolvedWalletName =
         walletName ?? agent?.owsWalletName ?? env.PALMOS_READINESS_OWS_WALLET
       const payer =
         explicitPayer ??
         (resolvedWalletName && owsClient?.getSolanaAddress(resolvedWalletName)) ??
+        agentWallet?.address?.trim() ??
         undefined
       const recipient =
         readMaybeString(req.query.recipient) ??
-        env.PUSD_MERCHANT_WALLET?.trim() ??
+        registeredService?.destinationAddress?.trim() ??
+        (!serviceId ? env.PUSD_MERCHANT_WALLET?.trim() : undefined) ??
         localServer?.payToAddress
       const amount =
         readMaybeString(req.query.amount) ??
+        catalogService?.expectedAmount ??
         env.PUSD_READINESS_AMOUNT?.trim() ??
         '0.01'
       const mint =
@@ -1069,8 +1790,9 @@ async function main() {
         res.json({
           ok: false,
           error:
-            'Missing payer. Provide ?payer=..., ?wallet=..., or seed an OWS-backed agent.',
+            'Missing payer. Provide ?payer=..., ?wallet=..., or select an agent with a configured wallet.',
           agentId,
+          serviceId,
           walletName: resolvedWalletName,
         })
         return
@@ -1079,8 +1801,11 @@ async function main() {
       if (!recipient) {
         res.json({
           ok: false,
-          error: 'Missing recipient. Provide ?recipient=... or set PUSD_MERCHANT_WALLET.',
+          error: serviceId
+            ? 'Missing service recipient. Register the service with a destinationAddress or provide ?recipient=... for this readiness check.'
+            : 'Missing recipient. Provide ?recipient=... or set PUSD_MERCHANT_WALLET for development checks.',
           agentId,
+          serviceId,
           walletName: resolvedWalletName,
         })
         return
@@ -1098,6 +1823,7 @@ async function main() {
       res.json({
         ok: report.ok,
         agentId,
+        serviceId,
         walletName: resolvedWalletName,
         report,
       })

@@ -25,6 +25,19 @@ dashboard-cards-reuse-plan.md
 dashboard-rewire-handoff.md
 dashboard-ui.md
 onboarding-engine.md
+dashboard-app-shell-plan.md
+public-access-handoff.md
+real-pusd-proof.md
+umbra-migration.md
+
+# Local agent/runtime workspace artifacts
+.vercel/
+.superstack/
+storage/
+ows-home/
+xmtp-local.db3
+waitlist-submissions.json
+*.log
 
 # Render deployment config (deploying via Vercel/GitHub instead)
 render.yaml
@@ -34,6 +47,8 @@ cards/
 
 # Internal assets
 image.png
+assets/*concepts*.png
+assets/logo-with-background.png
 
 # Temp / runtime
 /tmp/

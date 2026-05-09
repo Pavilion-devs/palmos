@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 
-export default function Hero() {
+export default function Hero({ onGetStarted }) {
   return (
     <section className="relative flex min-h-[80vh] flex-col items-center justify-center px-6 text-center md:px-12">
       <div className="pointer-events-none absolute top-0 left-0 -z-10 h-full w-full overflow-hidden opacity-30">
@@ -30,13 +30,14 @@ export default function Hero() {
         enforcing budgets, vendor allowlists, approvals, and audit trails.
       </p>
 
-      <a
-        href="#dashboard"
+      <button
+        type="button"
+        onClick={onGetStarted}
         className="group mt-12 flex items-center gap-2 border border-white/20 px-8 py-4 text-sm font-medium tracking-widest uppercase transition-all duration-300 hover:bg-white hover:text-black"
       >
-        <span>Open Dashboard</span>
+        <span>Get started</span>
         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={1.5} />
-      </a>
+      </button>
     </section>
   )
 }
