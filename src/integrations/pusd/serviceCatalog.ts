@@ -77,7 +77,7 @@ export function createLocalPusdSpotPriceService(input?: {
 
   return {
     serviceId: 'local.pusd.spot_price',
-    label: 'Local PalmOS PUSD Spot Price',
+    label: 'PUSD Market Data API',
     paymentRail: PALMOS_PAYMENT_RAIL,
     vendorId: 'local_pusd_demo',
     chainId: SOLANA_MAINNET_CHAIN_ID,
@@ -117,7 +117,7 @@ export function createLocalPusdOpsBriefService(input?: {
 
   return {
     serviceId: 'local.pusd.ops_brief',
-    label: 'Local PalmOS PUSD Ops Brief',
+    label: 'PUSD Ops Brief Vendor',
     paymentRail: PALMOS_PAYMENT_RAIL,
     vendorId: 'ops_research_vendor',
     chainId: SOLANA_MAINNET_CHAIN_ID,
@@ -184,6 +184,7 @@ export function createRegisteredPalmosServiceDefinition(
       const url = new URL(record.endpointUrl)
       const init: RequestInit = {
         method: record.method,
+        redirect: 'error',
       }
 
       if (record.method === 'GET' || record.requestMode === 'query') {

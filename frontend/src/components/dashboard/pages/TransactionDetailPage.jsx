@@ -25,7 +25,7 @@ async function copyToClipboard(value) {
   return false
 }
 
-function CopyableSignature({ signature, chainId, showSolscan }) {
+function CopyableSignature({ signature, chainId, explorerUrl, showSolscan }) {
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -52,7 +52,7 @@ function CopyableSignature({ signature, chainId, showSolscan }) {
         </button>
         {showSolscan && (
           <a
-            href={buildSolscanUrl(signature, chainId)}
+            href={explorerUrl ?? buildSolscanUrl(signature, chainId)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-green-300 transition-colors hover:bg-green-500/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
@@ -210,6 +210,7 @@ export default function TransactionDetailPage({
               <CopyableSignature
                 signature={event.txHashFull}
                 chainId={event.chainId}
+                explorerUrl={event.txExplorerUrl}
                 showSolscan={isReal}
               />
             </>

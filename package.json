@@ -2,12 +2,19 @@
   "name": "palmos",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "start": "node --import tsx src/server/dashboardApi.ts",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "package:agent:build": "tsc -p packages/agent/tsconfig.json",
+    "package:agent:pack": "npm --cache /tmp/palmos-npm-cache pack --workspace @palmos/agent --dry-run",
+    "palmos:init": "node --import tsx src/cli/initPalmos.ts",
     "palmos:wallet": "node --import tsx src/cli/generatePusdWallet.ts",
     "palmos:readiness": "node --import tsx src/cli/checkPusdReadiness.ts",
     "x402:wallet": "bun src/cli/generateX402Wallet.ts",
@@ -21,6 +28,7 @@
     "agent:external": "node --import tsx src/cli/runExternalAgent.ts",
     "palmos:worker": "node --import tsx src/cli/runPalmosWorker.ts",
     "palmos:external-agent": "node --import tsx src/cli/runExternalAgent.ts",
+    "judge:seed": "node --import tsx src/cli/seedJudgeWorkspace.ts",
     "approval:pending": "bun src/cli/reviewPendingApprovals.ts",
     "showcase:live": "bun src/cli/runHackathonShowcase.ts",
     "showcase:pending": "SHOWCASE_AUTO_RESOLVE_APPROVALS=0 bun src/cli/runHackathonShowcase.ts",

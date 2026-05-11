@@ -112,6 +112,15 @@ function isProbablyRealSolanaSignature(value) {
   return SOLANA_BASE58_PATTERN.test(value)
 }
 
+function buildSolscanTxUrl(signature, chainId) {
+  if (!isProbablyRealSolanaSignature(signature) || chainId === 'solana-local') {
+    return null
+  }
+
+  const cluster = chainId === 'solana-devnet' ? '?cluster=devnet' : ''
+  return `https://solscan.io/tx/${signature}${cluster}`
+}
+
 function deriveSettlementMode(record, txHashFull) {
   if (
     record.status === 'approval_pending' ||
@@ -270,6 +279,9 @@ function buildEvent(agentSnapshot, record) {
     chainId: record.chainId ?? null,
     txHash: shortTxHash(txHashFull),
     txHashFull,
+    txExplorerUrl:
+      record.transactionExplorerUrl ??
+      buildSolscanTxUrl(txHashFull, record.chainId),
     status: record.status,
     errorCode: record.errorCode ?? null,
     errorMessage: record.errorMessage ?? null,
@@ -517,6 +529,7 @@ function deriveAgent(agentSnapshot) {
       deadManSwitch: formatDeadManSwitch(
         agent.policyConfig?.heartbeatTimeoutSeconds,
       ),
+      settlementMode: agent.settlementMode ?? 'local-demo',
       walletBackend: agent.walletBackend ?? (agentSnapshot.owsAccess ? 'ows' : 'runtime'),
       owsWalletName:
         agent.owsWalletName ?? agentSnapshot.owsAccess?.owsWalletName ?? 'Not attached',

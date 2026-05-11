@@ -2,11 +2,15 @@ import type {
   PalmosPaidServiceDefinition,
 } from './serviceCatalog.js'
 import type {
+  ExpectedPusdPaymentInstruction,
   PusdPaymentRequiredResponse,
 } from './paymentInstructions.js'
+import { parsePusdAmountToBaseUnits } from './amount.js'
+import { assertPusdPaymentInstructionMatchesPolicy } from './paymentInstructions.js'
 import { readSolanaKeypairFromEnv, type ReadSolanaKeypairInput } from './keypair.js'
 import { sendPusdPayment } from './transfer.js'
 import { readSolanaRpcUrlFromEnv } from './constants.js'
+import type { AgentSettlementMode } from '../../store/AgentRegistry.js'
 
 export type PalmosExecutionResult = {
   status: number
@@ -19,6 +23,12 @@ export type PalmosClientConfig = {
   allowLocalDemoPayments?: boolean
   rpcUrl?: string
   keypair?: ReadSolanaKeypairInput
+  realPaymentMaxAmount?: string
+}
+
+export type PalmosExecuteOptions = {
+  expectedPayment?: ExpectedPusdPaymentInstruction
+  settlementMode?: Extract<AgentSettlementMode, 'local-demo' | 'real-solana'>
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
@@ -76,6 +86,21 @@ function mergeHeaders(
   return headers
 }
 
+function assertWithinRealPaymentCap(amount: string, cap?: string): void {
+  const normalizedCap = cap?.trim()
+  if (!normalizedCap) {
+    return
+  }
+
+  const amountBaseUnits = parsePusdAmountToBaseUnits(amount)
+  const capBaseUnits = parsePusdAmountToBaseUnits(normalizedCap)
+  if (amountBaseUnits > capBaseUnits) {
+    throw new Error(
+      `PUSD payment amount ${amount} exceeds configured real-payment cap ${normalizedCap}.`,
+    )
+  }
+}
+
 export class PalmosClient {
   constructor(
     private readonly config: PalmosClientConfig = {},
@@ -90,15 +115,19 @@ export class PalmosClient {
       allowLocalDemoPayments: env.PALMOS_ALLOW_LOCAL_DEMO_PAYMENTS !== '0',
       rpcUrl: readSolanaRpcUrlFromEnv(env),
       keypair: {
-        privateKey: env.PUSD_AGENT_PRIVATE_KEY,
+        privateKey: env.PUSD_AGENT_PRIVATE_KEY ?? env.OWS_WALLET_PRIVATE_KEY,
         keypairPath: env.PUSD_AGENT_KEYPAIR_PATH,
       },
+      realPaymentMaxAmount:
+        env.PALMOS_REAL_PUSD_MAX_PER_CALL?.trim() ||
+        env.PUSD_MAX_PER_CALL?.trim(),
     })
   }
 
   async execute<TRequest>(
     service: PalmosPaidServiceDefinition<TRequest>,
     request: TRequest,
+    options: PalmosExecuteOptions = {},
   ): Promise<PalmosExecutionResult> {
     const preparedRequest = service.buildRequest(request)
     const initialResponse = await this.fetchImpl(
@@ -115,20 +144,43 @@ export class PalmosClient {
       }
     }
 
-    const signer = await readSolanaKeypairFromEnv({
-      PUSD_AGENT_PRIVATE_KEY: this.config.keypair?.privateKey,
-      PUSD_AGENT_KEYPAIR_PATH: this.config.keypair?.keypairPath,
-    })
+    if (options.expectedPayment) {
+      assertPusdPaymentInstructionMatchesPolicy(
+        initialBody,
+        options.expectedPayment,
+      )
+    }
+
+    const settlementMode = options.settlementMode
+    const signer =
+      settlementMode === 'local-demo'
+        ? undefined
+        : await readSolanaKeypairFromEnv({
+            PUSD_AGENT_PRIVATE_KEY: this.config.keypair?.privateKey,
+            PUSD_AGENT_KEYPAIR_PATH: this.config.keypair?.keypairPath,
+          })
     let signature: string | undefined
+    if (settlementMode === 'real-solana' && !signer) {
+      throw new Error(
+        'Real Solana PUSD settlement requires PUSD_AGENT_PRIVATE_KEY or PUSD_AGENT_KEYPAIR_PATH.',
+      )
+    }
     if (signer) {
       try {
+        assertWithinRealPaymentCap(
+          initialBody.amount,
+          this.config.realPaymentMaxAmount,
+        )
         signature = await sendPusdPayment({
           payment: initialBody,
           payer: signer,
           rpcUrl: this.config.rpcUrl,
         })
       } catch (error) {
-        if (this.config.allowLocalDemoPayments === false) {
+        if (
+          settlementMode === 'real-solana' ||
+          this.config.allowLocalDemoPayments === false
+        ) {
           throw error
         }
       }

@@ -122,10 +122,10 @@ export default function AgentSidebar({
 
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-widest text-neutral-700">
-                  {agent.policy?.walletBackend === 'ows' ? 'OWS-backed wallet' : 'Runtime wallet'}
+                  {agent.policy?.walletBackend === 'ows' ? 'OWS-backed wallet' : 'Payment profile'}
                 </span>
                 <span className="border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-400">
-                  {agent.policy?.walletBackend === 'ows' ? 'OWS' : 'LOCAL'}
+                  {agent.policy?.walletBackend === 'ows' ? 'OWS' : 'TEST'}
                 </span>
               </div>
 

@@ -10,7 +10,6 @@ import {
 import { useState } from 'react'
 import { navigate } from '../../../hooks/useHashRoute'
 import CredentialsManager from '../CredentialsManager'
-import PusdReadinessPanel from '../PusdReadinessPanel'
 
 const STATUS_TONE = {
   active: 'text-green-400',
@@ -29,6 +28,12 @@ function formatPusd(value, digits = 3) {
 function shortHash(value) {
   if (!value) return null
   return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value
+}
+
+function formatSettlementMode(value) {
+  if (value === 'ows') return 'OWS Solana'
+  if (value === 'real-solana') return 'Real Solana'
+  return 'Local service-test'
 }
 
 function Section({ title, action, children }) {
@@ -389,12 +394,7 @@ export default function AgentDetailPage({
   allowServiceForAgent,
   unallowServiceForAgent,
 }) {
-  const [selectedServiceId, setSelectedServiceId] = useState(null)
   const agent = agents.find((a) => a.id === agentId)
-  const allowedVendorIds = new Set(agent?.policy?.allowedVendorIds ?? [])
-  const agentAllowedServices = agent
-    ? services.filter((service) => allowedVendorIds.has(service.vendorId))
-    : []
 
   if (!agent) {
     return <NotFound agentId={agentId} />
@@ -404,14 +404,6 @@ export default function AgentDetailPage({
   const agentSpend = agentEvents.filter((e) => e.type === 'spend')
   const agentAudit = agentEvents.filter((e) => e.type !== 'spend')
   const agentPending = pendingApprovals.filter((p) => p.agentId === agentId)
-  const latestService = agentAllowedServices.find(
-    (service) => service.serviceId === agent.policy?.latestServiceId,
-  )
-  const selectedService =
-    agentAllowedServices.find((service) => service.serviceId === selectedServiceId) ??
-    latestService ??
-    agentAllowedServices[0] ??
-    null
 
   const executedSpend = agent.policy?.executedSpend ?? 0
   const blockedCount = agent.policy?.blockedCount ?? 0
@@ -487,6 +479,7 @@ export default function AgentDetailPage({
       <div className="grid gap-4 px-6 pb-6 lg:grid-cols-2">
         <Section title="Wallet & identity">
           <DetailRow label="Agent ID" value={agent.id} mono />
+          <DetailRow label="Settlement mode" value={formatSettlementMode(agent.policy?.settlementMode)} />
           <DetailRow label="Wallet backend" value={agent.policy?.walletBackend ?? 'unknown'} />
           <DetailRow label="OWS wallet" value={agent.policy?.owsWalletName} />
           <DetailRow label="Wallet state" value={agent.policy?.walletState} />
@@ -523,52 +516,6 @@ export default function AgentDetailPage({
             unallowServiceForAgent={unallowServiceForAgent}
           />
         </Section>
-
-        <div className="lg:col-span-2">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-neutral-600">
-                Agent wallet readiness
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">
-                Route-specific check for this agent wallet against an allowed service.
-              </p>
-            </div>
-            {agentAllowedServices.length > 0 && (
-              <select
-                aria-label="Select service for agent readiness"
-                value={selectedServiceId ?? ''}
-                onChange={(event) => setSelectedServiceId(event.target.value || null)}
-                className="min-h-10 border border-neutral-800 bg-black px-3 text-xs text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
-              >
-                {agentAllowedServices.map((service) => (
-                  <option key={service.serviceId} value={service.serviceId}>
-                    {service.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <PusdReadinessPanel
-            agentId={agent.id}
-            serviceId={selectedService?.serviceId}
-            events={agentSpend}
-            eyebrow="Agent wallet"
-            title={
-              selectedService
-                ? `Ready to pay ${selectedService.label}`
-                : 'PUSD payment readiness'
-            }
-            description={
-              selectedService
-                ? `Verifies this agent wallet can settle ${selectedService.expectedAmount} PUSD to the selected service recipient.`
-                : 'Allow a service for this agent before checking real PUSD settlement.'
-            }
-            emptyTitle="No allowed service selected"
-            emptyDescription="Agent wallet readiness is checked against a service recipient. Allow at least one service for this agent, then refresh this page."
-            showSettlementSummary
-          />
-        </div>
 
         <Section
           title="SDK credentials"

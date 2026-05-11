@@ -2,6 +2,7 @@ import {
   buildAgentAuditSnapshot,
   buildShowcaseSnapshot,
   createDefaultPalmosServiceCatalog,
+  DEMO_AGENT_IDS,
   executePaidServiceCall,
   loadAgentSpendWorkspace,
   OwsClient,
@@ -73,11 +74,17 @@ const xmtpNotifier = XmtpNotifier.fromEnv(
   workspace.xmtpAlertRegistry,
 )
 
-const researchAgent = seedResult.agents.find((agent) => agent.agentId === 'research_agent')
-const opsAgent = seedResult.agents.find((agent) => agent.agentId === 'ops_buyer')
-const growthAgent = seedResult.agents.find((agent) => agent.agentId === 'growth_agent')
+const marketMonitorAgent = seedResult.agents.find(
+  (agent) => agent.agentId === DEMO_AGENT_IDS.marketMonitor,
+)
+const vendorProcurementAgent = seedResult.agents.find(
+  (agent) => agent.agentId === DEMO_AGENT_IDS.vendorProcurement,
+)
+const growthCampaignAgent = seedResult.agents.find(
+  (agent) => agent.agentId === DEMO_AGENT_IDS.growthCampaign,
+)
 
-if (!researchAgent || !opsAgent || !growthAgent) {
+if (!marketMonitorAgent || !vendorProcurementAgent || !growthCampaignAgent) {
   throw new Error('Showcase seed did not create all expected demo agents.')
 }
 
@@ -86,14 +93,14 @@ if (!brain) {
   throw new Error('OPENAI_API_KEY is required for the showcase run.')
 }
 
-const researchPlan = await brain.planTask({
-  agent: researchAgent,
+const marketPlan = await brain.planTask({
+  agent: marketMonitorAgent,
   task: 'Get the current BTC price in USD using the paid market data service and summarize it.',
   serviceCatalog,
 })
 
-const researchExecution =
-  researchPlan.kind === 'service_call'
+const marketExecution =
+  marketPlan.kind === 'service_call'
     ? await executePaidServiceCall(
         {
           kernel: workspace.kernel,
@@ -105,14 +112,14 @@ const researchExecution =
           xmtpNotifier,
         },
         {
-          agentId: researchAgent.agentId,
-          serviceId: researchPlan.serviceId,
-          request: researchPlan.request,
+          agentId: marketMonitorAgent.agentId,
+          serviceId: marketPlan.serviceId,
+          request: marketPlan.request,
         },
       )
     : undefined
 
-const opsSubmitted = await executePaidServiceCall(
+const procurementSubmitted = await executePaidServiceCall(
   {
     kernel: workspace.kernel,
     agentRegistry: workspace.agentRegistry,
@@ -123,7 +130,7 @@ const opsSubmitted = await executePaidServiceCall(
     xmtpNotifier,
   },
   {
-    agentId: opsAgent.agentId,
+    agentId: vendorProcurementAgent.agentId,
     serviceId: 'local.pusd.ops_brief',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
@@ -132,8 +139,8 @@ const opsSubmitted = await executePaidServiceCall(
   },
 )
 
-const opsApproved =
-  shouldAutoResolveApprovals && opsSubmitted.kind === 'approval_pending'
+const procurementApproved =
+  shouldAutoResolveApprovals && procurementSubmitted.kind === 'approval_pending'
     ? await resolvePendingPaidCallApproval(
         {
           kernel: workspace.kernel,
@@ -145,16 +152,16 @@ const opsApproved =
           xmtpNotifier,
         },
         {
-          executionId: opsSubmitted.execution.executionId,
+          executionId: procurementSubmitted.execution.executionId,
           decision: 'approved',
           approverActorId: 'manager_demo',
           approverRole: 'manager',
           comment: 'Approved during packaged showcase run.',
         },
       )
-    : opsSubmitted
+    : procurementSubmitted
 
-const growthBlocked = await executePaidServiceCall(
+const growthCampaignBlocked = await executePaidServiceCall(
   {
     kernel: workspace.kernel,
     agentRegistry: workspace.agentRegistry,
@@ -165,7 +172,7 @@ const growthBlocked = await executePaidServiceCall(
     xmtpNotifier,
   },
   {
-    agentId: growthAgent.agentId,
+    agentId: growthCampaignAgent.agentId,
     serviceId: 'local.pusd.ops_brief',
     request: {
       symbols: ['BTC', 'ETH'],
@@ -174,11 +181,13 @@ const growthBlocked = await executePaidServiceCall(
   },
 )
 
-const currentResearchAgent = await workspace.agentRegistry.get(researchAgent.agentId)
-if (currentResearchAgent) {
+const currentMarketMonitorAgent = await workspace.agentRegistry.get(
+  marketMonitorAgent.agentId,
+)
+if (currentMarketMonitorAgent) {
   const staleAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   await workspace.agentRegistry.put({
-    ...currentResearchAgent,
+    ...currentMarketMonitorAgent,
     updatedAt: staleAt,
     lastCheckInAt: staleAt,
   })
@@ -211,17 +220,17 @@ const dashboardJsonPath = await writeShowcaseSnapshot({
   snapshot,
 })
 
-const researchAudit = await buildAgentAuditSnapshot({
+const marketAudit = await buildAgentAuditSnapshot({
   baseDir,
-  agentId: researchAgent.agentId,
+  agentId: marketMonitorAgent.agentId,
 })
-const opsAudit = await buildAgentAuditSnapshot({
+const procurementAudit = await buildAgentAuditSnapshot({
   baseDir,
-  agentId: opsAgent.agentId,
+  agentId: vendorProcurementAgent.agentId,
 })
-const growthAudit = await buildAgentAuditSnapshot({
+const growthCampaignAudit = await buildAgentAuditSnapshot({
   baseDir,
-  agentId: growthAgent.agentId,
+  agentId: growthCampaignAgent.agentId,
 })
 
 console.log(
@@ -236,16 +245,16 @@ console.log(
         opsBriefPriceAmount: env.PUSD_DEMO_OPS_BRIEF_PRICE ?? '0.25',
       },
       outcomes: {
-        research: researchExecution?.kind,
-        opsSubmission: opsSubmitted.kind,
-        opsResolution: opsApproved.kind,
-        growth: growthBlocked.kind,
+        marketMonitor: marketExecution?.kind,
+        vendorProcurementSubmission: procurementSubmitted.kind,
+        vendorProcurementResolution: procurementApproved.kind,
+        growthCampaign: growthCampaignBlocked.kind,
         deadMansSwitch,
       },
       agents: {
-        research: researchAudit.current,
-        ops: opsAudit.current,
-        growth: growthAudit.current,
+        marketMonitor: marketAudit.current,
+        vendorProcurement: procurementAudit.current,
+        growthCampaign: growthCampaignAudit.current,
       },
       dashboard: {
         htmlPath: dashboardHtmlPath,

@@ -42,6 +42,12 @@ type DemoAgentSeed = {
   policyConfig: AgentPolicyTemplateInput
 }
 
+export const DEMO_AGENT_IDS = {
+  marketMonitor: 'market_monitor_agent',
+  vendorProcurement: 'vendor_procurement_agent',
+  growthCampaign: 'growth_campaign_agent',
+} as const
+
 function buildDemoPolicies(
   input: SeedDemoInput,
   environment: RuntimeEnvironment,
@@ -54,11 +60,11 @@ function buildDemoPolicies(
 
   return [
     {
-      agentId: 'research_agent',
-      displayName: 'Research Agent',
+      agentId: DEMO_AGENT_IDS.marketMonitor,
+      displayName: 'Market Monitor Agent',
       walletType: 'ops',
       policyConfig: {
-        agentId: 'research_agent',
+        agentId: DEMO_AGENT_IDS.marketMonitor,
         organizationId: input.organizationId,
         environment,
         walletType: 'ops',
@@ -68,7 +74,7 @@ function buildDemoPolicies(
         allowedVendors: [
           {
             vendorId: 'local_pusd_demo',
-            label: 'Local PalmOS PUSD Demo',
+            label: 'PUSD Market Data API',
             destinationAddress: localPusdVendor,
             chainId: SOLANA_MAINNET_CHAIN_ID,
           },
@@ -85,11 +91,11 @@ function buildDemoPolicies(
       },
     },
     {
-      agentId: 'ops_buyer',
-      displayName: 'Ops Buyer',
+      agentId: DEMO_AGENT_IDS.vendorProcurement,
+      displayName: 'Vendor Procurement Agent',
       walletType: 'ops',
       policyConfig: {
-        agentId: 'ops_buyer',
+        agentId: DEMO_AGENT_IDS.vendorProcurement,
         organizationId: input.organizationId,
         environment,
         walletType: 'ops',
@@ -110,11 +116,11 @@ function buildDemoPolicies(
       },
     },
     {
-      agentId: 'growth_agent',
-      displayName: 'Growth Agent',
+      agentId: DEMO_AGENT_IDS.growthCampaign,
+      displayName: 'Growth Campaign Agent',
       walletType: 'ops',
       policyConfig: {
-        agentId: 'growth_agent',
+        agentId: DEMO_AGENT_IDS.growthCampaign,
         organizationId: input.organizationId,
         environment,
         walletType: 'ops',

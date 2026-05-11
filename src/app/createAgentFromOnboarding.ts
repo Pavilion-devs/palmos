@@ -12,6 +12,10 @@ import type {
   AgentCredentialRecord,
   AgentCredentialRegistry,
 } from '../store/AgentCredentialRegistry.js'
+import {
+  normalizeAgentSettlementMode,
+  type AgentSettlementMode,
+} from '../store/AgentRegistry.js'
 import type { AgentSpendWorkspace } from '../workspace/loadWorkspace.js'
 
 export type CreateAgentFromOnboardingInput = {
@@ -23,6 +27,7 @@ export type CreateAgentFromOnboardingInput = {
   allowedVendors?: string[]
   walletMode?: string
   managerAddress?: string
+  owsImportPrivateKey?: string
   organizationId: string
   treasuryId?: string
   servicePayToAddress: string
@@ -123,9 +128,26 @@ function buildVendorRules(input: {
     .filter((rule): rule is AgentVendorRule => rule != null)
 }
 
-function readWalletMode(value: string | undefined): 'ops' {
-  void value
+function readWalletMode(_value: string | undefined): 'ops' {
   return 'ops'
+}
+
+function readSettlementMode(value: string | undefined): AgentSettlementMode {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === '2' || normalized === 'ows') {
+    return 'ows'
+  }
+  if (
+    normalized === '3' ||
+    normalized === 'real-solana' ||
+    normalized === 'real_solana' ||
+    normalized === 'solana' ||
+    normalized === 'mainnet'
+  ) {
+    return 'real-solana'
+  }
+
+  return normalizeAgentSettlementMode(normalized)
 }
 
 export async function createAgentFromOnboarding(
@@ -164,13 +186,15 @@ export async function createAgentFromOnboarding(
     sessionBudget,
     heartbeatTimeoutSeconds: 900,
   }
+  const settlementMode = readSettlementMode(input.walletMode)
   const created = await createAgentWallet(
     {
       kernel: deps.workspace.kernel,
       agentRegistry: deps.workspace.agentRegistry,
       walletRegistry: deps.workspace.walletRegistry,
-      owsClient: deps.workspace.owsClient,
-      owsAccessRegistry: deps.workspace.owsAccessRegistry,
+      owsClient: settlementMode === 'ows' ? deps.workspace.owsClient : undefined,
+      owsAccessRegistry:
+        settlementMode === 'ows' ? deps.workspace.owsAccessRegistry : undefined,
       now: deps.now,
     },
     {
@@ -182,9 +206,13 @@ export async function createAgentFromOnboarding(
       managerActorId: 'manager_dashboard',
       managerRoleIds: ['manager'],
       walletType: policyConfig.walletType,
+      settlementMode,
       subjectType: 'team',
       policyConfig,
       xmtpInboxId: input.managerAddress,
+      owsImportPrivateKey:
+        settlementMode === 'ows' ? input.owsImportPrivateKey : undefined,
+      owsImportChain: settlementMode === 'ows' ? 'solana' : undefined,
     },
   )
   const agent = await activateAgentWallet(

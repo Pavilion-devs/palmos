@@ -1,6 +1,8 @@
 import { join } from 'path'
 import {
   createDefaultPalmosServiceCatalog,
+  DEMO_AGENT_IDS,
+  loadProcessEnv,
   loadAgentSpendWorkspace,
   OpenAIResearchAgent,
   OwsClient,
@@ -12,22 +14,12 @@ import {
   XmtpNotifier,
 } from '../index.js'
 
-function readProcessEnv(): Record<string, string | undefined> {
-  const scope = globalThis as {
-    process?: {
-      env?: Record<string, string | undefined>
-    }
-  }
-
-  return scope.process?.env ?? {}
-}
-
-const env = readProcessEnv()
+const env = loadProcessEnv()
 const baseDir =
   env.AGENT_SPEND_OS_BASE_DIR?.trim() ||
   `/tmp/palmos-worker-${Date.now().toString(36)}`
 const task = env.AGENT_TASK?.trim()
-const agentId = env.PALMOS_WORKER_AGENT_ID?.trim() || 'research_agent'
+const agentId = env.PALMOS_WORKER_AGENT_ID?.trim() || DEMO_AGENT_IDS.marketMonitor
 const shouldStartLocalServer = env.START_LOCAL_PUSD_SERVER !== '0'
 
 let localServer: Awaited<ReturnType<typeof startLocalPusdDemoServer>> | undefined

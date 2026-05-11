@@ -1,6 +1,6 @@
 import { executePaidServiceCall } from './executePaidServiceCall.js'
 import { buildShowcaseSnapshot } from '../projections/buildShowcaseSnapshot.js'
-import { seedDemo } from '../demo/seedDemo.js'
+import { DEMO_AGENT_IDS, seedDemo } from '../demo/seedDemo.js'
 import type { PalmosClient } from '../integrations/pusd/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { XmtpNotifier } from '../integrations/xmtp/client.js'
@@ -25,9 +25,9 @@ export async function runDashboardScenario(
 ): Promise<{
   snapshot: Awaited<ReturnType<typeof buildShowcaseSnapshot>>
   outcomes: {
-    research: string
-    ops: string
-    growth: string
+    marketMonitor: string
+    vendorProcurement: string
+    growthCampaign: string
   }
 }> {
   if (!deps.palmosClient) {
@@ -47,15 +47,17 @@ export async function runDashboardScenario(
     treasuryId: 'treasury_demo',
   })
 
-  const researchAgent = seeded.agents.find(
-    (agent) => agent.agentId === 'research_agent',
+  const marketMonitorAgent = seeded.agents.find(
+    (agent) => agent.agentId === DEMO_AGENT_IDS.marketMonitor,
   )
-  const opsAgent = seeded.agents.find((agent) => agent.agentId === 'ops_buyer')
-  const growthAgent = seeded.agents.find(
-    (agent) => agent.agentId === 'growth_agent',
+  const vendorProcurementAgent = seeded.agents.find(
+    (agent) => agent.agentId === DEMO_AGENT_IDS.vendorProcurement,
+  )
+  const growthCampaignAgent = seeded.agents.find(
+    (agent) => agent.agentId === DEMO_AGENT_IDS.growthCampaign,
   )
 
-  if (!researchAgent || !opsAgent || !growthAgent) {
+  if (!marketMonitorAgent || !vendorProcurementAgent || !growthCampaignAgent) {
     throw new Error('Dashboard scenario seed did not create all expected agents.')
   }
 
@@ -69,8 +71,8 @@ export async function runDashboardScenario(
     xmtpNotifier: deps.xmtpNotifier,
   }
 
-  const research = await executePaidServiceCall(sharedDeps, {
-    agentId: researchAgent.agentId,
+  const marketMonitor = await executePaidServiceCall(sharedDeps, {
+    agentId: marketMonitorAgent.agentId,
     serviceId: 'local.pusd.spot_price',
     request: {
       base: 'BTC',
@@ -78,8 +80,8 @@ export async function runDashboardScenario(
     },
   })
 
-  const ops = await executePaidServiceCall(sharedDeps, {
-    agentId: opsAgent.agentId,
+  const vendorProcurement = await executePaidServiceCall(sharedDeps, {
+    agentId: vendorProcurementAgent.agentId,
     serviceId: 'local.pusd.ops_brief',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
@@ -87,8 +89,8 @@ export async function runDashboardScenario(
     },
   })
 
-  const growth = await executePaidServiceCall(sharedDeps, {
-    agentId: growthAgent.agentId,
+  const growthCampaign = await executePaidServiceCall(sharedDeps, {
+    agentId: growthCampaignAgent.agentId,
     serviceId: 'local.pusd.ops_brief',
     request: {
       symbols: ['BTC', 'ETH'],
@@ -104,9 +106,9 @@ export async function runDashboardScenario(
   return {
     snapshot,
     outcomes: {
-      research: research.kind,
-      ops: ops.kind,
-      growth: growth.kind,
+      marketMonitor: marketMonitor.kind,
+      vendorProcurement: vendorProcurement.kind,
+      growthCampaign: growthCampaign.kind,
     },
   }
 }

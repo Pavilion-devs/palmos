@@ -6,11 +6,11 @@ const API_BASE_URL = import.meta.env.VITE_DASHBOARD_API_BASE_URL || ''
 const INITIAL_TURN = {
   field: 'agentTask',
   message:
-    'Hi there, welcome to PalmOS. I am here to manage your agent wallet. What should this agent do for you?',
+    "Let's register your external agent with PalmOS. Which paid services should it be allowed to use?",
   inputType: 'text',
-  placeholder: 'Generate market-ops briefs using paid PUSD APIs',
+  placeholder: 'Market data APIs and ops brief vendors',
   state: {
-    agentName: 'PalmOS Agent',
+    agentName: 'External Agent',
   },
   complete: false,
 }
@@ -34,8 +34,8 @@ function displayUserReply(turn, value) {
 
 function buildStoredSetup(state) {
   return {
-    agentName: state.agentName || 'PalmOS Agent',
-    agentTask: state.agentTask || 'Generate market-ops briefs using paid PUSD APIs',
+    agentName: state.agentName || 'External Agent',
+    agentTask: state.agentTask || 'Use approved paid services through PalmOS',
     maxPerCall: state.maxPerCall || '0.05',
     sessionBudget: state.sessionBudget || '1.00',
     autoApproveUnder: state.autoApproveUnder || '0.05',
@@ -95,7 +95,7 @@ async function createDashboardAgent(setup) {
   const payload = await response.json().catch(() => null)
 
   if (!response.ok || !payload?.ok || !payload?.agent?.agentId) {
-    throw new Error(payload?.error || 'PalmOS could not create this agent.')
+    throw new Error(payload?.error || 'PalmOS could not register this external agent.')
   }
 
   return payload
@@ -196,9 +196,6 @@ export default function DashboardOnboarding({ onComplete }) {
       const created = await createDashboardAgent(sanitized)
       window.localStorage.setItem('palmos.dashboard.setup', JSON.stringify(sanitized))
       window.localStorage.setItem('palmos.dashboard.selectedAgentId', created.agent.agentId)
-      if (created.token) {
-        window.localStorage.setItem('palmos.dashboard.agentToken', created.token)
-      }
       onComplete({
         ...sanitized,
         agentId: created.agent.agentId,
@@ -207,7 +204,7 @@ export default function DashboardOnboarding({ onComplete }) {
       const message =
         requestError instanceof Error
           ? requestError.message
-          : 'PalmOS could not create this agent.'
+          : 'PalmOS could not register this external agent.'
       setError(message)
       setMessages((current) => [
         ...current,
@@ -299,7 +296,7 @@ export default function DashboardOnboarding({ onComplete }) {
               onClick={completeSetup}
               className="flex items-center gap-2 border border-white px-5 py-3 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black"
             >
-              Open console
+              Copy SDK credential
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>

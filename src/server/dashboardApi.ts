@@ -1,8 +1,9 @@
 import express from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { existsSync, readFileSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
+import { isIP } from 'net'
 import { join } from 'path'
+import { PublicKey } from '@solana/web3.js'
 import {
   authenticateAgentCredential,
   buildShowcaseSnapshot,
@@ -11,6 +12,7 @@ import {
   createAgentCredential,
   createAgentFromOnboarding,
   executePaidServiceCall,
+  loadProcessEnv,
   loadAgentSpendWorkspace,
   mergeRegisteredPalmosServices,
   OpenAIResearchAgent,
@@ -34,6 +36,7 @@ import {
 import {
   PALMOS_LOCAL_DEMO_MERCHANT_WALLET,
 } from '../integrations/pusd/constants.js'
+import { FilePusdReadinessReportRegistry } from '../store/PusdReadinessReportRegistry.js'
 import type { PalmosServiceCatalog } from '../integrations/pusd/serviceCatalog.js'
 import {
   createOnboardingTurn,
@@ -42,41 +45,7 @@ import {
 } from './onboardingEngine.js'
 
 function readProcessEnv(): Record<string, string | undefined> {
-  const scope = globalThis as {
-    process?: {
-      cwd?: () => string
-      env?: Record<string, string | undefined>
-    }
-  }
-
-  const processEnv = scope.process?.env ?? {}
-  const cwd = scope.process?.cwd?.() ?? '.'
-  const envPath = join(cwd, '.env')
-  if (!existsSync(envPath)) {
-    return processEnv
-  }
-
-  const fileEnv: Record<string, string> = {}
-  for (const rawLine of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (!line || line.startsWith('#')) {
-      continue
-    }
-
-    const separatorIndex = line.indexOf('=')
-    if (separatorIndex <= 0) {
-      continue
-    }
-
-    const key = line.slice(0, separatorIndex).trim()
-    const value = line.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '')
-    fileEnv[key] = value
-  }
-
-  return {
-    ...fileEnv,
-    ...processEnv,
-  }
+  return loadProcessEnv()
 }
 
 function resolveDashboardBaseDir(
@@ -196,6 +165,57 @@ function isPublicAccessMode(env: Record<string, string | undefined>): boolean {
     env.PALMOS_PUBLIC_ACCESS_MODE?.trim()?.toLowerCase() === 'true' ||
     Boolean(env.RENDER?.trim())
   )
+}
+
+function isShowcaseRunEnabled(env: Record<string, string | undefined>): boolean {
+  return (
+    env.PALMOS_ENABLE_SHOWCASE_RUN?.trim() === '1' ||
+    env.PALMOS_ENABLE_SHOWCASE_RUN?.trim()?.toLowerCase() === 'true'
+  )
+}
+
+function normalizeOrigin(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed === '*') {
+    return undefined
+  }
+
+  try {
+    return new URL(trimmed).origin
+  } catch {
+    return undefined
+  }
+}
+
+function readCsvValues(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function buildAllowedCorsOrigins(
+  env: Record<string, string | undefined>,
+): Set<string> {
+  const configuredOrigins = [
+    ...readCsvValues(env.PALMOS_ALLOWED_ORIGINS),
+    ...readCsvValues(env.DASHBOARD_ALLOWED_ORIGINS),
+    env.PALMOS_FRONTEND_ORIGIN,
+    env.FRONTEND_ORIGIN,
+  ]
+  const localOrigins = [
+    'http://127.0.0.1:5173',
+    'http://localhost:5173',
+    'http://127.0.0.1:4173',
+    'http://localhost:4173',
+    'http://127.0.0.1:4030',
+    'http://localhost:4030',
+  ]
+  const origins = [...configuredOrigins, ...localOrigins]
+    .map(normalizeOrigin)
+    .filter((origin): origin is string => Boolean(origin))
+
+  return new Set(origins)
 }
 
 function readCookie(req: express.Request, name: string): string | undefined {
@@ -441,11 +461,79 @@ function readAgentPolicyPatch(value: unknown): {
     heartbeatTimeoutSeconds:
       Number.isFinite(heartbeat) && heartbeat > 0
         ? Math.round(heartbeat)
-        : undefined,
+    : undefined,
   }
 }
 
-function readRegisteredServiceInput(value: unknown): Omit<
+function allowUnsafeServiceEndpoints(env: Record<string, string | undefined>): boolean {
+  return (
+    env.PALMOS_ALLOW_UNSAFE_SERVICE_ENDPOINTS?.trim() === '1' ||
+    env.PALMOS_ALLOW_UNSAFE_SERVICE_ENDPOINTS?.trim()?.toLowerCase() === 'true'
+  )
+}
+
+function normalizeSolanaAddress(value: string): string | undefined {
+  try {
+    return new PublicKey(value.trim()).toBase58()
+  } catch {
+    return undefined
+  }
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false
+  }
+
+  const [first = 0, second = 0] = parts
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  )
+}
+
+function isUnsafeRegisteredServiceUrl(url: URL): boolean {
+  const hostname = normalizeHostname(url.hostname)
+  if (
+    hostname === 'localhost' ||
+    hostname === 'metadata' ||
+    hostname === 'metadata.google.internal' ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    return true
+  }
+
+  const ipVersion = isIP(hostname)
+  if (ipVersion === 4) {
+    return isPrivateIpv4(hostname)
+  }
+
+  if (ipVersion === 6) {
+    return (
+      hostname === '::1' ||
+      hostname.startsWith('fc') ||
+      hostname.startsWith('fd') ||
+      hostname.startsWith('fe80:')
+    )
+  }
+
+  return false
+}
+
+function readRegisteredServiceInput(
+  value: unknown,
+  env: Record<string, string | undefined>,
+): Omit<
   RegisteredPalmosServiceRecord,
   'createdAt' | 'updatedAt' | 'status'
 > | undefined {
@@ -467,9 +555,20 @@ function readRegisteredServiceInput(value: unknown): Omit<
     return undefined
   }
 
+  const normalizedDestinationAddress = normalizeSolanaAddress(destinationAddress)
+  if (!normalizedDestinationAddress) {
+    return undefined
+  }
+
   try {
     const parsedUrl = new URL(endpointUrl)
     if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return undefined
+    }
+    if (
+      !allowUnsafeServiceEndpoints(env) &&
+      isUnsafeRegisteredServiceUrl(parsedUrl)
+    ) {
       return undefined
     }
   } catch {
@@ -480,7 +579,7 @@ function readRegisteredServiceInput(value: unknown): Omit<
     serviceId,
     label,
     vendorId,
-    destinationAddress,
+    destinationAddress: normalizedDestinationAddress,
     endpointUrl,
     method,
     requestMode: readServiceRequestMode(candidate.requestMode, method),
@@ -556,7 +655,8 @@ async function main() {
   const palmosClient = PalmosClient.fromEnv(env)
   const owsClient = workspace.owsClient ?? OwsClient.fromEnv(baseDir, env)
   const zerionClient = ZerionClient.fromEnv(env)
-  const xmtpNotifier = XmtpNotifier.fromEnv(
+  const pusdReadinessReports = new FilePusdReadinessReportRegistry(baseDir)
+  let xmtpNotifier = XmtpNotifier.fromEnv(
     {
       ...env,
       XMTP_DB_PATH: env.XMTP_DB_PATH?.trim() || join(baseDir, 'xmtp-local.db3'),
@@ -564,7 +664,15 @@ async function main() {
     workspace.xmtpAlertRegistry,
   )
 
-  await xmtpNotifier?.assertReady()
+  try {
+    await xmtpNotifier?.assertReady()
+  } catch (error) {
+    console.warn(
+      '[DashboardApi] XMTP notifier disabled:',
+      error instanceof Error ? error.message : 'Unable to initialize XMTP.',
+    )
+    xmtpNotifier = undefined
+  }
 
   let localServer: Awaited<ReturnType<typeof startLocalPusdDemoServer>> | undefined
   if (env.START_LOCAL_PUSD_SERVER !== '0') {
@@ -620,17 +728,28 @@ async function main() {
   }
 
   const app = express()
+  const allowedCorsOrigins = buildAllowedCorsOrigins(env)
   app.use(express.json())
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*')
+    const requestOrigin = Array.isArray(req.headers.origin)
+      ? req.headers.origin[0]
+      : req.headers.origin
+    const normalizedOrigin = normalizeOrigin(requestOrigin)
+
+    res.setHeader('Vary', 'Origin')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS')
     res.setHeader(
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type, X-PalmOS-Agent-Key',
     )
-    res.setHeader('Access-Control-Allow-Credentials', 'true')
+
+    if (normalizedOrigin && allowedCorsOrigins.has(normalizedOrigin)) {
+      res.setHeader('Access-Control-Allow-Origin', normalizedOrigin)
+      res.setHeader('Access-Control-Allow-Credentials', 'true')
+    }
+
     if (req.method === 'OPTIONS') {
-      res.status(204).end()
+      res.status(normalizedOrigin && !allowedCorsOrigins.has(normalizedOrigin) ? 403 : 204).end()
       return
     }
     next()
@@ -793,7 +912,7 @@ async function main() {
 
   app.post('/api/dashboard/services', async (req, res) => {
     try {
-      const input = readRegisteredServiceInput(req.body)
+      const input = readRegisteredServiceInput(req.body, env)
       if (!input) {
         res.status(400).json({
           ok: false,
@@ -1157,6 +1276,7 @@ async function main() {
           ...setup,
           organizationId: env.PALMOS_ORG_ID?.trim() || 'org_demo',
           treasuryId: env.PALMOS_TREASURY_ID?.trim() || 'treasury_demo',
+          owsImportPrivateKey: env.OWS_WALLET_PRIVATE_KEY?.trim(),
           servicePayToAddress:
             localServer?.payToAddress ??
             env.PUSD_MERCHANT_WALLET?.trim() ??
@@ -1688,7 +1808,7 @@ async function main() {
       if (!agentId) {
         res.status(400).json({
           ok: false,
-          error: 'Select or create an agent before running PalmOS.',
+          error: 'Select or register an external agent before running PalmOS.',
         })
         return
       }
@@ -1819,6 +1939,17 @@ async function main() {
         rpcUrl,
         env,
       })
+      const now = new Date().toISOString()
+      await pusdReadinessReports.put({
+        reportId: createId('pusd_readiness'),
+        createdAt: now,
+        updatedAt: now,
+        agentId,
+        serviceId,
+        walletName: resolvedWalletName,
+        ok: report.ok,
+        report,
+      })
 
       res.json({
         ok: report.ok,
@@ -1839,6 +1970,15 @@ async function main() {
   })
 
   app.post('/api/dashboard/showcase/run', async (_req, res) => {
+    if (!isShowcaseRunEnabled(env)) {
+      res.status(404).json({
+        ok: false,
+        error:
+          'Showcase scenario runs are disabled. Set PALMOS_ENABLE_SHOWCASE_RUN=1 in a development workspace to enable this destructive demo route.',
+      })
+      return
+    }
+
     try {
       const result = await runDashboardScenario({
         baseDir,

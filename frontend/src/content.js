@@ -2,6 +2,7 @@ export const navLinks = [
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Outcomes', href: '#outcomes' },
   { label: 'Stack', href: '#built-with' },
+  { label: 'Docs', href: '#docs' },
 ]
 
 export const howItWorksSteps = [
@@ -29,7 +30,7 @@ export const outcomeCards = [
   {
     status: 'Auto Approved',
     color: 'green',
-    agent: 'Research Agent',
+    agent: 'Market Monitor Agent',
     action: 'Market data via PUSD API',
     amount: '0.03 PUSD',
     policy: 'Within OWS-backed policy guardrails - auto-approved',
@@ -37,7 +38,7 @@ export const outcomeCards = [
   {
     status: 'Pending Approval',
     color: 'yellow',
-    agent: 'Ops Buyer',
+    agent: 'Vendor Procurement Agent',
     action: 'Ops brief via PalmOS merchant',
     amount: '0.25 PUSD',
     policy: 'Exceeds the 0.10 PUSD auto-approve threshold - awaiting operator',
@@ -45,7 +46,7 @@ export const outcomeCards = [
   {
     status: 'Policy Denied',
     color: 'red',
-    agent: 'Growth Agent',
+    agent: 'Growth Campaign Agent',
     action: 'Unknown paid endpoint',
     amount: '0.25 PUSD',
     policy: 'No allowed vendor or Solana destination resolved - blocked',
@@ -56,7 +57,6 @@ export const builtWithLogos = [
   { name: 'OWS', label: 'OWS' },
   { name: 'PUSD', label: 'Palm USD' },
   { name: 'XMTP', label: 'XMTP' },
-  { name: 'OpenAI', label: 'OpenAI' },
+  { name: 'Umbra', label: 'Umbra' },
   { name: 'Solana', label: 'Solana' },
-  { name: 'Zerion', label: 'Zerion' },
 ]

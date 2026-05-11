@@ -138,7 +138,7 @@ export default function Dashboard() {
         className="hidden items-center gap-2 border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white sm:inline-flex"
       >
         <Plus className="h-3 w-3" aria-hidden="true" />
-        New agent
+        Register agent
       </button>
     ) : null
 

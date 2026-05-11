@@ -1,0 +1,38 @@
+{
+  "name": "@palmos/agent",
+  "version": "0.1.0",
+  "description": "PalmOS SDK client for external agents that need governed PUSD payments.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "palmos",
+    "agent",
+    "pusd",
+    "solana",
+    "payments",
+    "ai"
+  ],
+  "sideEffects": false
+}

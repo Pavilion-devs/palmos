@@ -106,9 +106,9 @@ const ONBOARDING_PROMPTS: Record<OnboardingField, OnboardingPrompt> = {
   agentTask: {
     field: 'agentTask',
     message:
-      'Hi there, welcome to PalmOS. I am here to manage your agent wallet. What should this agent do for you?',
+      "Let's register your external agent with PalmOS. Which paid services should it be allowed to use?",
     inputType: 'text',
-    placeholder: 'Generate market-ops briefs using paid PUSD APIs',
+    placeholder: 'Market data APIs and ops brief vendors',
   },
   maxPerCall: {
     field: 'maxPerCall',
@@ -145,9 +145,9 @@ const ONBOARDING_PROMPTS: Record<OnboardingField, OnboardingPrompt> = {
     message: 'Choose the wallet mode for this run.',
     inputType: 'choice',
     choices: [
-      { value: 'local-demo', label: 'Local demo' },
-      { value: 'ows', label: 'OWS wallet' },
-      { value: 'real-solana', label: 'Real Solana' },
+      { value: 'local-demo', label: 'Service-test settlement' },
+      { value: 'ows', label: 'OWS governed wallet' },
+      { value: 'real-solana', label: 'Real Solana settlement' },
     ],
   },
   managerAddress: {
@@ -350,7 +350,7 @@ function advanceFromField(
       state: completedState,
       complete: true,
       message:
-        'That is enough to arm the agent. I can open the PalmOS console now.',
+        'That is enough to register the governed payment profile. Next, copy an SDK credential and connect your agent code.',
     }
   }
 
@@ -906,7 +906,7 @@ function validationMessage(field: OnboardingField, validationError: string): str
   }
 
   if (field === 'agentTask') {
-    return 'Tell me what this agent should do.'
+    return 'Tell me which paid services this external agent should be allowed to use.'
   }
 
   return 'Please answer the current setup question.'
@@ -919,8 +919,8 @@ function nextOnboardingField(field: OnboardingField): OnboardingField | undefine
 
 function completeOnboardingState(state: OnboardingState): OnboardingState {
   return {
-    agentName: state.agentName || 'PalmOS Agent',
-    agentTask: state.agentTask || 'Generate market-ops briefs using paid PUSD APIs',
+    agentName: state.agentName || 'External Agent',
+    agentTask: state.agentTask || 'Use approved paid services through PalmOS',
     maxPerCall: state.maxPerCall || '0.05',
     sessionBudget: state.sessionBudget || '1.00',
     autoApproveUnder: state.autoApproveUnder || '0.05',

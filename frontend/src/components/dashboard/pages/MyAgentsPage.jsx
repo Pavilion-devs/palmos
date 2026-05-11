@@ -72,9 +72,13 @@ function AgentRow({ agent }) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-neutral-700">Wallet</div>
+          <div className="text-[10px] uppercase tracking-widest text-neutral-700">Mode</div>
           <div className="mt-1 truncate font-mono text-[11px] text-neutral-400">
-            {agent.policy?.walletBackend === 'ows' ? 'OWS' : 'Local'}
+            {agent.policy?.settlementMode === 'real-solana'
+              ? 'Real Solana'
+              : agent.policy?.settlementMode === 'ows'
+                ? 'OWS'
+                : 'Local'}
           </div>
         </div>
       </div>
@@ -110,8 +114,8 @@ function Field({ label, id, hint, error, children }) {
 
 function validateAgentForm(form) {
   const errors = {}
-  if (!form.agentName.trim()) errors.agentName = 'Agent name is required.'
-  if (!form.agentTask.trim()) errors.agentTask = 'Agent task is required.'
+  if (!form.agentName.trim()) errors.agentName = 'External agent name is required.'
+  if (!form.agentTask.trim()) errors.agentTask = 'Agent runtime purpose is required.'
 
   const sessionBudget = Number(form.sessionBudget)
   const maxPerCall = Number(form.maxPerCall)
@@ -170,7 +174,7 @@ function NewAgentForm({ onCancel, createAgent }) {
       })
       navigate(`#dashboard/agents/${agent.agentId}`)
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'Unable to create agent.')
+      setServerError(err instanceof Error ? err.message : 'Unable to register external agent.')
     } finally {
       setPending(false)
     }
@@ -181,15 +185,15 @@ function NewAgentForm({ onCancel, createAgent }) {
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="text-[10px] uppercase tracking-widest text-neutral-600">
-            New agent
+            External agent
           </div>
-          <h2 className="mt-1 text-base font-medium text-white">Create payment identity</h2>
+          <h2 className="mt-1 text-base font-medium text-white">Register payment profile</h2>
         </div>
         <button
           type="button"
           onClick={onCancel}
           className="inline-flex min-h-10 min-w-10 items-center justify-center text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
-          aria-label="Close new agent form"
+          aria-label="Close external agent registration form"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -202,7 +206,7 @@ function NewAgentForm({ onCancel, createAgent }) {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Field id="agentName" label="Agent name" error={errors.agentName}>
+        <Field id="agentName" label="External agent name" error={errors.agentName}>
           <input
             id="agentName"
             type="text"
@@ -212,25 +216,25 @@ function NewAgentForm({ onCancel, createAgent }) {
             aria-invalid={errors.agentName ? 'true' : undefined}
             aria-describedby={errors.agentName ? 'agentName-error' : undefined}
             className="min-h-10 w-full border border-neutral-800 bg-black px-3 text-sm text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
-            placeholder="Treasury Research Agent"
+            placeholder="Market Monitor Agent"
           />
         </Field>
 
-        <Field id="walletMode" label="Wallet mode" hint="OWS is used when configured server-side.">
+        <Field id="walletMode" label="Settlement mode" hint="The agent brain stays outside PalmOS. This controls how PalmOS settles approved payments.">
           <select
             id="walletMode"
             value={form.walletMode}
             onChange={(event) => updateField('walletMode', event.target.value)}
             className="min-h-10 w-full border border-neutral-800 bg-black px-3 text-sm text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
           >
-            <option value="local-demo">Local demo</option>
-            <option value="ows">OWS wallet</option>
-            <option value="real-solana">Runtime Solana</option>
+            <option value="local-demo">Service-test settlement</option>
+            <option value="ows">OWS governed wallet</option>
+            <option value="real-solana">Real Solana settlement</option>
           </select>
         </Field>
 
         <div className="md:col-span-2">
-          <Field id="agentTask" label="Agent task" error={errors.agentTask}>
+          <Field id="agentTask" label="Agent runtime purpose" error={errors.agentTask}>
             <textarea
               id="agentTask"
               rows={3}
@@ -279,7 +283,7 @@ function NewAgentForm({ onCancel, createAgent }) {
           aria-busy={pending}
           className="min-h-10 border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
         >
-          {pending ? 'Creating...' : 'Create agent'}
+          {pending ? 'Registering...' : 'Register agent'}
         </button>
       </div>
     </form>
@@ -353,7 +357,7 @@ export default function MyAgentsPage({
             className="flex min-h-10 items-center gap-2 border border-neutral-700 bg-neutral-900 px-4 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            New agent
+            Register agent
           </button>
         </div>
       </div>
@@ -374,7 +378,7 @@ export default function MyAgentsPage({
             <p className="mt-1 text-[11px] uppercase tracking-widest text-neutral-700">
               {view === 'archived'
                 ? 'Archived agents appear here after they are retired.'
-                : 'Create your first agent to start using PalmOS.'}
+                : 'Register your first external agent to start using PalmOS.'}
             </p>
             {view !== 'archived' && (
               <button
@@ -383,7 +387,7 @@ export default function MyAgentsPage({
                 className="mt-5 inline-flex min-h-10 items-center gap-2 border border-white px-4 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                Create first agent
+                Register first agent
               </button>
             )}
           </div>

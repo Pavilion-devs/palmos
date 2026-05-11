@@ -16,6 +16,7 @@ import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { promisify } from 'util'
 import type { PusdPaymentRequiredResponse } from '../pusd/paymentInstructions.js'
+import { readSolanaKeypairFromPrivateKey } from '../pusd/keypair.js'
 import { buildUnsignedPusdPaymentTransaction } from '../pusd/transfer.js'
 import {
   checkPusdPaymentReadiness,
@@ -118,6 +119,18 @@ function transactionToUnsignedHex(transaction: Transaction): string {
     .toString('hex')
 }
 
+function normalizePrivateKeyForImport(
+  value: string,
+  chain: string | undefined,
+): string {
+  if (chain !== 'solana') {
+    return value
+  }
+
+  const keypair = readSolanaKeypairFromPrivateKey(value)
+  return Buffer.from(keypair.secretKey.slice(0, 32)).toString('hex')
+}
+
 export function readOwsConfigFromEnv(
   baseDir: string,
   env: Record<string, string | undefined> = readProcessEnv(),
@@ -159,7 +172,7 @@ export class OwsClient {
 
   async ensureWallet(input: {
     name: string
-    importPrivateKeyHex?: string
+    importPrivateKey?: string
     importChain?: string
   }): Promise<OwsWalletBinding> {
     await this.ensureHome()
@@ -176,10 +189,10 @@ export class OwsClient {
     }
 
     const wallet =
-      input.importPrivateKeyHex != null
+      input.importPrivateKey != null
         ? importWalletPrivateKey(
             input.name,
-            input.importPrivateKeyHex,
+            normalizePrivateKeyForImport(input.importPrivateKey, input.importChain),
             this.config.passphrase,
             this.config.vaultPath,
             input.importChain ?? 'evm',
@@ -195,7 +208,7 @@ export class OwsClient {
       wallet,
       evmAddress: readEvmAddress(wallet),
       solanaAddress: readSolanaAddress(wallet),
-      importedFromPrivateKey: input.importPrivateKeyHex != null,
+      importedFromPrivateKey: input.importPrivateKey != null,
     }
   }
 

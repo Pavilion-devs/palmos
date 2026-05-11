@@ -5,6 +5,7 @@ import {
   readPusdNetworkFromEnv,
   type SolanaCluster,
 } from './constants.js'
+import { parsePusdAmountToBaseUnits } from './amount.js'
 
 export type PusdPaymentRequestStatus =
   | 'created'
@@ -40,6 +41,13 @@ export type PusdPaymentRequiredResponse = {
   expiresAt: string
   network: SolanaCluster
   description?: string
+}
+
+export type ExpectedPusdPaymentInstruction = {
+  amount: string
+  recipient?: string
+  mint?: string
+  network?: SolanaCluster
 }
 
 export type CreatePusdPaymentRequestInput = {
@@ -105,4 +113,66 @@ export function isPusdPaymentRequestExpired(
   now: Date = new Date(),
 ): boolean {
   return new Date(request.expiresAt).getTime() <= now.getTime()
+}
+
+function normalizeAddress(value: string | undefined): string | undefined {
+  return value?.trim() || undefined
+}
+
+function amountsMatch(left: string, right: string): boolean {
+  try {
+    return parsePusdAmountToBaseUnits(left) === parsePusdAmountToBaseUnits(right)
+  } catch {
+    return false
+  }
+}
+
+export function validatePusdPaymentInstruction(
+  payment: PusdPaymentRequiredResponse,
+  expected: ExpectedPusdPaymentInstruction,
+): string[] {
+  const issues: string[] = []
+
+  if (payment.paymentRail !== PALMOS_PAYMENT_RAIL) {
+    issues.push('payment_rail_mismatch')
+  }
+
+  if (payment.currency !== PUSD_SYMBOL) {
+    issues.push('currency_mismatch')
+  }
+
+  if (!amountsMatch(payment.amount, expected.amount)) {
+    issues.push('amount_mismatch')
+  }
+
+  const expectedRecipient = normalizeAddress(expected.recipient)
+  if (
+    expectedRecipient &&
+    normalizeAddress(payment.recipient) !== expectedRecipient
+  ) {
+    issues.push('recipient_mismatch')
+  }
+
+  const expectedMint = normalizeAddress(expected.mint)
+  if (expectedMint && normalizeAddress(payment.mint) !== expectedMint) {
+    issues.push('mint_mismatch')
+  }
+
+  if (expected.network && payment.network !== expected.network) {
+    issues.push('network_mismatch')
+  }
+
+  return issues
+}
+
+export function assertPusdPaymentInstructionMatchesPolicy(
+  payment: PusdPaymentRequiredResponse,
+  expected: ExpectedPusdPaymentInstruction,
+): void {
+  const issues = validatePusdPaymentInstruction(payment, expected)
+  if (issues.length > 0) {
+    throw new Error(
+      `PUSD payment instruction does not match approved PalmOS policy: ${issues.join(', ')}.`,
+    )
+  }
 }

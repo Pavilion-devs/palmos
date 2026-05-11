@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import type { AgentSettlementMode } from './AgentRegistry.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -21,6 +22,7 @@ export type PaidCallRecord = {
   serviceId: string
   vendorId: string
   paymentRail: PaidCallPaymentRail
+  settlementMode?: AgentSettlementMode
   amount: string
   assetSymbol: string
   chainId?: string

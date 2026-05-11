@@ -1,6 +1,5 @@
 import { CircleDollarSign, Clock3, WalletCards } from 'lucide-react'
 import OperationsBoard from '../OperationsBoard'
-import ActivityTicker from '../ActivityTicker'
 
 function formatPusd(value, digits = 3) {
   const parsed = Number(value)
@@ -58,8 +57,6 @@ export default function DashboardHomePage({
         onDeny={onDeny}
         approvalsInteractive={approvalsInteractive}
       />
-
-      <ActivityTicker events={events} />
     </div>
   )
 }

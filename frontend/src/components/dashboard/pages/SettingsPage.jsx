@@ -1,9 +1,6 @@
 import {
   AlertTriangle,
-  ArrowRight,
   CheckCircle2,
-  ExternalLink,
-  KeyRound,
   Server,
   ShieldCheck,
 } from 'lucide-react'
@@ -68,23 +65,6 @@ function SummaryTile({ icon, label, value, tone = 'neutral' }) {
   )
 }
 
-function LinkRow({ href, title, description }) {
-  return (
-    <a
-      href={href}
-      className="flex min-h-10 items-center justify-between gap-3 border-b border-neutral-900 py-3 text-left transition-colors last:border-b-0 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
-    >
-      <span className="min-w-0">
-        <span className="block text-sm text-neutral-300">{title}</span>
-        <span className="mt-1 block text-[11px] leading-5 text-neutral-600">
-          {description}
-        </span>
-      </span>
-      <ArrowRight className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
-    </a>
-  )
-}
-
 export default function SettingsPage({ agents, services, events }) {
   const activeAgents = agents.filter((agent) => agent.status === 'active').length
   const owsAgents = agents.filter((agent) => agent.policy?.walletBackend === 'ows').length
@@ -94,7 +74,6 @@ export default function SettingsPage({ agents, services, events }) {
   ).length
   const realSettlements = events.filter((event) => event.settlementMode === 'real').length
   const firstAgent = agents[0]
-  const firstService = services[0]
   const defaultPolicy = firstAgent?.policy
 
   return (
@@ -105,8 +84,7 @@ export default function SettingsPage({ agents, services, events }) {
         </div>
         <h1 className="mt-1 text-xl font-medium text-white">Workspace controls</h1>
         <p className="mt-1 max-w-prose text-[11px] leading-5 text-neutral-500">
-          Workspace defaults, SDK configuration, and system health. Wallet readiness is
-          scoped to agent and service detail pages.
+          Workspace defaults, SDK configuration, and high-level system health.
         </p>
       </div>
 
@@ -189,45 +167,26 @@ export default function SettingsPage({ agents, services, events }) {
         </Section>
 
         <Section
-          title="Scoped readiness"
-          description="Open the correct detail view to inspect wallet or recipient readiness."
+          title="Developer handoff"
+          description="Pointers for connecting real agents to this workspace."
         >
-          {firstAgent ? (
-            <LinkRow
-              href={`#dashboard/agents/${firstAgent.id}`}
-              title="Agent wallet readiness"
-              description={`Inspect payer readiness for ${firstAgent.name}.`}
-            />
-          ) : (
-            <LinkRow
-              href="#dashboard/onboarding"
-              title="Create first agent"
-              description="Create an agent before checking payer wallet readiness."
-            />
-          )}
-          {firstService ? (
-            <LinkRow
-              href={`#dashboard/services/${firstService.serviceId}`}
-              title="Service recipient readiness"
-              description={`Inspect recipient readiness for ${firstService.label}.`}
-            />
-          ) : (
-            <LinkRow
-              href="#dashboard/services"
-              title="Register service"
-              description="Register or load a service before checking recipient readiness."
-            />
-          )}
-          <a
-            href="sdk.md"
-            className="flex min-h-10 items-center justify-between gap-3 pt-3 text-sm text-neutral-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
-          >
-            <span className="inline-flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-neutral-600" aria-hidden="true" />
-              SDK setup guide
-            </span>
-            <ExternalLink className="h-4 w-4 text-neutral-600" aria-hidden="true" />
-          </a>
+          <DetailRow
+            label="Agent credentials"
+            value={
+              firstAgent
+                ? `Manage credentials from ${firstAgent.name}'s detail page.`
+                : 'Register an external agent before issuing credentials.'
+            }
+          />
+          <DetailRow label="SDK setup guide" value="sdk.md" mono />
+          <DetailRow
+            label="Payment rail"
+            value="PalmOS/PUSD on Solana with local service-test fallback."
+          />
+          <DetailRow
+            label="Operator controls"
+            value="Budgets, vendor allowlists, approvals, lifecycle state, and audit records."
+          />
         </Section>
       </div>
     </div>

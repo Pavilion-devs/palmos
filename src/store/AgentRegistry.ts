@@ -11,6 +11,8 @@ const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
 export type AgentTrustTier = 'new' | 'healthy' | 'trusted' | 'restricted'
 
+export type AgentSettlementMode = 'local-demo' | 'ows' | 'real-solana'
+
 export type AgentStatus =
   | 'draft'
   | 'wallet_pending'
@@ -33,6 +35,7 @@ export type AgentRecord = {
   actorId: string
   sessionId: string
   walletType: AgentPolicyTemplateInput['walletType']
+  settlementMode?: AgentSettlementMode
   walletId?: string
   walletState?: WalletLifecycleState
   signerProfileId?: string
@@ -47,6 +50,19 @@ export type AgentRecord = {
   status: AgentStatus
   lastCheckInAt: string
   xmtpInboxId?: string
+}
+
+export function isAgentSettlementMode(
+  value: string | undefined,
+): value is AgentSettlementMode {
+  return value === 'local-demo' || value === 'ows' || value === 'real-solana'
+}
+
+export function normalizeAgentSettlementMode(
+  value: string | undefined,
+  fallback: AgentSettlementMode = 'local-demo',
+): AgentSettlementMode {
+  return isAgentSettlementMode(value) ? value : fallback
 }
 
 export interface AgentRegistry {

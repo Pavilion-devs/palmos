@@ -1,20 +1,13 @@
 import {
   checkPusdPaymentReadiness,
+  loadProcessEnv,
   loadAgentSpendWorkspace,
   OwsClient,
+  DEMO_AGENT_IDS,
   readPusdMintFromEnv,
+  readSolanaKeypairFromEnv,
   readSolanaRpcUrlFromEnv,
 } from '../index.js'
-
-function readProcessEnv(): Record<string, string | undefined> {
-  const scope = globalThis as {
-    process?: {
-      env?: Record<string, string | undefined>
-    }
-  }
-
-  return scope.process?.env ?? {}
-}
 
 function readFlag(args: string[], name: string): string | undefined {
   const exact = `--${name}`
@@ -36,11 +29,13 @@ function readFlag(args: string[], name: string): string | undefined {
   return undefined
 }
 
-const env = readProcessEnv()
+const env = loadProcessEnv()
 const args = process.argv.slice(2)
 const baseDir = readFlag(args, 'base-dir') ?? env.AGENT_SPEND_OS_BASE_DIR
 const walletName =
-  readFlag(args, 'wallet') ?? env.PALMOS_READINESS_OWS_WALLET ?? 'research_agent'
+  readFlag(args, 'wallet') ??
+  env.PALMOS_READINESS_OWS_WALLET ??
+  DEMO_AGENT_IDS.marketMonitor
 const payer =
   readFlag(args, 'payer') ?? env.PUSD_AGENT_WALLET ?? undefined
 const recipient =
@@ -55,6 +50,11 @@ async function main(): Promise<void> {
     const workspace = loadAgentSpendWorkspace({ baseDir })
     const owsClient = workspace.owsClient ?? OwsClient.fromEnv(baseDir, env)
     payerAddress = owsClient?.getSolanaAddress(walletName)?.trim()
+  }
+
+  if (!payerAddress) {
+    const keypair = await readSolanaKeypairFromEnv(env)
+    payerAddress = keypair?.publicKey.toBase58()
   }
 
   if (!payerAddress) {

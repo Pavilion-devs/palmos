@@ -111,9 +111,9 @@ Core primitives:
 - `SettlementRail`
 - `PrivacyProof`
 
-## Later Private Settlement Direction
+## MVP Private Settlement Direction
 
-PalmOS should remain the operating system. Umbra should become an optional privacy execution layer after the normal Palm/PUSD product path works and is deployed.
+PalmOS should remain the operating system. Umbra should become an optional privacy execution layer for the MVP submission without replacing or destabilizing the verified Palm/PUSD product path.
 
 Reference plan:
 
@@ -127,7 +127,7 @@ Target mental model:
 agent -> PalmOS policy/approval -> Umbra private settlement -> PalmOS reconciliation/audit
 ```
 
-This means agents can eventually have private transactions, but only after PalmOS enforces the same controls it already applies to normal PUSD agent payments:
+This means agents can have a private settlement proof for the MVP, but only after PalmOS enforces the same controls it already applies to normal PUSD agent payments:
 
 - agent identity
 - policy limits
@@ -145,10 +145,10 @@ Implementation rules:
 - Route the private settlement through PalmOS policy before calling Umbra.
 - Store Umbra proof fields in the same paid-call/audit model, including settlement rail, privacy path, final transaction, report id, and reconciliation result.
 
-This is a later track extension, not an immediate dependency for the Palm USD hackathon submission. The priority remains:
+This is now an MVP submission add-on, not a replacement for the Palm USD rail. The priority is:
 
 ```text
-PUSD agent payments -> backend deployment -> submission polish -> optional Umbra private settlement mode
+PUSD agent payments -> backend deployment -> focused Umbra private settlement proof -> submission polish
 ```
 
 ## Product Rules Going Forward
@@ -368,7 +368,7 @@ What is not done yet:
 - Demo video and final Superteam submission answers are not prepared yet.
 - Backend deployment is not done yet. Vercel can host the frontend now, but the full private dashboard needs a separate backend URL before judges can use the real app remotely.
 - Production deployment envs are not finalized yet, especially persistent backend storage, PUSD/OWS/XMTP secrets, and backend CORS/domain config.
-- Umbra private settlement mode is not implemented yet. It is documented in `umbra-migration.md` as a later integration path after the Palm/PUSD core is stable.
+- Umbra private settlement mode is not implemented in PalmOS yet. It is documented in `umbra-migration.md` as an MVP private-settlement proof path that must keep the verified Palm/PUSD core stable.
 
 ## Existing Codebase Baseline
 
@@ -1143,12 +1143,21 @@ Goal: Make the backend product path reliable and defensible.
 
 Tasks:
 
-- Persist readiness reports or surface latest readiness in the dashboard snapshot.
-- Add Solscan explorer URL construction for real transaction signatures.
-- Add clearer status for local/service-test signatures versus real Solana signatures.
-- Add a spend cap guard around real OWS Solana settlement.
-- Add better error display for failed payment verification and failed OWS signing.
-- Add one or two focused tests for PUSD amount parsing, payment request creation, and readiness formatting.
+- Next implementation order:
+  1. Done: Bind PUSD 402 payment instructions to the approved PalmOS policy before signing or broadcasting. Before `PalmosClient` or the OWS Solana path pays a service, verify the returned payment instruction matches the approved service call: expected amount, allowed recipient wallet, official PUSD mint, and expected Solana network. This preserves the verified real-payment happy path while closing the gap where a registered service could return a different payment instruction after policy approval.
+  2. Done: Gate or disable `/api/dashboard/showcase/run` outside an explicit development/showcase flag. The route now requires `PALMOS_ENABLE_SHOWCASE_RUN=1`, so it is not reachable from the judge/product dashboard path by default.
+  3. Done: Restrict credentialed CORS to configured frontend origins such as localhost and the deployed judge frontend URL instead of reflecting arbitrary request origins. Backend now uses `PALMOS_ALLOWED_ORIGINS`/frontend-origin envs plus local development defaults.
+  4. Done: Harden registered service input for production mode. Registered services now reject obvious localhost/private-network/metadata endpoints unless `PALMOS_ALLOW_UNSAFE_SERVICE_ENDPOINTS=1`, validate Solana recipient addresses, and execute with redirect following disabled.
+  5. Done: Stop persisting one-time SDK tokens in browser `localStorage`; reveal them once after creation/rotation and rely on backend hash storage plus credential rotation/revocation.
+- Done: Persist readiness reports and surface the latest readiness data in the dashboard snapshot. The readiness endpoint now records completed PUSD readiness checks under the workspace and `buildShowcaseSnapshot` exposes the latest/recent reports without forcing large readiness panels into the main product UI.
+- Done: Add Solscan explorer URL construction for real transaction signatures. Paid-call records now persist `transactionExplorerUrl` for non-local Solana signatures, and the dashboard consumes the backend URL when available.
+- Done: Add clearer status for local/service-test signatures versus real Solana signatures. The transaction detail view now uses the real explorer URL only for real Solana signatures while keeping local receipts clearly labeled as service-test receipts.
+- Done: Add a spend cap guard around real OWS Solana settlement. `PALMOS_REAL_PUSD_MAX_PER_CALL` now guards real PUSD sends in both the OWS path and direct `PalmosClient` path, with `PUSD_MAX_PER_CALL` as a fallback.
+- Done: Add better error display for failed payment verification and failed OWS signing. Payment instruction mismatches, real-payment cap failures, and OWS payment failures now get specific backend error codes for the dashboard.
+- Done: Make onboarding settlement mode authoritative. Agents now persist `local-demo`, `ows`, or `real-solana`; PUSD execution routes through that selected mode; OWS and direct Solana modes fail explicitly instead of falling back to local service-test settlement.
+- Done: Wire funded Solana payer configuration into real rails. OWS-mode onboarding imports `OWS_WALLET_PRIVATE_KEY` as a Solana OWS wallet, direct real-solana settlement can use `PUSD_AGENT_PRIVATE_KEY`/`PUSD_AGENT_KEYPAIR_PATH` or the funded `OWS_WALLET_PRIVATE_KEY` fallback, and readiness/agent CLIs load `.env`.
+- Done: Make XMTP startup non-fatal. If the local native XMTP binding is unavailable, the dashboard API starts and disables XMTP notifier instead of blocking payment validation.
+- Done: Add focused tests for PUSD amount parsing, payment request creation/policy binding, and readiness failure formatting.
 - Decide whether to keep x402 modules in the repo or move them under a clearly labeled legacy folder after migration.
 
 Acceptance criteria:
@@ -1297,17 +1306,22 @@ Only add this after backend deployment:
 VITE_DASHBOARD_API_BASE_URL=https://<palmos-backend-domain>
 ```
 
-Backend deployment variables still need a dedicated deployment pass. Expected backend envs include:
+VPS backend variables should follow `docs/deployment.md`. Expected backend envs include:
 
 ```text
 PALMOS_PUBLIC_ACCESS_MODE=1
 PALMOS_CROSS_SITE_COOKIES=1
 PALMOS_JUDGE_ACCESS_CODE=<private-judge-code>
-AGENT_SPEND_OS_BASE_DIR=<persistent-storage-path>
+AGENT_SPEND_OS_BASE_DIR=/var/data/palmos-live
 PUSD_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-PALMOS_USE_OWS_SOLANA_PAYMENTS=1
-PALMOS_ACCEPT_LOCAL_DEMO_PAYMENTS=0
-PUSD_MERCHANT_WALLET=<service-recipient-wallet-if-needed-for-dev-fallbacks>
+OWS_WALLET_PRIVATE_KEY=<funded-solana-private-key>
+PUSD_MERCHANT_WALLET=<service-recipient-wallet>
+PALMOS_REAL_PUSD_MAX_PER_CALL=0.05
+PALMOS_ENABLE_SHOWCASE_RUN=0
+PALMOS_ALLOW_UNSAFE_SERVICE_ENDPOINTS=0
+PALMOS_ALLOWED_ORIGINS=https://<frontend-domain>
+PALMOS_USE_OWS_SOLANA_PAYMENTS=0
+PALMOS_ACCEPT_LOCAL_DEMO_PAYMENTS=1
 XMTP_ENV=dev
 XMTP_WALLET_KEY=<sender-wallet-key>
 XMTP_MANAGER_ADDRESS=<manager-evm-address>
@@ -1378,47 +1392,73 @@ Current phase status as of May 9, 2026:
 | Phase 6.5: Product Worker Runner | Done | Worker now runs against selected user-created agents and is a sample consumer, not the core product model. |
 | Phase 7: OWS/XMTP Hardening | Done for MVP | OWS restored the funded wallet, signed live Solana PUSD transfers, and XMTP request/resolution messages were verified on XMTP dev. Production-grade hardening remains. |
 | Phase 8: Product Dashboard Tailoring | Mostly done | App shell, agents, services, transactions, approvals, settings correction, and scoped readiness are in place. Remaining work is polish, hardening, and developer handoff snippets. |
-| Phase 8.5: Real PUSD And XMTP Test Pass | Done for MVP | Fresh OWS-settled PUSD payment and XMTP approval request/resolution flow are verified and documented in `real-pusd-proof.md`. |
+| Phase 8.5: Real PUSD And XMTP Test Pass | Done for MVP | Fresh OWS-settled and direct real-solana PUSD payments are verified and documented in `real-pusd-proof.md`. XMTP approval request/resolution has prior proof, but current local native binding is non-fatal and should be fixed separately before relying on live alerts. |
 | Phase 8.7: Public Landing And Judge Gate | Done for frontend MVP | Public CTAs open Formspree waitlist, judge access is backend-passcode gated, signed cookies are used, and frontend was pushed for Vercel pickup. Backend deployment remains separate. |
 | Phase 8.6: Backend Hardening Before Submission | In progress | Important guards exist; service endpoint hardening, abuse controls, and security review remain. |
-| Phase 9: Submission Polish | Pending | README, architecture walkthrough, demo video, and Superteam submission assets remain. |
-| Phase 10: Umbra Private Settlement Mode | Future | Optional later extension from `umbra-migration.md`. Keep PalmOS as the policy/approval/audit OS and add Umbra as a surgical privacy settlement rail under `src/integrations/umbra/*`. |
+| Phase 9: Submission Polish | In progress | Deployment, security, package publishing, XMTP runtime, workspace curation, and submission readiness docs exist. Demo script/video and final submission copy remain. |
+| Phase 10: Umbra Private Settlement Mode | MVP add-on planned | Use `umbra-migration.md` as the source of truth. Keep PalmOS as the policy/approval/audit OS, keep the verified PUSD rail stable, and add Umbra as a focused private settlement proof under `src/integrations/umbra/*`. |
 
 ## Immediate Next Steps
 
-1. Deploy backend for judge demo access.
-   - Pick backend host and persistent storage strategy.
+1. External-agent developer story.
+   - Add a public `/docs` experience that shows how to connect an outside agent to PalmOS.
+   - Lead with the target package install command, `npm install @palmos/agent`, while keeping the current MVP CLI/API path explicit until the package is published.
+   - Point developers to dashboard-issued agent credentials, service IDs, and required environment variables.
+   - Show the demo story as an external agent requesting a paid service while PalmOS enforces policy, approvals, PUSD settlement, and audit.
+
+2. Polish the external agent demo path.
+   - Done: Make `npm run palmos:external-agent` reliable and demo-friendly with concise human output plus `--json` for coding-agent shells.
+   - Done: Add `examples/external-agent-demo.md` with auto-approved, approval-pending, and policy-block demo flows.
+   - Done: Add `examples/codex-claude-agent.md` for Codex/Claude-style usage of PalmOS as the governed payment tool.
+   - Add copyable `.env` and Node/TypeScript snippets per agent/service pair.
+   - Clarify token rotation, revocation, and one-time-token rules.
+
+3. Update README and architecture walkthrough.
+   - Done: README frames PalmOS as infrastructure for external agents, not just a dashboard.
+   - Done: Architecture walkthrough documents `Agent -> SDK/API -> Policy -> Approval -> PUSD payment -> Audit trail`.
+   - Done: Local service-test, OWS, and direct real-solana settlement modes are documented.
+   - Keep Umbra as a planned MVP private-settlement add-on, not the core PalmOS/PUSD rail.
+
+4. MCP / coding-agent integration track.
+   - Design a future `palmos-mcp` tool surface with `list_services`, `request_paid_service`, `check_policy`, and `get_agent_status`.
+   - Keep this behind the main SDK/API path unless time allows a clean MVP.
+   - Position it as the way Claude Code, Codex, and other coding agents can ask PalmOS for governed payments.
+
+5. QVAC/Tether external-agent bridge.
+   - Done: Add `docs/qvac-tether-integration.md` as the cross-repo contract.
+   - Keep the QVAC/Tether app in its own repo and call PalmOS through SDK/API credentials.
+   - Use QVAC for local/private reasoning and PalmOS for policy, approval, settlement, and audit.
+   - Treat USDT/Tether as an additional future settlement asset beside the proven PUSD/Solana rail.
+
+6. Deploy backend for judge demo access.
+   - Done: Add Dockerfile hardening and `render.yaml` with persistent disk defaults.
+   - Done: Add `docs/deployment.md`.
    - Set backend env vars for public access, signed judge access, PUSD, OWS, and XMTP.
    - Set `VITE_DASHBOARD_API_BASE_URL` in Vercel after backend URL exists.
    - Smoke test `#judge-access -> #dashboard` from the deployed Vercel URL.
 
-2. Harden service registration.
+7. Harden service registration.
    - Validate URLs and methods strictly.
    - Block localhost/private-network/unsafe endpoint registration in production mode.
    - Validate Solana recipient addresses and Token-2022/PUSD assumptions.
    - Make service readiness first-class before a service can be used for real settlement.
 
-3. Polish the SDK developer handoff.
-   - Add copyable `.env` snippet per agent.
-   - Add copyable Node/TypeScript snippet per agent/service pair.
-   - Clarify token rotation, revocation, and one-time-token rules.
-   - Show last-used context clearly enough for operators.
-
-4. Product/security review pass.
+8. Product/security review pass.
+   - Done: Add `docs/security-notes.md` documenting shared demo payer caveat, real-payment guards, and production direction.
    - Review secret handling and credential persistence.
    - Add rate limits or abuse guards around SDK payment endpoints.
    - Confirm suspended/archived/blocked states cannot pay through any path.
    - Confirm real-payment mode cannot spend above policy.
    - Confirm audit records are complete for allowed, blocked, approval-pending, approved, denied, and failed calls.
 
-5. Submission polish.
-   - Update README and setup docs.
-   - Add architecture walkthrough.
+9. Submission polish.
+   - Done: Update README and setup docs.
+   - Done: Add architecture walkthrough and submission readiness docs.
    - Prepare demo script.
    - Record product walkthrough video.
    - Prepare Superteam submission copy.
 
-6. Later: Umbra private settlement mode.
+10. MVP add-on: Umbra private settlement proof.
    - Use `umbra-migration.md` as the migration source of truth.
    - Keep the PUSD rail untouched at first.
    - Add `src/integrations/umbra/*`.

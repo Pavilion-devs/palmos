@@ -16,6 +16,10 @@ import {
   FileXMTPAlertRegistry,
   type XMTPAlertRecord,
 } from '../store/XMTPAlertRegistry.js'
+import {
+  FilePusdReadinessReportRegistry,
+  type PusdReadinessReportRecord,
+} from '../store/PusdReadinessReportRegistry.js'
 import { FileOwsAccessRegistry, type OwsAccessRecord } from '../store/OwsAccessRegistry.js'
 import { buildAgentAuditSnapshot } from '../audit/buildAgentAuditSnapshot.js'
 import type { ZerionClient, ZerionWalletSnapshot } from '../integrations/zerion/client.js'
@@ -34,6 +38,10 @@ export type ShowcaseSnapshot = {
     staleAgents: number
     xmtpAlertsSent: number
     owsBackedAgents: number
+  }
+  pusdReadiness?: {
+    latest?: PusdReadinessReportRecord
+    recent: PusdReadinessReportRecord[]
   }
   agents: Array<{
     agent: AgentRecord
@@ -55,6 +63,7 @@ export async function buildShowcaseSnapshot(input: {
   const controlEventRegistry = new FileAgentControlEventRegistry(input.baseDir)
   const xmtpAlertRegistry = new FileXMTPAlertRegistry(input.baseDir)
   const owsAccessRegistry = new FileOwsAccessRegistry(input.baseDir)
+  const pusdReadinessRegistry = new FilePusdReadinessReportRegistry(input.baseDir)
   const [agents, wallets, paidCalls, controlEvents, xmtpAlerts, owsAccess] = await Promise.all([
     agentRegistry.list(),
     walletRegistry.list(),
@@ -63,6 +72,7 @@ export async function buildShowcaseSnapshot(input: {
     xmtpAlertRegistry.list(),
     owsAccessRegistry.list(),
   ])
+  const readinessReports = await pusdReadinessRegistry.list()
   const walletsById = new Map(
     wallets.map((wallet) => [wallet.walletId, wallet]),
   )
@@ -129,6 +139,10 @@ export async function buildShowcaseSnapshot(input: {
       staleAgents: agents.filter((agent) => agent.status === 'stale').length,
       xmtpAlertsSent: xmtpAlerts.filter((record) => record.status === 'sent').length,
       owsBackedAgents: agents.filter((agent) => agent.walletBackend === 'ows').length,
+    },
+    pusdReadiness: {
+      latest: readinessReports[0],
+      recent: readinessReports.slice(0, 10),
     },
     agents: agentSnapshots,
   }

@@ -4,14 +4,30 @@ import {
   type PalmosServiceCatalog,
 } from '../integrations/pusd/serviceCatalog.js'
 import { type PalmosClient } from '../integrations/pusd/client.js'
-import { PALMOS_PAYMENT_RAIL } from '../integrations/pusd/constants.js'
+import { parsePusdAmountToBaseUnits } from '../integrations/pusd/amount.js'
+import {
+  PALMOS_PAYMENT_RAIL,
+  readPusdMintFromEnv,
+  SOLANA_DEVNET_CHAIN_ID,
+  SOLANA_LOCAL_CHAIN_ID,
+  SOLANA_MAINNET_CHAIN_ID,
+  type SolanaCluster,
+} from '../integrations/pusd/constants.js'
+import {
+  assertPusdPaymentInstructionMatchesPolicy,
+  type ExpectedPusdPaymentInstruction,
+} from '../integrations/pusd/paymentInstructions.js'
 import {
   type X402ServiceCatalog,
 } from '../integrations/x402/serviceCatalog.js'
 import { type X402Client } from '../integrations/x402/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { XmtpNotifier } from '../integrations/xmtp/client.js'
-import type { AgentRecord } from '../store/AgentRegistry.js'
+import {
+  normalizeAgentSettlementMode,
+  type AgentRecord,
+  type AgentSettlementMode,
+} from '../store/AgentRegistry.js'
 import type {
   PaidCallPaymentRail,
   PaidCallRecord,
@@ -190,6 +206,42 @@ function shouldUseOwsSolanaPayments(): boolean {
   return process.env.PALMOS_USE_OWS_SOLANA_PAYMENTS === '1'
 }
 
+function resolveAgentSettlementMode(agent: AgentRecord): AgentSettlementMode {
+  if (agent.settlementMode) {
+    return normalizeAgentSettlementMode(agent.settlementMode)
+  }
+
+  if (agent.walletBackend === 'ows' && shouldUseOwsSolanaPayments()) {
+    return 'ows'
+  }
+
+  return 'local-demo'
+}
+
+function readRealPusdMaxAmount(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  return (
+    env.PALMOS_REAL_PUSD_MAX_PER_CALL?.trim() ||
+    env.PUSD_MAX_PER_CALL?.trim() ||
+    undefined
+  )
+}
+
+function assertWithinRealPusdCap(amount: string, cap?: string): void {
+  if (!cap) {
+    return
+  }
+
+  const amountBaseUnits = parsePusdAmountToBaseUnits(amount)
+  const capBaseUnits = parsePusdAmountToBaseUnits(cap)
+  if (amountBaseUnits > capBaseUnits) {
+    throw new Error(
+      `PUSD payment amount ${amount} exceeds configured real-payment cap ${cap}.`,
+    )
+  }
+}
+
 function parseAmount(value: string | undefined): number {
   if (!value) {
     return 0
@@ -270,6 +322,7 @@ async function executePalmosWithOws(input: {
   wallet: string
   url: string
   init?: RequestInit
+  expectedPayment?: ExpectedPusdPaymentInstruction
 }): Promise<{
   status: number
   headers: Record<string, string>
@@ -285,6 +338,14 @@ async function executePalmosWithOws(input: {
       body: initialBody,
     }
   }
+
+  if (input.expectedPayment) {
+    assertPusdPaymentInstructionMatchesPolicy(
+      initialBody,
+      input.expectedPayment,
+    )
+  }
+  assertWithinRealPusdCap(initialBody.amount, readRealPusdMaxAmount())
 
   const payment = await input.deps.owsClient!.payPusdRequest({
     wallet: input.wallet,
@@ -390,6 +451,7 @@ function toRecordBase(input: {
     serviceId: input.serviceId,
     vendorId: input.vendorId,
     paymentRail: input.paymentRail,
+    settlementMode: resolveAgentSettlementMode(input.agent),
     amount: input.amount,
     assetSymbol: input.assetSymbol,
     chainId: input.chainId,
@@ -403,6 +465,93 @@ function toRecordBase(input: {
     requestSummary: input.requestSummary,
     requestUrl: input.requestUrl,
   }
+}
+
+function toSolanaCluster(chainId: string): SolanaCluster | undefined {
+  if (
+    chainId === SOLANA_MAINNET_CHAIN_ID ||
+    chainId === SOLANA_DEVNET_CHAIN_ID ||
+    chainId === SOLANA_LOCAL_CHAIN_ID
+  ) {
+    return chainId
+  }
+
+  return undefined
+}
+
+function buildExpectedPusdPaymentInstruction(input: {
+  agent: AgentRecord
+  vendorId: string
+  amount: string
+  chainId: string
+}): ExpectedPusdPaymentInstruction {
+  const vendor = input.agent.policyConfig.allowedVendors.find(
+    (candidate) => candidate.vendorId === input.vendorId,
+  )
+  if (!vendor?.destinationAddress?.trim()) {
+    throw new Error(
+      `No approved recipient wallet is configured for vendor ${input.vendorId}.`,
+    )
+  }
+
+  return {
+    amount: input.amount,
+    recipient: vendor.destinationAddress,
+    mint: readPusdMintFromEnv(),
+    network: toSolanaCluster(input.chainId),
+  }
+}
+
+function buildSolscanTransactionUrl(
+  signature: string | undefined,
+  chainId: string | undefined,
+): string | undefined {
+  const solanaSignaturePattern = /^[1-9A-HJ-NP-Za-km-z]+$/
+  if (
+    !signature ||
+    signature.length < 80 ||
+    !solanaSignaturePattern.test(signature) ||
+    chainId === SOLANA_LOCAL_CHAIN_ID
+  ) {
+    return undefined
+  }
+
+  const cluster = chainId === SOLANA_DEVNET_CHAIN_ID ? '?cluster=devnet' : ''
+  return `https://solscan.io/tx/${signature}${cluster}`
+}
+
+function classifyExecutionError(input: {
+  isPalmosRail: boolean
+  message: string
+}): string {
+  const normalized = input.message.toLowerCase()
+  if (input.isPalmosRail) {
+    if (
+      normalized.includes('payment instruction') ||
+      normalized.includes('approved palmos policy')
+    ) {
+      return 'palmos.payment_instruction_mismatch'
+    }
+
+    if (
+      normalized.includes('real-payment cap') ||
+      normalized.includes('configured real-payment cap')
+    ) {
+      return 'palmos.real_payment_cap_exceeded'
+    }
+
+    if (normalized.includes('ows')) {
+      return 'palmos.ows_payment_failed'
+    }
+
+    return 'palmos.execution_failed'
+  }
+
+  if (normalized.includes('ows')) {
+    return 'x402.ows_payment_failed'
+  }
+
+  return 'x402.execution_failed'
 }
 
 export async function continueRuntimeBoundPaidExecution(
@@ -450,29 +599,61 @@ export async function continueRuntimeBoundPaidExecution(
   const signatureRequestId = currentRun?.signatureRequestRefs.at(-1)
   const preparedRequest = service.buildRequest(input.requestPayload as never)
   const isPalmosRail = service.paymentRail === PALMOS_PAYMENT_RAIL
+  const settlementMode = resolveAgentSettlementMode(input.agent)
   const owsPayEligible =
     deps.owsClient != null &&
     input.agent.owsWalletName != null &&
     deps.owsClient.supportsPaymentChain(service.chainId) &&
-    (!isPalmosRail || shouldUseOwsSolanaPayments())
+    (!isPalmosRail || settlementMode === 'ows')
+  const palmosClientEligible =
+    deps.palmosClient != null &&
+    (!isPalmosRail ||
+      settlementMode === 'local-demo' ||
+      settlementMode === 'real-solana')
 
-  if (isPalmosRail && !deps.palmosClient && !owsPayEligible) {
-    const pendingRecord: PaidCallRecord = {
+  if (isPalmosRail && settlementMode === 'ows' && !owsPayEligible) {
+    const failedRecord: PaidCallRecord = {
       ...input.execution,
-      status: 'waiting_for_execution',
+      status: 'failed',
+      updatedAt: deps.now?.() ?? new Date().toISOString(),
+      runtimeStatus: currentRun?.status ?? input.execution.runtimeStatus,
+      runtimePhase: currentRun?.currentPhase ?? input.execution.runtimePhase,
+      errorCode: 'palmos.ows_not_configured',
+      errorMessage: input.agent.owsWalletName
+        ? 'OWS settlement was selected, but the configured OWS client cannot pay this Solana service.'
+        : 'OWS settlement was selected, but this agent does not have an attached OWS wallet.',
+    }
+    await deps.paidCalls?.put(failedRecord)
+    return {
+      kind: 'execution_failed',
+      agent: input.agent,
+      execution: failedRecord,
+      turnOutput: input.turnOutput ?? [],
+      error: failedRecord.errorMessage ?? 'OWS settlement is not configured.',
+    }
+  }
+
+  if (isPalmosRail && settlementMode !== 'ows' && !palmosClientEligible) {
+    const failedRecord: PaidCallRecord = {
+      ...input.execution,
+      status: 'failed',
       updatedAt: deps.now?.() ?? new Date().toISOString(),
       runtimeStatus: currentRun?.status ?? input.execution.runtimeStatus,
       runtimePhase: currentRun?.currentPhase ?? input.execution.runtimePhase,
       errorCode: 'palmos.client_not_configured',
       errorMessage:
-        'No PalmOS PUSD client is configured yet. Set PUSD_* env vars or enable local demo payments.',
+        settlementMode === 'real-solana'
+          ? 'Real Solana settlement was selected, but no PalmOS PUSD client is configured.'
+          : 'Local service-test settlement was selected, but no PalmOS PUSD client is configured.',
     }
-    await deps.paidCalls?.put(pendingRecord)
+    await deps.paidCalls?.put(failedRecord)
     return {
-      kind: 'waiting_for_execution',
+      kind: 'execution_failed',
       agent: input.agent,
-      execution: pendingRecord,
+      execution: failedRecord,
       turnOutput: input.turnOutput ?? [],
+      error:
+        failedRecord.errorMessage ?? 'PalmOS PUSD client is not configured.',
     }
   }
 
@@ -499,6 +680,14 @@ export async function continueRuntimeBoundPaidExecution(
   try {
     const palmosClient = deps.palmosClient
     const x402Client = deps.x402Client
+    const expectedPusdPayment = isPalmosRail
+      ? buildExpectedPusdPaymentInstruction({
+          agent: input.agent,
+          vendorId: service.vendorId,
+          amount: input.execution.amount,
+          chainId: service.chainId,
+        })
+      : undefined
     const response = owsPayEligible
       ? await (async () => {
           if (isPalmosRail) {
@@ -507,6 +696,7 @@ export async function continueRuntimeBoundPaidExecution(
               wallet: input.agent.owsWalletName!,
               url: preparedRequest.url,
               init: preparedRequest.init,
+              expectedPayment: expectedPusdPayment,
             })
           }
 
@@ -532,7 +722,14 @@ export async function continueRuntimeBoundPaidExecution(
         ? await palmosClient!.execute(
             service,
             input.requestPayload as never,
-          )
+          {
+            expectedPayment: expectedPusdPayment,
+            settlementMode:
+              settlementMode === 'real-solana'
+                ? 'real-solana'
+                : 'local-demo',
+          },
+        )
         : await x402Client!.execute(
             service,
             input.requestPayload as never,
@@ -612,6 +809,12 @@ export async function continueRuntimeBoundPaidExecution(
       errorCode: undefined,
       errorMessage: undefined,
       transactionSignature: paymentResponse?.transaction,
+      transactionExplorerUrl: isPalmosRail
+        ? buildSolscanTransactionUrl(
+            paymentResponse?.transaction,
+            service.chainId,
+          )
+        : undefined,
     }
     await deps.paidCalls?.put(executedRecord)
     return {
@@ -640,9 +843,10 @@ export async function continueRuntimeBoundPaidExecution(
         refreshedRun?.currentPhase ??
         currentRun?.currentPhase ??
         input.execution.runtimePhase,
-      errorCode: isPalmosRail
-        ? 'palmos.execution_failed'
-        : 'x402.execution_failed',
+      errorCode: classifyExecutionError({
+        isPalmosRail,
+        message,
+      }),
       errorMessage: message,
     }
     await deps.paidCalls?.put(failedRecord)

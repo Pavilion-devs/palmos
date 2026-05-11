@@ -1,7 +1,6 @@
 import { ArrowLeft, ExternalLink, Info } from 'lucide-react'
 import { useState } from 'react'
 import { navigate } from '../../../hooks/useHashRoute'
-import PusdReadinessPanel from '../PusdReadinessPanel'
 
 function compactAddress(value) {
   if (!value) return null
@@ -114,10 +113,8 @@ export default function ServiceDetailPage({
   serviceId,
   services,
   agents,
-  events = [],
   allowServiceForAgent,
 }) {
-  const [selectedAgentId, setSelectedAgentId] = useState(null)
   const service = services.find((s) => s.serviceId === serviceId)
   const allowedAgents = service
     ? agents.filter((agent) =>
@@ -135,11 +132,6 @@ export default function ServiceDetailPage({
   const otherAgents = agents.filter(
     (agent) => !(agent.policy?.allowedVendorIds ?? []).includes(service.vendorId),
   )
-  const selectedAgent =
-    allowedAgents.find((agent) => agent.id === selectedAgentId) ??
-    allowedAgents[0] ??
-    null
-  const serviceEvents = events.filter((event) => event.serviceId === service.serviceId)
   const siblingServices = services.filter(
     (other) =>
       other.vendorId === service.vendorId && other.serviceId !== service.serviceId,
@@ -250,52 +242,6 @@ export default function ServiceDetailPage({
       </div>
 
       <div className="px-6 pb-6">
-        <div className="mb-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-neutral-600">
-                Service recipient readiness
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">
-                Route-specific check for this recipient against an allowed agent wallet.
-              </p>
-            </div>
-            {allowedAgents.length > 0 && (
-              <select
-                aria-label="Select agent for service readiness"
-                value={selectedAgentId ?? ''}
-                onChange={(event) => setSelectedAgentId(event.target.value || null)}
-                className="min-h-10 border border-neutral-800 bg-black px-3 text-xs text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
-              >
-                {allowedAgents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <PusdReadinessPanel
-            agentId={selectedAgent?.id}
-            serviceId={service.serviceId}
-            events={serviceEvents}
-            eyebrow="Service recipient"
-            title={
-              selectedAgent
-                ? `Ready to receive from ${selectedAgent.name}`
-                : 'PUSD recipient readiness'
-            }
-            description={
-              selectedAgent
-                ? `Verifies ${service.label} can receive ${service.expectedAmount} PUSD from the selected agent wallet.`
-                : 'Allow this service for an agent before checking recipient readiness.'
-            }
-            emptyTitle="No allowed agent selected"
-            emptyDescription="Service recipient readiness is checked against one payer agent. Allow this service for an agent, then refresh this page."
-            showSettlementSummary
-          />
-        </div>
-
         <Section title="Agent allowlist">
           <div className="mb-5 flex items-start gap-2 border border-neutral-800 bg-black px-3 py-2.5 text-[11px] leading-5 text-neutral-400">
             <Info
@@ -329,7 +275,7 @@ export default function ServiceDetailPage({
 
           {agents.length === 0 ? (
             <p className="text-sm text-neutral-500">
-              No agents registered yet. Create an agent to allow this service for it.
+              No agents registered yet. Register an external agent to allow this service for it.
             </p>
           ) : (
             <div className="space-y-5">

@@ -4,7 +4,11 @@ import type {
   SessionKernel,
   WalletRegistry,
 } from '../../runtime/index.js'
-import type { AgentRegistry, AgentRecord } from '../store/AgentRegistry.js'
+import type {
+  AgentRegistry,
+  AgentRecord,
+  AgentSettlementMode,
+} from '../store/AgentRegistry.js'
 import type { AgentPolicyTemplateInput } from '../policies/compileAgentPolicy.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { OwsAccessRegistry } from '../store/OwsAccessRegistry.js'
@@ -18,11 +22,13 @@ export type CreateAgentWalletInput = {
   managerActorId: string
   managerRoleIds: string[]
   walletType: AgentPolicyTemplateInput['walletType']
+  settlementMode?: AgentSettlementMode
   subjectType?: 'individual' | 'team' | 'business'
   signerProfileId?: string
   policyConfig: AgentPolicyTemplateInput
   xmtpInboxId?: string
-  owsImportPrivateKeyHex?: string
+  owsImportPrivateKey?: string
+  owsImportChain?: string
 }
 
 export type CreateAgentWalletDependencies = {
@@ -67,6 +73,7 @@ export async function createAgentWallet(
     actorId: getAgentActorId(input.agentId),
     sessionId: `agent:${input.agentId}`,
     walletType: input.walletType,
+    settlementMode: input.settlementMode ?? 'local-demo',
     policyProfileId:
       input.policyConfig.policyProfileId ?? `policy_agent_${input.agentId}`,
     policyConfig: input.policyConfig,
@@ -133,8 +140,8 @@ export async function createAgentWallet(
   if (deps.owsClient) {
     const owsWallet = await deps.owsClient.ensureWallet({
       name: input.agentId,
-      importPrivateKeyHex: input.owsImportPrivateKeyHex,
-      importChain: 'evm',
+      importPrivateKey: input.owsImportPrivateKey,
+      importChain: input.owsImportChain,
     })
 
     const owsApiKey = deps.owsClient.createApiKey({

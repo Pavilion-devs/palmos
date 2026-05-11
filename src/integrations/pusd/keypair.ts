@@ -56,7 +56,7 @@ export async function readSolanaKeypairFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): Promise<Keypair | undefined> {
   return readSolanaKeypair({
-    privateKey: env.PUSD_AGENT_PRIVATE_KEY,
+    privateKey: env.PUSD_AGENT_PRIVATE_KEY ?? env.OWS_WALLET_PRIVATE_KEY,
     keypairPath: env.PUSD_AGENT_KEYPAIR_PATH,
   })
 }

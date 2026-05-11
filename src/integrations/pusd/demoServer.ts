@@ -155,7 +155,7 @@ function buildSpotPrice(base: string, quote: string) {
     base: normalizedBase,
     quote: normalizedQuote,
     amount: fixtures[normalizedBase] ?? '1.00',
-    provider: 'palmos_local_fixture',
+    provider: 'palmos_service_test_fixture',
     fetchedAt: new Date().toISOString(),
   }
 }
@@ -204,7 +204,7 @@ export async function startLocalPusdDemoServer(
       recipient: config.payToAddress,
       serviceId: 'local.pusd.spot_price',
       vendorId: 'local_pusd_demo',
-      description: 'Local PalmOS spot-price lookup protected by PUSD.',
+      description: 'PalmOS spot-price lookup protected by PUSD.',
       acceptLocalDemoPayments: config.acceptLocalDemoPayments,
       rpcUrl: config.rpcUrl,
     }),
@@ -226,7 +226,7 @@ export async function startLocalPusdDemoServer(
       recipient: config.payToAddress,
       serviceId: 'local.pusd.ops_brief',
       vendorId: 'ops_research_vendor',
-      description: 'Local PalmOS market-ops brief protected by PUSD.',
+      description: 'PalmOS market-ops brief protected by PUSD.',
       acceptLocalDemoPayments: config.acceptLocalDemoPayments,
       rpcUrl: config.rpcUrl,
     }),
@@ -242,7 +242,7 @@ export async function startLocalPusdDemoServer(
         ok: true,
         data: {
           symbols,
-          provider: 'palmos_local_fixture',
+          provider: 'palmos_service_test_fixture',
           summary:
             'Liquidity is concentrated in majors; agent should keep PUSD spend inside policy and request approval for larger paid calls.',
           signals: symbols.map((symbol) => ({

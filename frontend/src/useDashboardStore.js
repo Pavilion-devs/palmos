@@ -450,7 +450,7 @@ export default function useDashboardStore() {
       ? 'Running...'
       : liveState.data.totalAgentCount > 0
         ? 'Run Agent'
-        : 'Create Agent',
+        : 'Register Agent',
     listAgentCredentials,
     createAgent,
     updateAgentPolicy,

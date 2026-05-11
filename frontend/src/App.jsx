@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AboutSection from './components/AboutSection'
 import CrewSection from './components/CrewSection'
+import DocsPage from './components/DocsPage'
 import Hero from './components/Hero'
 import JudgeAccessPage from './components/JudgeAccessPage'
 import Navbar from './components/Navbar'
@@ -68,6 +69,10 @@ export default function App() {
 
   if (hash === 'judge-access' || hash === 'demo-access') {
     return <JudgeAccessPage />
+  }
+
+  if (hash === 'docs') {
+    return <DocsPage />
   }
 
   if (hash.startsWith('dashboard')) {
