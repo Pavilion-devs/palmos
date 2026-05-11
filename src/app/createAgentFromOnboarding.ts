@@ -161,8 +161,8 @@ export async function createAgentFromOnboarding(
   const displayName = input.agentName?.trim() || 'PalmOS Agent'
   const slug = slugify(displayName) || 'agent'
   const agentId = deps.createId?.(slug) ?? createId(slug)
-  const maxPerTransaction = normalizePositiveAmount(input.maxPerCall, '0.05')
-  const sessionBudget = normalizePositiveAmount(input.sessionBudget, '1')
+  const maxPerTransaction = normalizePositiveAmount(input.maxPerCall, '2')
+  const sessionBudget = normalizePositiveAmount(input.sessionBudget, '2')
   const autoApproveUnder = normalizePositiveAmount(
     input.autoApproveUnder,
     '0.05',

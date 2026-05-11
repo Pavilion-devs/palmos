@@ -108,14 +108,17 @@ async function main(): Promise<void> {
   // Policy amounts
   console.log()
   const rawMax = await rl.question(
-    `  ${B}Max PUSD per API call${X} ${D}[0.05]${X}: `,
+    `  ${B}Max PUSD per API call${X} ${D}[2.00]${X}: `,
   )
-  const maxPerCall = parseAmount(rawMax, '0.05')
+  const maxPerCall = parseAmount(rawMax, '2.00')
+  console.log(
+    `  ${D}New agents have a lower effective cap, so 2.00 keeps approval demos from hard-blocking.${X}`,
+  )
 
   const rawBudget = await rl.question(
-    `  ${B}Session budget in PUSD${X} ${D}[1.00]${X}: `,
+    `  ${B}Session budget in PUSD${X} ${D}[2.00]${X}: `,
   )
-  const sessionBudget = parseAmount(rawBudget, '1.00')
+  const sessionBudget = parseAmount(rawBudget, '2.00')
 
   const rawAuto = await rl.question(
     `  ${B}Auto-approve under PUSD${X} ${D}[0.05]${X}: `,

@@ -14,6 +14,10 @@ import {
   validatePusdPaymentInstruction,
 } from '../src/integrations/pusd/paymentInstructions.js'
 import {
+  evaluateSpendRequest,
+  type AgentPolicyTemplateInput,
+} from '../src/policies/compileAgentPolicy.js'
+import {
   formatPusdReadinessFailure,
   type PusdPaymentReadinessReport,
 } from '../src/integrations/pusd/readiness.js'
@@ -194,4 +198,43 @@ test('Solana keypair env reader accepts OWS wallet fallback', async () => {
   })
 
   assert.equal(loaded?.publicKey.toBase58(), keypair.publicKey.toBase58())
+})
+
+test('new agent demo defaults allow approval instead of hard block', () => {
+  const policy: AgentPolicyTemplateInput = {
+    agentId: 'demo_agent',
+    organizationId: 'org_demo',
+    environment: 'production',
+    walletType: 'ops',
+    allowedChains: ['solana-mainnet'],
+    allowedAssets: ['PUSD'],
+    allowedSignerClasses: ['multisig'],
+    allowedVendors: [
+      {
+        vendorId: 'ops_research_vendor',
+        label: 'PUSD Ops Research Vendor',
+        destinationAddress: '4tC7nLrTUz5nYhhWMspiXAuQcGpBVyRzuMNxR19Xaczy',
+        chainId: 'solana-mainnet',
+      },
+    ],
+    autoApproveUnder: '0.05',
+    maxPerTransaction: '2.00',
+    sessionBudget: '2.00',
+    heartbeatTimeoutSeconds: 900,
+  }
+
+  assert.deepEqual(
+    evaluateSpendRequest({
+      policy,
+      amount: '0.25',
+      vendorId: 'ops_research_vendor',
+      trustTier: 'new',
+    }),
+    {
+      status: 'restricted',
+      requiresApproval: true,
+      effectiveMaxPerTransaction: '0.50',
+      reasonCode: 'policy.approval_required',
+    },
+  )
 })

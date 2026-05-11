@@ -90,8 +90,8 @@ const DEFAULT_AGENT_FORM = {
   agentName: '',
   agentTask: '',
   allowedServices: [],
-  sessionBudget: '1.00',
-  maxPerCall: '0.05',
+  sessionBudget: '2.00',
+  maxPerCall: '2.00',
   autoApproveUnder: '0.05',
   walletMode: 'local-demo',
 }
@@ -349,11 +349,21 @@ function NewAgentForm({ onCancel, createAgent, services = [] }) {
         </div>
 
         {[
-          ['sessionBudget', 'Session budget', '1.00'],
-          ['maxPerCall', 'Max per call', '0.05'],
-          ['autoApproveUnder', 'Auto approve under', '0.05'],
-        ].map(([field, label, placeholder]) => (
-          <Field key={field} id={field} label={label} error={errors[field]}>
+          ['sessionBudget', 'Session budget', '2.00', 'Total spend cap for this payment profile.'],
+          [
+            'maxPerCall',
+            'Max per call',
+            '2.00',
+            'New agents start with a lower effective cap, so this default keeps approval demos from hard-blocking.',
+          ],
+          [
+            'autoApproveUnder',
+            'Auto approve under',
+            '0.05',
+            'Calls above this threshold pause for approval when still under the effective max.',
+          ],
+        ].map(([field, label, placeholder, hint]) => (
+          <Field key={field} id={field} label={label} hint={hint} error={errors[field]}>
             <input
               id={field}
               type="text"

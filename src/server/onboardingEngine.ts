@@ -112,9 +112,10 @@ const ONBOARDING_PROMPTS: Record<OnboardingField, OnboardingPrompt> = {
   },
   maxPerCall: {
     field: 'maxPerCall',
-    message: 'What is the most this agent can spend on one paid API call?',
+    message:
+      'What is the most this agent can spend on one paid API call? New agents start with a lower effective cap, so 2.00 PUSD is a good demo default.',
     inputType: 'amount',
-    placeholder: '0.05',
+    placeholder: '2.00',
     suffix: 'PUSD',
   },
   sessionBudget: {
@@ -921,8 +922,8 @@ function completeOnboardingState(state: OnboardingState): OnboardingState {
   return {
     agentName: state.agentName || 'External Agent',
     agentTask: state.agentTask || 'Use approved paid services through PalmOS',
-    maxPerCall: state.maxPerCall || '0.05',
-    sessionBudget: state.sessionBudget || '1.00',
+    maxPerCall: state.maxPerCall || '2.00',
+    sessionBudget: state.sessionBudget || '2.00',
     autoApproveUnder: state.autoApproveUnder || '0.05',
     allowedVendors:
       state.allowedVendors && state.allowedVendors.length > 0

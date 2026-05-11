@@ -36,8 +36,8 @@ function buildStoredSetup(state) {
   return {
     agentName: state.agentName || 'External Agent',
     agentTask: state.agentTask || 'Use approved paid services through PalmOS',
-    maxPerCall: state.maxPerCall || '0.05',
-    sessionBudget: state.sessionBudget || '1.00',
+    maxPerCall: state.maxPerCall || '2.00',
+    sessionBudget: state.sessionBudget || '2.00',
     autoApproveUnder: state.autoApproveUnder || '0.05',
     allowedVendors: Array.isArray(state.allowedVendors)
       ? state.allowedVendors
