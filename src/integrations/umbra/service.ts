@@ -392,7 +392,7 @@ async function attachUmbraPolicyToExistingAgent(input: {
     ...wallet,
     updatedAt: at,
     supportedChains: uniqueStrings([...(wallet.supportedChains ?? []), chainId]),
-    signerProfileId: wallet.signerProfileId ?? agent.signerProfileId ?? 'mpc_default',
+    signerProfileId: 'mpc_default',
     complianceStatus: 'approved',
     policyAttachmentStatus: 'attached',
     signerHealthStatus: 'healthy',
@@ -404,7 +404,7 @@ async function attachUmbraPolicyToExistingAgent(input: {
     ...agent,
     updatedAt: at,
     walletState: updatedWallet.state,
-    signerProfileId: updatedWallet.signerProfileId,
+    signerProfileId: 'mpc_default',
     policyConfig: {
       ...agent.policyConfig,
       allowedChains: uniqueStrings([
