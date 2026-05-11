@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../../../hooks/useHashRoute'
 
 const STATUS_TONE = {
@@ -89,10 +89,20 @@ function AgentRow({ agent }) {
 const DEFAULT_AGENT_FORM = {
   agentName: '',
   agentTask: '',
+  allowedServices: [],
   sessionBudget: '1.00',
   maxPerCall: '0.05',
   autoApproveUnder: '0.05',
   walletMode: 'local-demo',
+}
+
+function formatServiceAmount(service) {
+  const amount = Number(service.expectedAmount)
+  const displayAmount = Number.isFinite(amount)
+    ? amount.toFixed(3).replace(/\.?0+$/, '')
+    : service.expectedAmount
+
+  return `${displayAmount} ${service.assetSymbol ?? 'PUSD'}`
 }
 
 function Field({ label, id, hint, error, children }) {
@@ -116,6 +126,9 @@ function validateAgentForm(form) {
   const errors = {}
   if (!form.agentName.trim()) errors.agentName = 'External agent name is required.'
   if (!form.agentTask.trim()) errors.agentTask = 'Agent runtime purpose is required.'
+  if (!Array.isArray(form.allowedServices) || form.allowedServices.length === 0) {
+    errors.allowedServices = 'Select at least one paid service.'
+  }
 
   const sessionBudget = Number(form.sessionBudget)
   const maxPerCall = Number(form.maxPerCall)
@@ -148,15 +161,46 @@ function validateAgentForm(form) {
   return errors
 }
 
-function NewAgentForm({ onCancel, createAgent }) {
+function NewAgentForm({ onCancel, createAgent, services = [] }) {
+  const serviceOptions = useMemo(
+    () => services.filter((service) => service?.serviceId && service?.label),
+    [services],
+  )
   const [form, setForm] = useState(DEFAULT_AGENT_FORM)
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [pending, setPending] = useState(false)
 
+  useEffect(() => {
+    if (serviceOptions.length === 0) return
+
+    setForm((current) => {
+      if (current.allowedServices.length > 0) return current
+
+      return {
+        ...current,
+        allowedServices: serviceOptions.map((service) => service.serviceId),
+      }
+    })
+  }, [serviceOptions])
+
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  function toggleService(serviceId) {
+    setForm((current) => {
+      const nextServices = current.allowedServices.includes(serviceId)
+        ? current.allowedServices.filter((selectedId) => selectedId !== serviceId)
+        : [...current.allowedServices, serviceId]
+
+      return {
+        ...current,
+        allowedServices: nextServices,
+      }
+    })
+    setErrors((current) => ({ ...current, allowedServices: undefined }))
   }
 
   async function submit(event) {
@@ -170,7 +214,7 @@ function NewAgentForm({ onCancel, createAgent }) {
     try {
       const agent = await createAgent({
         ...form,
-        allowedVendors: ['local.palmos.ops', 'local.palmos.spot_price'],
+        allowedVendors: form.allowedServices,
       })
       navigate(`#dashboard/agents/${agent.agentId}`)
     } catch (err) {
@@ -248,6 +292,62 @@ function NewAgentForm({ onCancel, createAgent }) {
           </Field>
         </div>
 
+        <div className="md:col-span-2">
+          <div className="text-[10px] uppercase tracking-widest text-neutral-600">
+            Allowed paid services
+          </div>
+          <div
+            className="mt-1 divide-y divide-neutral-900 border border-neutral-800 bg-black"
+            role="group"
+            aria-describedby={
+              errors.allowedServices ? 'allowedServices-error' : 'allowedServices-hint'
+            }
+          >
+            {serviceOptions.length > 0 ? (
+              serviceOptions.map((service) => {
+                const checked = form.allowedServices.includes(service.serviceId)
+
+                return (
+                  <label
+                    key={service.serviceId}
+                    className="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-neutral-950"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleService(service.serviceId)}
+                      className="h-4 w-4 border-neutral-700 bg-black accent-white"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-white">
+                        {service.label}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-neutral-600">
+                        {service.vendorId}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-xs text-neutral-400">
+                      {formatServiceAmount(service)}
+                    </span>
+                  </label>
+                )
+              })
+            ) : (
+              <div className="px-3 py-4 text-sm text-neutral-500">Loading services...</div>
+            )}
+          </div>
+          {!errors.allowedServices && (
+            <p id="allowedServices-hint" className="mt-1 text-[11px] text-neutral-600">
+              PalmOS will only approve payments to the selected services.
+            </p>
+          )}
+          {errors.allowedServices && (
+            <p id="allowedServices-error" className="mt-1 text-[11px] text-red-400">
+              {errors.allowedServices}
+            </p>
+          )}
+        </div>
+
         {[
           ['sessionBudget', 'Session budget', '1.00'],
           ['maxPerCall', 'Max per call', '0.05'],
@@ -292,6 +392,7 @@ function NewAgentForm({ onCancel, createAgent }) {
 
 export default function MyAgentsPage({
   agents,
+  services = [],
   onCreateAgent,
   createAgent,
   createOpen = false,
@@ -366,6 +467,7 @@ export default function MyAgentsPage({
         {showCreateForm && createAgent && (
           <NewAgentForm
             createAgent={createAgent}
+            services={services}
             onCancel={() => setCreateOpen(false)}
           />
         )}

@@ -179,6 +179,7 @@ export default function Dashboard() {
       {route.page === 'agents' && (
         <MyAgentsPage
           agents={agents}
+          services={services}
           onCreateAgent={handleCreateAgent}
           createAgent={createAgent}
           createOpen={agentCreateOpen}

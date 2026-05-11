@@ -41,7 +41,7 @@ function buildStoredSetup(state) {
     autoApproveUnder: state.autoApproveUnder || '0.05',
     allowedVendors: Array.isArray(state.allowedVendors)
       ? state.allowedVendors
-      : ['local.palmos.ops', 'local.palmos.spot_price'],
+      : ['local.pusd.ops_brief', 'local.pusd.spot_price'],
     managerAddress: state.managerAddress || '',
     walletMode: state.walletMode || 'local-demo',
     hasAnthropicKey: Boolean(state.hasAnthropicKey),

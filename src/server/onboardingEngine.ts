@@ -136,9 +136,9 @@ const ONBOARDING_PROMPTS: Record<OnboardingField, OnboardingPrompt> = {
   allowedVendors: {
     field: 'allowedVendors',
     message:
-      'Which paid vendor endpoints should this agent be allowed to use? List endpoint ids separated by commas.',
+      'Which paid services should this agent be allowed to use? List service ids separated by commas.',
     inputType: 'text',
-    placeholder: 'local.palmos.ops, local.palmos.spot_price',
+    placeholder: 'local.pusd.ops_brief, local.pusd.spot_price',
   },
   walletMode: {
     field: 'walletMode',
@@ -894,7 +894,7 @@ function validationMessage(field: OnboardingField, validationError: string): str
   }
 
   if (field === 'allowedVendors') {
-    return 'List vendor endpoint ids separated by commas, for example local.palmos.ops, local.palmos.spot_price.'
+    return 'List service ids separated by commas, for example local.pusd.ops_brief, local.pusd.spot_price.'
   }
 
   if (field === 'walletMode') {
@@ -927,7 +927,7 @@ function completeOnboardingState(state: OnboardingState): OnboardingState {
     allowedVendors:
       state.allowedVendors && state.allowedVendors.length > 0
         ? state.allowedVendors
-        : ['local.palmos.ops', 'local.palmos.spot_price'],
+        : ['local.pusd.ops_brief', 'local.pusd.spot_price'],
     walletMode: state.walletMode || 'local-demo',
     managerAddress: state.managerAddress || '',
     hasAnthropicKey: Boolean(state.hasAnthropicKey),
