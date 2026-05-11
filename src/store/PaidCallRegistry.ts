@@ -12,7 +12,28 @@ export type PaidCallStatus =
   | 'executed'
   | 'failed'
 
-export type PaidCallPaymentRail = 'x402' | 'palmos-pusd'
+export type UmbraSettlementMetadata = {
+  settlementRail: 'umbra'
+  privacyPath:
+    | 'umbra_direct_deposit'
+    | 'umbra_mixer_utxo'
+    | 'local_mock'
+    | 'transparent_disabled'
+  network: 'solana-devnet' | 'solana-mainnet' | 'solana-local' | string
+  assetSymbol: 'wSOL' | 'dUSDC' | 'dUSDT' | 'PUSD' | string
+  mint: string
+  amount: string
+  finalTransactionSignature?: string
+  fundingTransactionSignatures?: string[]
+  createUtxoTransactionSignatures?: string[]
+  claimTransactionSignatures?: string[]
+  reportId?: string
+  reconciliationStatus?: 'matched' | 'unmatched' | 'pending' | 'failed'
+  disclosurePosture?: 'artifact_only' | 'viewing_key_available' | 'not_supported'
+}
+
+export type PaidCallPaymentRail = 'x402' | 'palmos-pusd' | 'umbra'
+export type PaidCallSettlementMode = AgentSettlementMode | 'umbra'
 
 export type PaidCallRecord = {
   executionId: string
@@ -22,12 +43,13 @@ export type PaidCallRecord = {
   serviceId: string
   vendorId: string
   paymentRail: PaidCallPaymentRail
-  settlementMode?: AgentSettlementMode
+  settlementMode?: PaidCallSettlementMode
   amount: string
   assetSymbol: string
   chainId?: string
   transactionSignature?: string
   transactionExplorerUrl?: string
+  umbraSettlement?: UmbraSettlementMetadata
   status: PaidCallStatus
   runId?: string
   sessionId?: string

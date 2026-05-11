@@ -25,7 +25,13 @@ async function copyToClipboard(value) {
   return false
 }
 
-function CopyableSignature({ signature, chainId, explorerUrl, showSolscan }) {
+function CopyableSignature({
+  signature,
+  chainId,
+  explorerUrl,
+  showExplorer,
+  explorerLabel = 'Open explorer',
+}) {
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -50,7 +56,7 @@ function CopyableSignature({ signature, chainId, explorerUrl, showSolscan }) {
           <Copy className="h-3 w-3" aria-hidden="true" />
           {copied ? 'Copied' : 'Copy signature'}
         </button>
-        {showSolscan && (
+        {showExplorer && (
           <a
             href={explorerUrl ?? buildSolscanUrl(signature, chainId)}
             target="_blank"
@@ -58,7 +64,7 @@ function CopyableSignature({ signature, chainId, explorerUrl, showSolscan }) {
             className="inline-flex items-center gap-1.5 border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-green-300 transition-colors hover:bg-green-500/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
           >
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            Open on Solscan
+            {explorerLabel}
           </a>
         )}
       </div>
@@ -90,6 +96,86 @@ function DetailRow({ label, value, mono, action }) {
         {action}
       </div>
     </div>
+  )
+}
+
+function formatProofValue(value) {
+  if (typeof value === 'boolean') {
+    return value ? 'yes' : 'no'
+  }
+  return value ?? 'n/a'
+}
+
+function formatPrivacyPath(value) {
+  if (value === 'umbra_mixer_utxo') return 'Umbra mixer/UTXO'
+  if (value === 'umbra_direct_deposit') return 'Umbra direct deposit'
+  if (value === 'local_mock') return 'Local mock'
+  if (value === 'transparent_disabled') return 'Transparent disabled'
+  return value ?? 'n/a'
+}
+
+function formatNetwork(value) {
+  if (value === 'solana-devnet') return 'Solana devnet'
+  if (value === 'solana-mainnet') return 'Solana mainnet'
+  if (value === 'solana-local') return 'Solana localnet'
+  return value ?? 'n/a'
+}
+
+function UmbraProofSection({ event }) {
+  const settlement = event.umbraSettlement
+  if (!settlement) return null
+
+  return (
+    <Section title="Umbra private settlement">
+      <div className="mb-4 border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-[11px] leading-5 text-violet-100/80">
+        Umbra devnet mixer/UTXO private settlement proof. This is an artifact-only
+        audit record; it does not claim production private payments or viewing-key
+        disclosure.
+      </div>
+      <DetailRow label="Settlement rail" value="Umbra" />
+      <DetailRow label="Privacy path" value={formatPrivacyPath(settlement.privacyPath)} />
+      <DetailRow label="Network" value={formatNetwork(settlement.network)} />
+      <DetailRow
+        label="Amount"
+        value={`${settlement.amount ?? event.amount} ${settlement.assetSymbol ?? event.assetSymbol}`}
+        mono
+      />
+      <DetailRow label="Mint" value={settlement.mint} mono />
+      <DetailRow label="Report id" value={settlement.reportId} mono />
+      <DetailRow
+        label="Reconciliation"
+        value={settlement.reconciliationStatus ?? 'pending'}
+        mono
+      />
+      <DetailRow
+        label="Disclosure posture"
+        value={settlement.disclosurePosture ?? 'artifact_only'}
+        mono
+      />
+      <DetailRow
+        label="Proof source"
+        value={event.proofAgentSource}
+        mono
+      />
+      <DetailRow
+        label="Synthetic proof agent"
+        value={formatProofValue(event.syntheticProofAgent)}
+        mono
+      />
+      {settlement.finalTransactionSignature && (
+        <div className="border-t border-neutral-900 pt-4">
+          <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
+            Final transaction
+          </div>
+          <CopyableSignature
+            signature={settlement.finalTransactionSignature}
+            chainId={settlement.network}
+            explorerUrl={event.txExplorerUrl}
+            showExplorer
+          />
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -142,6 +228,7 @@ export default function TransactionDetailPage({
   const agent = agents.find((a) => a.id === event.agentId)
   const service = services.find((s) => s.serviceId === event.serviceId)
   const isReal = event.settlementMode === 'real'
+  const isUmbra = event.settlementMode === 'umbra' || Boolean(event.umbraSettlement)
 
   const createdAt = formatTimestampMs(event.createdAtMs)
   const updatedAt = formatTimestampMs(event.atMs)
@@ -203,15 +290,17 @@ export default function TransactionDetailPage({
           {event.txHashFull ? (
             <>
               <div className="mb-3 text-[11px] leading-5 text-neutral-400">
-                {isReal
-                  ? 'Real Solana PUSD settlement. The signature below resolves to a confirmed Solana transaction.'
-                  : 'Local service-test signature. This entry is a workspace receipt, not a real Solana transaction. Configure OWS Solana payments to settle on-chain.'}
+                {isUmbra
+                  ? 'Umbra devnet private settlement proof. The signature below is the final Solana transaction recorded by the Umbra proof run.'
+                  : isReal
+                    ? 'Real Solana PUSD settlement. The signature below resolves to a confirmed Solana transaction.'
+                    : 'Local service-test signature. This entry is a workspace receipt, not a real Solana transaction. Configure OWS Solana payments to settle on-chain.'}
               </div>
               <CopyableSignature
                 signature={event.txHashFull}
                 chainId={event.chainId}
                 explorerUrl={event.txExplorerUrl}
-                showSolscan={isReal}
+                showExplorer={isReal || isUmbra}
               />
             </>
           ) : event.settlementMode === 'approval_pending' ? (
@@ -274,6 +363,8 @@ export default function TransactionDetailPage({
           <DetailRow label="Vendor id" value={event.vendorId ?? 'n/a'} mono />
         </Section>
 
+        <UmbraProofSection event={event} />
+
         <Section title="Timestamps">
           <DetailRow label="Created" value={createdAt} />
           <DetailRow label="Updated" value={updatedAt} />
@@ -285,6 +376,7 @@ export default function TransactionDetailPage({
 
 function settlementText(mode) {
   if (mode === 'real') return 'Real Solana PUSD'
+  if (mode === 'umbra') return 'Umbra private settlement'
   if (mode === 'local') return 'Local service-test'
   if (mode === 'approval_pending') return 'Approval pending'
   if (mode === 'blocked') return 'Blocked by policy'

@@ -3,6 +3,12 @@ import type { SignatureRequest, SignatureResult } from './signing.js'
 
 export type BroadcastStatus = 'submitted' | 'confirmed' | 'failed'
 
+export type BroadcastPrivacyPath =
+  | 'umbra_direct_deposit'
+  | 'umbra_mixer_utxo'
+  | 'local_mock'
+  | 'transparent_disabled'
+
 export type BroadcastInput = {
   runId: string
   sessionId: string
@@ -21,6 +27,7 @@ export type BroadcastRecord = {
   runId: string
   submittedAt: ISO8601String
   status: BroadcastStatus
+  privacyPath?: BroadcastPrivacyPath
   transactionHash?: string
   network: string
   signatureRequestId: string

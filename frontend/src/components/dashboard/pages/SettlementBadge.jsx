@@ -1,6 +1,7 @@
 const SETTLEMENT_LABELS = {
   real: { label: 'Real Solana PUSD', tone: 'text-green-400 border-green-500/30 bg-green-500/5' },
   local: { label: 'Successful', tone: 'text-blue-300 border-blue-500/30 bg-blue-500/5' },
+  umbra: { label: 'Umbra private', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/5' },
   approval_pending: {
     label: 'Approval pending',
     tone: 'text-yellow-300 border-yellow-500/30 bg-yellow-500/5',
@@ -16,11 +17,13 @@ export default function SettlementBadge({ mode }) {
       ? 'bg-green-400'
       : mode === 'local'
         ? 'bg-blue-300'
-        : mode === 'approval_pending'
-          ? 'animate-pulse bg-yellow-300'
-          : mode === 'blocked'
-            ? 'bg-red-400'
-            : 'bg-neutral-500'
+        : mode === 'umbra'
+          ? 'bg-violet-300'
+          : mode === 'approval_pending'
+            ? 'animate-pulse bg-yellow-300'
+            : mode === 'blocked'
+              ? 'bg-red-400'
+              : 'bg-neutral-500'
 
   return (
     <span

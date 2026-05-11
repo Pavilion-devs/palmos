@@ -1461,10 +1461,11 @@ Current phase status as of May 9, 2026:
 10. MVP add-on: Umbra private settlement proof.
    - Use `umbra-migration.md` as the migration source of truth.
    - Keep the PUSD rail untouched at first.
-   - Add `src/integrations/umbra/*`.
-   - Build `npm run palmos:umbra-private` as the first proof.
-   - Route the Umbra call through PalmOS policy and approval before execution.
-   - Store privacy proof fields in the paid-call/audit model.
+   - Done: Add `src/integrations/umbra/*`.
+   - Done: Build `npm run palmos:umbra-private` as the first proof.
+   - Done: Route the Umbra call through PalmOS policy before execution.
+   - Done: Store privacy proof fields in the paid-call/audit model.
+   - Done: Add read-only dashboard visibility for Umbra settlement rail, privacy path, report id, final transaction, reconciliation, and disclosure posture.
 
 ## Superteam Submission Angle
 

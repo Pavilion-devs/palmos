@@ -102,6 +102,13 @@ export type PolicyEmergencyRules = {
   incidentModeRestrictions?: string[]
 }
 
+export type UmbraPolicyConfig = {
+  defaultPath: 'confidential' | 'anonymous' | 'transparent'
+  mixerRequired: boolean
+  viewingKeyRetention: 'always' | 'on_request' | 'never'
+  disclosureRecipients: string[]
+}
+
 export type PolicyProfile = {
   policyProfileId: string
   version: string
@@ -119,5 +126,6 @@ export type PolicyProfile = {
   identity: PolicyIdentityRules
   trust: PolicyTrustRules
   emergency: PolicyEmergencyRules
+  umbra?: UmbraPolicyConfig
   derivedToolPolicy?: Record<string, unknown>
 }

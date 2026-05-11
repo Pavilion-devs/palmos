@@ -34,6 +34,7 @@ export type AgentPolicyTemplateInput = {
   policyProfileId?: string
   approvalExpirySeconds?: number
   minimumWalletTrustTier?: TrustTier
+  umbra?: PolicyProfile['umbra']
 }
 
 export type AgentTrustTier = 'new' | 'healthy' | 'trusted' | 'restricted'
@@ -287,6 +288,7 @@ export function compileAgentPolicy(input: {
     emergency: {
       emergencyHaltEnabled: true,
     },
+    umbra: input.policy.umbra,
   }
 }
 

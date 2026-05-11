@@ -34,15 +34,19 @@
     "showcase:pending": "SHOWCASE_AUTO_RESOLVE_APPROVALS=0 bun src/cli/runHackathonShowcase.ts",
     "dashboard:export": "bun src/cli/exportDashboard.ts",
     "frontend:snapshot": "bun src/cli/syncFrontendSnapshot.ts",
-    "dashboard:api": "node --import tsx src/server/dashboardApi.ts"
+    "dashboard:api": "node --import tsx src/server/dashboardApi.ts",
+    "palmos:umbra-private": "node --import tsx src/cli/runUmbraPrivateProof.ts"
   },
   "dependencies": {
     "@open-wallet-standard/core": "^1.2.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
+    "@umbra-privacy/sdk": "^4.0.0",
+    "@umbra-privacy/web-zk-prover": "^2.0.1",
     "@xmtp/node-sdk": "^6.0.0",
     "bs58": "^6.0.0",
     "express": "^5.2.1",
+    "snarkjs": "^0.7.6",
     "tsx": "^4.21.0",
     "viem": "^2.21.26",
     "x402-express": "^1.1.0",

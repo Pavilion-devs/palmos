@@ -122,6 +122,10 @@ function buildSolscanTxUrl(signature, chainId) {
 }
 
 function deriveSettlementMode(record, txHashFull) {
+  if (record.paymentRail === 'umbra' || record.umbraSettlement) {
+    return 'umbra'
+  }
+
   if (
     record.status === 'approval_pending' ||
     record.status === 'waiting_for_execution'
@@ -148,6 +152,10 @@ function getPolicyVendorLabel(agentSnapshot, vendorId) {
 
 function buildActionLabel(agentSnapshot, record) {
   const vendorLabel = getPolicyVendorLabel(agentSnapshot, record.vendorId)
+
+  if (record.paymentRail === 'umbra' || record.umbraSettlement) {
+    return 'Umbra private settlement proof'
+  }
 
   if (record.serviceId === 'coingecko.simple_price') {
     return `Crypto data via ${vendorLabel}`
@@ -183,6 +191,23 @@ function getMatchingXMTPAlerts(agentSnapshot, executionId) {
 }
 
 function buildReason(agentSnapshot, record) {
+  if (record.paymentRail === 'umbra' || record.umbraSettlement) {
+    const reconciliation = record.umbraSettlement?.reconciliationStatus
+    if (record.status === 'executed' && reconciliation === 'matched') {
+      return 'Umbra devnet mixer/UTXO reconciliation matched'
+    }
+    if (record.status === 'executed') {
+      return 'Umbra private settlement executed'
+    }
+    if (
+      record.status === 'approval_pending' ||
+      record.status === 'waiting_for_execution'
+    ) {
+      return 'Umbra private settlement awaiting approval'
+    }
+    return record.errorMessage ?? 'Umbra private settlement did not execute'
+  }
+
   const requiresApproval =
     parseAmount(record.amount) >
     parseAmount(agentSnapshot?.agent?.policyConfig?.autoApproveUnder)
@@ -276,6 +301,16 @@ function buildEvent(agentSnapshot, record) {
     vendor: getPolicyVendorLabel(agentSnapshot, record.vendorId),
     vendorId: record.vendorId ?? null,
     serviceId: record.serviceId ?? null,
+    paymentRail: record.paymentRail ?? null,
+    umbraSettlement: record.umbraSettlement ?? null,
+    proofAgentSource:
+      record.requestSummary?.proofAgentSource ??
+      record.requestPayload?.proofAgentSource ??
+      null,
+    syntheticProofAgent:
+      record.requestSummary?.syntheticProofAgent ??
+      record.requestPayload?.syntheticProofAgent ??
+      null,
     chainId: record.chainId ?? null,
     txHash: shortTxHash(txHashFull),
     txHashFull,
@@ -295,6 +330,21 @@ function buildEvent(agentSnapshot, record) {
 }
 
 function buildPaidCallBadge(record, approvedByOperator) {
+  if (record.paymentRail === 'umbra' || record.umbraSettlement) {
+    if (record.status === 'executed') {
+      return record.umbraSettlement?.reconciliationStatus === 'matched'
+        ? 'UMBRA MATCHED'
+        : 'UMBRA EXECUTED'
+    }
+    if (
+      record.status === 'approval_pending' ||
+      record.status === 'waiting_for_execution'
+    ) {
+      return 'UMBRA PENDING'
+    }
+    return record.status === 'failed' ? 'UMBRA FAILED' : 'UMBRA BLOCKED'
+  }
+
   const result = mapPaidCallResult(record)
 
   if (result === 'approved') {

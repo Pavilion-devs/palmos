@@ -5,6 +5,7 @@ import SettlementBadge from './SettlementBadge'
 const SETTLEMENT_FILTER_OPTIONS = [
   { value: 'all', label: 'All settlement modes' },
   { value: 'real', label: 'Real Solana PUSD' },
+  { value: 'umbra', label: 'Umbra private' },
   { value: 'local', label: 'Local service-test' },
   { value: 'approval_pending', label: 'Approval pending' },
   { value: 'blocked', label: 'Blocked' },
@@ -48,7 +49,13 @@ function FilterSelect({ value, onChange, options, ariaLabel }) {
 
 function TransactionRow({ event, services }) {
   const service = services.find((s) => s.serviceId === event.serviceId)
-  const serviceLabel = service?.label ?? event.serviceId ?? '—'
+  const isUmbra = event.settlementMode === 'umbra' || event.umbraSettlement
+  const serviceLabel = isUmbra
+    ? 'Umbra private settlement'
+    : service?.label ?? event.serviceId ?? '—'
+  const routeLabel = isUmbra
+    ? `${event.umbraSettlement?.privacyPath ?? 'umbra_mixer_utxo'} · ${event.chainId ?? event.umbraSettlement?.network ?? 'solana-devnet'}`
+    : null
 
   return (
     <button
@@ -82,6 +89,14 @@ function TransactionRow({ event, services }) {
         {event.txHashFull && (
           <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-neutral-600">
             <span className="truncate">tx: {shortHash(event.txHashFull)}</span>
+            {routeLabel && (
+              <span className="truncate text-violet-300/70">{routeLabel}</span>
+            )}
+          </div>
+        )}
+        {!event.txHashFull && routeLabel && (
+          <div className="mt-2 truncate font-mono text-[10px] text-violet-300/70">
+            {routeLabel}
           </div>
         )}
       </div>
@@ -111,6 +126,7 @@ export default function TransactionsPage({ events, agents, services }) {
   }, [spendEvents, agentFilter, statusFilter, settlementFilter])
 
   const realCount = spendEvents.filter((e) => e.settlementMode === 'real').length
+  const umbraCount = spendEvents.filter((e) => e.settlementMode === 'umbra').length
   const totalSpent = spendEvents
     .filter((e) => e.settlementMode === 'real' || e.settlementMode === 'local')
     .reduce((sum, e) => sum + (e.amount ?? 0), 0)
@@ -148,6 +164,12 @@ export default function TransactionsPage({ events, agents, services }) {
             <span className="ml-2 font-mono text-xs text-white">
               {formatPusd(totalSpent)} PUSD
             </span>
+          </div>
+          <div className="border border-neutral-800 bg-neutral-900 px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-widest text-neutral-500">
+              Umbra proofs
+            </span>
+            <span className="ml-2 font-mono text-xs text-violet-300">{umbraCount}</span>
           </div>
         </div>
       </div>
@@ -217,4 +239,3 @@ export default function TransactionsPage({ events, agents, services }) {
     </div>
   )
 }
-
