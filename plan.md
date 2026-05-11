@@ -1466,6 +1466,7 @@ Current phase status as of May 9, 2026:
    - Done: Route the Umbra call through PalmOS policy before execution.
    - Done: Store privacy proof fields in the paid-call/audit model.
    - Done: Add read-only dashboard visibility for Umbra settlement rail, privacy path, report id, final transaction, reconciliation, and disclosure posture.
+   - In progress: Support running `npm run palmos:umbra-private -- --require-existing-agent` against a dashboard-registered agent by attaching the minimum Umbra proof policy to that existing agent identity. Live devnet validation requires `UMBRA_SECRET_KEY_BASE64` in the local environment.
 
 ## Superteam Submission Angle
 

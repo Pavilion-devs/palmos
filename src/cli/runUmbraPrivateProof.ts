@@ -95,6 +95,7 @@ async function main(): Promise<void> {
         walletId: result.agent.walletId,
         proofSource: result.proofAgent.source,
         syntheticProofAgent: result.proofAgent.synthetic,
+        umbraPolicyAttached: result.proofAgent.umbraPolicyAttached,
       },
       execution: {
         executionId: result.execution.executionId,

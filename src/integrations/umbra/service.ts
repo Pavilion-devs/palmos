@@ -64,6 +64,7 @@ export type UmbraPrivateSettlementResult = {
   proofAgent: {
     source: 'existing' | 'auto_created'
     synthetic: boolean
+    umbraPolicyAttached: boolean
   }
   execution: PaidCallRecord
   turnOutput: string[]
@@ -179,6 +180,7 @@ export async function executeUmbraPrivateSettlement(
       proofAgent: {
         source: proofAgent.source,
         synthetic: proofAgent.source === 'auto_created',
+        umbraPolicyAttached: proofAgent.umbraPolicyAttached,
       },
       execution,
       turnOutput: [],
@@ -226,6 +228,7 @@ export async function executeUmbraPrivateSettlement(
     proofAgent: {
       source: proofAgent.source,
       synthetic: proofAgent.source === 'auto_created',
+      umbraPolicyAttached: proofAgent.umbraPolicyAttached,
     },
     execution,
     turnOutput: submitted.turn.output,
@@ -242,6 +245,7 @@ async function ensureUmbraProofAgent(input: {
 }): Promise<{
   agent: AgentRecord
   source: 'existing' | 'auto_created'
+  umbraPolicyAttached: boolean
 }> {
   const existing = await input.agentRegistry.get(input.input.agentId)
   if (existing) {
@@ -250,9 +254,11 @@ async function ensureUmbraProofAgent(input: {
         `Umbra proof requires agent ${existing.agentId} to be ready; current status is ${existing.status}.`,
       )
     }
+    const agent = await attachUmbraPolicyToExistingAgent(input)
     return {
-      agent: existing,
+      agent,
       source: 'existing',
+      umbraPolicyAttached: true,
     }
   }
 
@@ -340,7 +346,95 @@ async function ensureUmbraProofAgent(input: {
   return {
     agent,
     source: 'auto_created',
+    umbraPolicyAttached: true,
   }
+}
+
+async function attachUmbraPolicyToExistingAgent(input: {
+  input: UmbraPrivateSettlementInput
+  agentRegistry: AgentRegistry
+  walletRegistry: FileWalletRegistry
+  now: () => string
+}): Promise<AgentRecord> {
+  const agent = await input.agentRegistry.get(input.input.agentId)
+  if (!agent) {
+    throw new Error(`Umbra proof agent ${input.input.agentId} does not exist.`)
+  }
+  if (!agent.walletId) {
+    throw new Error(`Umbra proof requires agent ${agent.agentId} to have a wallet.`)
+  }
+
+  const wallet = await input.walletRegistry.get(agent.walletId)
+  if (!wallet) {
+    throw new Error(`Umbra proof wallet ${agent.walletId} was not found.`)
+  }
+
+  const at = input.now()
+  const chainId = toSolanaChainId(input.input.config.network)
+  const vendorId = input.input.vendorId ?? UMBRA_DEFAULT_VENDOR_ID
+  const vendorRule = {
+    vendorId,
+    label: 'Umbra private settlement recipient',
+    destinationAddress: input.input.destinationAddress,
+    chainId,
+  }
+  const allowedVendors = [
+    ...agent.policyConfig.allowedVendors.filter(
+      (vendor) =>
+        !(
+          vendor.vendorId === vendorRule.vendorId &&
+          vendor.chainId === vendorRule.chainId
+        ),
+    ),
+    vendorRule,
+  ]
+  const updatedWallet: WalletRecord = {
+    ...wallet,
+    updatedAt: at,
+    supportedChains: uniqueStrings([...(wallet.supportedChains ?? []), chainId]),
+    signerProfileId: wallet.signerProfileId ?? agent.signerProfileId ?? 'mpc_default',
+    complianceStatus: 'approved',
+    policyAttachmentStatus: 'attached',
+    signerHealthStatus: 'healthy',
+    trustStatus: 'sufficient',
+  }
+  await input.walletRegistry.put(updatedWallet)
+
+  const updatedAgent: AgentRecord = {
+    ...agent,
+    updatedAt: at,
+    walletState: updatedWallet.state,
+    signerProfileId: updatedWallet.signerProfileId,
+    policyConfig: {
+      ...agent.policyConfig,
+      allowedChains: uniqueStrings([
+        ...agent.policyConfig.allowedChains,
+        chainId,
+      ]),
+      allowedAssets: uniqueStrings([
+        ...agent.policyConfig.allowedAssets,
+        input.input.assetSymbol,
+      ]),
+      allowedSignerClasses: uniqueStrings([
+        'mpc',
+        ...(agent.policyConfig.allowedSignerClasses ?? []),
+      ]),
+      allowedVendors,
+      umbra: agent.policyConfig.umbra ?? {
+        defaultPath: 'anonymous',
+        mixerRequired: true,
+        viewingKeyRetention: 'on_request',
+        disclosureRecipients: [],
+      },
+    },
+    lastCheckInAt: at,
+  }
+  await input.agentRegistry.put(updatedAgent)
+  return updatedAgent
+}
+
+function uniqueStrings<T extends string>(values: T[]): T[] {
+  return Array.from(new Set(values.filter(Boolean)))
 }
 
 function assertUmbraPolicyAllows(input: {
@@ -489,12 +583,14 @@ async function persistUmbraExecution(input: {
       note: input.input.note,
       proofAgentSource: input.proofAgentSource,
       syntheticProofAgent: input.proofAgentSource === 'auto_created',
+      umbraPolicyAttached: true,
     },
     requestSummary: {
       route: 'PalmOS policy -> Umbra ETA -> Mixer -> ETA',
       proof: 'Umbra private settlement proof runner',
       proofAgentSource: input.proofAgentSource,
       syntheticProofAgent: input.proofAgentSource === 'auto_created',
+      umbraPolicyAttached: true,
       privacyPath: UMBRA_DEFAULT_PRIVACY_PATH,
       network: toSolanaChainId(input.input.config.network),
       amount: input.input.amount,

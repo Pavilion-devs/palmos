@@ -311,6 +311,10 @@ function buildEvent(agentSnapshot, record) {
       record.requestSummary?.syntheticProofAgent ??
       record.requestPayload?.syntheticProofAgent ??
       null,
+    umbraPolicyAttached:
+      record.requestSummary?.umbraPolicyAttached ??
+      record.requestPayload?.umbraPolicyAttached ??
+      null,
     chainId: record.chainId ?? null,
     txHash: shortTxHash(txHashFull),
     txHashFull,

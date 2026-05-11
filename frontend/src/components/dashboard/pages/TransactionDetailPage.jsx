@@ -162,6 +162,11 @@ function UmbraProofSection({ event }) {
         value={formatProofValue(event.syntheticProofAgent)}
         mono
       />
+      <DetailRow
+        label="Umbra policy attached"
+        value={formatProofValue(event.umbraPolicyAttached)}
+        mono
+      />
       {settlement.finalTransactionSignature && (
         <div className="border-t border-neutral-900 pt-4">
           <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
