@@ -1469,6 +1469,7 @@ Current phase status as of May 9, 2026:
    - Done: Support running `npm run palmos:umbra-private -- --require-existing-agent` against a dashboard-registered agent by attaching the minimum Umbra proof policy to that existing agent identity. Live devnet validation succeeded with `proofSource=existing`, `syntheticProofAgent=false`, `privacyPath=umbra_mixer_utxo`, and `reconciliationStatus=matched`.
    - Done: Add `npm run palmos:private`, `/palmos-private-pay`, and `docs/umbra-private-workflow.md` as the explicit private-settlement workflow for Claude Code/Codex demos.
    - Done: Add read-only agent detail visibility for whether Umbra private settlement policy is attached to a registered external agent.
+   - Done: Add approval-gated Umbra private payouts. A private request above the auto-approve threshold now records `approval_pending`; approval resumes the original Umbra runtime run, executes mixer/UTXO settlement, and updates the same paid-call record. Live devnet validation succeeded with final transaction `4EYLgHqkM4kfWXTDaT1mZTsSKDGHJfdg7QjfQE3PK1tnHUQfNJKVvqbtK2uaMcEb16JE8bX4TD49aHfgv2ynvcQM` and `reconciliationStatus=matched`.
 
 ## Superteam Submission Angle
 

@@ -72,6 +72,14 @@ export type UmbraPrivateSettlementResult = {
   error?: string
 }
 
+export type UmbraApprovalSettlementInput = {
+  baseDir: string
+  execution: PaidCallRecord
+  config: UmbraRuntimeConfig
+  prefundWrappedSol?: boolean
+  now?: () => string
+}
+
 type UmbraBroadcastArtifacts = BroadcastRecord & {
   fundingTransactionSignatures?: string[]
   createUtxoTransactionSignatures?: string[]
@@ -102,10 +110,6 @@ export async function executeUmbraPrivateSettlement(
     destinationAddress: input.destinationAddress,
   })
 
-  if (input.assetSymbol === 'wSOL' && input.prefundWrappedSol !== false) {
-    await prepareWrappedSol(input)
-  }
-
   const umbraWalletProvider = await UmbraWalletProvider.create({
     network: input.config.network,
     rpcUrl: input.config.rpcUrl,
@@ -115,35 +119,33 @@ export async function executeUmbraPrivateSettlement(
     registry: walletRegistry,
     defaultSignerProfileId: 'mpc_default',
   })
-  const kernel = new DefaultSessionKernel({
-    persistence: new FileKernelPersistence(input.baseDir),
-    sessions: new FileSessionRegistry(input.baseDir),
-    runs: new FileRunRegistry(input.baseDir),
+  const kernel = createUmbraSettlementKernel({
+    baseDir: input.baseDir,
     walletRegistry,
+    agentRegistry,
     walletProvider: umbraWalletProvider,
-    signerGateway: new DeterministicSignerGateway('signed'),
-    broadcaster: new UmbraMixerBroadcaster({
-      walletProvider: umbraWalletProvider,
-      network: input.config.network,
-      relayerApiEndpoint: input.config.relayerApiEndpoint,
-      scanTreeIndex: Number(process.env.UMBRA_MIXER_TREE_INDEX ?? 0),
-      scanStartIndex: Number(process.env.UMBRA_MIXER_SCAN_START_INDEX ?? 0),
-      scanLimit: Number(process.env.UMBRA_MIXER_SCAN_LIMIT ?? 10_000),
-      scanAttempts: Number(process.env.UMBRA_MIXER_SCAN_ATTEMPTS ?? 6),
-      scanDelayMs: Number(process.env.UMBRA_MIXER_SCAN_DELAY_MS ?? 5_000),
-      fundEncryptedBalance: process.env.UMBRA_MIXER_PREFUND_ETA !== 'false',
-      autoClaim: process.env.UMBRA_MIXER_AUTO_CLAIM !== 'false',
-      mintAddresses: defaultUmbraMintAddresses(input.config.network),
-    }),
-    getPolicyCandidates: createAgentPolicyCandidateResolver({
-      agentRegistry,
-      now,
-    }),
+    config: input.config,
     now,
   })
 
   const executionId = createExecutionId()
   const createdAt = now()
+  const spendDecision = evaluateSpendRequest({
+    policy: agent.policyConfig,
+    amount: input.amount,
+    vendorId: input.vendorId ?? UMBRA_DEFAULT_VENDOR_ID,
+    trustTier: agent.trustTier,
+  })
+  if (
+    !spendDecision.requiresApproval &&
+    input.assetSymbol === 'wSOL' &&
+    input.prefundWrappedSol !== false
+  ) {
+    await prepareWrappedSol({
+      amount: input.amount,
+      config: input.config,
+    })
+  }
   const submitted = await requestPaidAction(
     {
       kernel,
@@ -190,18 +192,10 @@ export async function executeUmbraPrivateSettlement(
 
   const run = submitted.turn.run
   const artifacts = await readUmbraRunArtifacts(run)
-  const reconciliationStatus = mapReconciliationStatus(
-    artifacts.reconciliation?.status,
-  )
   const finalTransactionSignature =
     artifacts.broadcast?.transactionHash ??
     artifacts.reconciliation?.observedTransactionHash
-  const status: PaidCallRecord['status'] =
-    run?.status === 'completed' && reconciliationStatus === 'matched'
-      ? 'executed'
-      : run?.status === 'waiting_for_approval'
-        ? 'approval_pending'
-        : 'failed'
+  const status = deriveUmbraPaidCallStatus(run)
 
   const execution = await persistUmbraExecution({
     paidCallRegistry,
@@ -223,7 +217,10 @@ export async function executeUmbraPrivateSettlement(
   })
 
   return {
-    ok: status === 'executed',
+    ok:
+      status === 'executed' ||
+      status === 'approval_pending' ||
+      status === 'waiting_for_execution',
     agent: submitted.agent,
     proofAgent: {
       source: proofAgent.source,
@@ -235,6 +232,161 @@ export async function executeUmbraPrivateSettlement(
     run,
     error: execution.errorMessage,
   }
+}
+
+export function isUmbraPaidCall(record: PaidCallRecord): boolean {
+  return record.paymentRail === UMBRA_PAYMENT_RAIL || Boolean(record.umbraSettlement)
+}
+
+export function createUmbraSettlementKernel(input: {
+  baseDir: string
+  walletRegistry: FileWalletRegistry
+  agentRegistry: AgentRegistry
+  walletProvider: UmbraWalletProvider
+  config: UmbraRuntimeConfig
+  now?: () => string
+}): DefaultSessionKernel {
+  const now = input.now ?? (() => new Date().toISOString())
+  return new DefaultSessionKernel({
+    persistence: new FileKernelPersistence(input.baseDir),
+    sessions: new FileSessionRegistry(input.baseDir),
+    runs: new FileRunRegistry(input.baseDir),
+    walletRegistry: input.walletRegistry,
+    walletProvider: input.walletProvider,
+    signerGateway: new DeterministicSignerGateway('signed'),
+    broadcaster: new UmbraMixerBroadcaster({
+      walletProvider: input.walletProvider,
+      network: input.config.network,
+      relayerApiEndpoint: input.config.relayerApiEndpoint,
+      scanTreeIndex: Number(process.env.UMBRA_MIXER_TREE_INDEX ?? 0),
+      scanStartIndex: Number(process.env.UMBRA_MIXER_SCAN_START_INDEX ?? 0),
+      scanLimit: Number(process.env.UMBRA_MIXER_SCAN_LIMIT ?? 10_000),
+      scanAttempts: Number(process.env.UMBRA_MIXER_SCAN_ATTEMPTS ?? 6),
+      scanDelayMs: Number(process.env.UMBRA_MIXER_SCAN_DELAY_MS ?? 5_000),
+      fundEncryptedBalance: process.env.UMBRA_MIXER_PREFUND_ETA !== 'false',
+      autoClaim: process.env.UMBRA_MIXER_AUTO_CLAIM !== 'false',
+      mintAddresses: defaultUmbraMintAddresses(input.config.network),
+    }),
+    getPolicyCandidates: createAgentPolicyCandidateResolver({
+      agentRegistry: input.agentRegistry,
+      now,
+    }),
+    now,
+  })
+}
+
+export async function createUmbraSettlementKernelFromConfig(input: {
+  baseDir: string
+  agentRegistry: AgentRegistry
+  walletRegistry: FileWalletRegistry
+  config: UmbraRuntimeConfig
+  now?: () => string
+}): Promise<DefaultSessionKernel> {
+  const walletProvider = await UmbraWalletProvider.create({
+    network: input.config.network,
+    rpcUrl: input.config.rpcUrl,
+    rpcSubscriptionsUrl: input.config.rpcSubscriptionsUrl,
+    indexerApiEndpoint: input.config.indexerApiEndpoint,
+    secretKeyBase64: input.config.secretKeyBase64,
+    registry: input.walletRegistry,
+    defaultSignerProfileId: 'mpc_default',
+  })
+  return createUmbraSettlementKernel({
+    baseDir: input.baseDir,
+    walletRegistry: input.walletRegistry,
+    agentRegistry: input.agentRegistry,
+    walletProvider,
+    config: input.config,
+    now: input.now,
+  })
+}
+
+export async function prepareUmbraFundingForApprovedExecution(
+  input: UmbraApprovalSettlementInput,
+): Promise<void> {
+  if (input.prefundWrappedSol === false) {
+    return
+  }
+  if (input.execution.assetSymbol !== 'wSOL') {
+    return
+  }
+  await prepareWrappedSol({
+    amount: input.execution.amount,
+    config: input.config,
+  })
+}
+
+export async function updateUmbraExecutionFromRun(input: {
+  paidCallRegistry: PaidCallRegistry
+  execution: PaidCallRecord
+  run: RunState | undefined
+  status?: PaidCallRecord['status']
+  errorCode?: string
+  errorMessage?: string
+  now?: () => string
+}): Promise<PaidCallRecord> {
+  const artifacts = await readUmbraRunArtifacts(input.run)
+  const finalTransactionSignature =
+    artifacts.broadcast?.transactionHash ??
+    artifacts.reconciliation?.observedTransactionHash ??
+    input.execution.transactionSignature
+  const status = input.status ?? deriveUmbraPaidCallStatus(input.run)
+  const existingSettlement = input.execution.umbraSettlement
+  const network =
+    existingSettlement?.network ?? input.execution.chainId ?? 'solana-devnet'
+  const updatedSettlement: UmbraSettlementMetadata = {
+    settlementRail: 'umbra',
+    privacyPath:
+      artifacts.broadcast?.privacyPath ??
+      existingSettlement?.privacyPath ??
+      UMBRA_DEFAULT_PRIVACY_PATH,
+    network,
+    assetSymbol: existingSettlement?.assetSymbol ?? input.execution.assetSymbol,
+    mint: existingSettlement?.mint ?? '',
+    amount: existingSettlement?.amount ?? input.execution.amount,
+    finalTransactionSignature,
+    fundingTransactionSignatures:
+      artifacts.broadcast?.fundingTransactionSignatures ??
+      existingSettlement?.fundingTransactionSignatures,
+    createUtxoTransactionSignatures:
+      artifacts.broadcast?.createUtxoTransactionSignatures ??
+      existingSettlement?.createUtxoTransactionSignatures,
+    claimTransactionSignatures:
+      artifacts.broadcast?.claimTransactionSignatures ??
+      existingSettlement?.claimTransactionSignatures,
+    reportId: input.run?.reportRef ?? existingSettlement?.reportId,
+    reconciliationStatus: mapReconciliationStatus(artifacts.reconciliation?.status),
+    disclosurePosture: existingSettlement?.disclosurePosture ?? 'artifact_only',
+  }
+  const updatedRecord: PaidCallRecord = {
+    ...input.execution,
+    updatedAt: input.now?.() ?? new Date().toISOString(),
+    status,
+    runtimeStatus: input.run?.status ?? input.execution.runtimeStatus,
+    runtimePhase: input.run?.currentPhase ?? input.execution.runtimePhase,
+    runId: input.run?.runId ?? input.execution.runId,
+    sessionId: input.run?.sessionId ?? input.execution.sessionId,
+    transactionSignature: finalTransactionSignature,
+    transactionExplorerUrl: buildSolanaExplorerUrlFromChain(
+      finalTransactionSignature,
+      network,
+    ),
+    umbraSettlement: updatedSettlement,
+    responsePreview: {
+      broadcast: artifacts.broadcast?.summary,
+      reconciliation: artifacts.reconciliation?.summary,
+      reportId: input.run?.reportRef ?? existingSettlement?.reportId,
+    },
+    errorCode: input.errorCode,
+    errorMessage:
+      input.errorMessage ??
+      (status === 'failed'
+        ? 'Umbra private settlement did not complete.'
+        : undefined),
+  }
+
+  await input.paidCallRegistry.put(updatedRecord)
+  return updatedRecord
 }
 
 async function ensureUmbraProofAgent(input: {
@@ -476,7 +628,10 @@ function assertUmbraPolicyAllows(input: {
   }
 }
 
-async function prepareWrappedSol(input: UmbraPrivateSettlementInput): Promise<void> {
+async function prepareWrappedSol(input: {
+  amount: string
+  config: UmbraRuntimeConfig
+}): Promise<void> {
   const keypair = readUmbraKeypair(input.config.secretKeyBase64)
   const connection = new Connection(input.config.rpcUrl, 'confirmed')
   const balance = await connection.getBalance(keypair.publicKey)
@@ -625,6 +780,22 @@ function mapReconciliationStatus(
   }
 }
 
+function deriveUmbraPaidCallStatus(run: RunState | undefined): PaidCallRecord['status'] {
+  if (run?.status === 'waiting_for_approval') {
+    return 'approval_pending'
+  }
+  if (run?.status === 'completed') {
+    return 'executed'
+  }
+  if (
+    run?.status === 'waiting_for_signature' ||
+    run?.status === 'waiting_for_confirmation'
+  ) {
+    return 'waiting_for_execution'
+  }
+  return 'failed'
+}
+
 function buildSolanaExplorerUrl(
   signature: string | undefined,
   network: UmbraPrivateSettlementInput['config']['network'],
@@ -633,6 +804,17 @@ function buildSolanaExplorerUrl(
     return undefined
   }
   const cluster = network === 'devnet' ? '?cluster=devnet' : ''
+  return `https://explorer.solana.com/tx/${signature}${cluster}`
+}
+
+function buildSolanaExplorerUrlFromChain(
+  signature: string | undefined,
+  chainId: string | undefined,
+): string | undefined {
+  if (!signature) {
+    return undefined
+  }
+  const cluster = chainId === 'solana-devnet' ? '?cluster=devnet' : ''
   return `https://explorer.solana.com/tx/${signature}${cluster}`
 }
 

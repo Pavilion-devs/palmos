@@ -29,7 +29,7 @@
     "palmos:worker": "node --import tsx src/cli/runPalmosWorker.ts",
     "palmos:external-agent": "node --import tsx src/cli/runExternalAgent.ts",
     "judge:seed": "node --import tsx src/cli/seedJudgeWorkspace.ts",
-    "approval:pending": "bun src/cli/reviewPendingApprovals.ts",
+    "approval:pending": "node --import tsx src/cli/reviewPendingApprovals.ts",
     "showcase:live": "bun src/cli/runHackathonShowcase.ts",
     "showcase:pending": "SHOWCASE_AUTO_RESOLVE_APPROVALS=0 bun src/cli/runHackathonShowcase.ts",
     "dashboard:export": "bun src/cli/exportDashboard.ts",

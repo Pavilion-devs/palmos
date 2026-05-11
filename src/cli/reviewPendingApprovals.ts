@@ -1,6 +1,7 @@
 import {
   createDefaultPalmosServiceCatalog,
   listPendingPaidApprovals,
+  loadProcessEnv,
   loadAgentSpendWorkspace,
   PalmosClient,
   readLocalPusdServerConfigFromEnv,
@@ -88,7 +89,10 @@ function parseCommand(args: string[], env: Record<string, string | undefined>): 
   )
 }
 
-const env = readProcessEnv()
+const env = {
+  ...loadProcessEnv(),
+  ...readProcessEnv(),
+}
 const command = parseCommand(process.argv.slice(2), env)
 const workspace = loadAgentSpendWorkspace({
   baseDir: command.baseDir,
@@ -166,6 +170,7 @@ const xmtpNotifier = XmtpNotifier.fromEnv(
 
 const result = await resolvePendingPaidCallApproval(
   {
+    baseDir: command.baseDir,
     kernel: workspace.kernel,
     agentRegistry: workspace.agentRegistry,
     paidCalls: workspace.paidCallRegistry,
@@ -177,6 +182,7 @@ const result = await resolvePendingPaidCallApproval(
       localDemoOpsBriefAmount: env.PUSD_DEMO_OPS_BRIEF_PRICE,
     }),
     xmtpNotifier,
+    env,
   },
   {
     executionId: command.executionId,

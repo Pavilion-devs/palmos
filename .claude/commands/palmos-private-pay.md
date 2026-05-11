@@ -24,6 +24,7 @@ Arguments: $ARGUMENTS
 
 5. Parse the JSON output and report:
    - `ok === true` and `execution.status === "executed"` -> Private settlement executed. Show the amount, token, privacy path, report ID, final transaction link, and dashboard link `#dashboard/transactions/<executionId>`.
+   - `ok === true` and `execution.status === "approval_pending"` -> Private settlement is waiting for operator approval. Show the execution ID and tell the user to approve it from `#dashboard/approvals` or with `npm run approval:pending -- approve <executionId> --base-dir <path>`.
    - `ok === true` but not executed -> Show the execution status and reconciliation status.
    - `ok === false` or command failure -> Show the error and confirm the agent exists, Umbra env vars are loaded, and the devnet wallet has SOL.
 
@@ -32,4 +33,5 @@ Arguments: $ARGUMENTS
 - This is an explicit private settlement workflow. It does not replace the normal PUSD payment command.
 - `--require-existing-agent` prevents the command from silently creating a synthetic proof agent during dashboard demos.
 - The first successful run attaches the minimum Umbra proof policy to the existing PalmOS agent identity and records the result in the dashboard.
+- If policy requires approval, no Umbra settlement executes until the PalmOS approval is accepted.
 - Current MVP proofs use the Umbra devnet mixer/UTXO path and write audit metadata for reconciliation, report ID, privacy path, and final transaction.

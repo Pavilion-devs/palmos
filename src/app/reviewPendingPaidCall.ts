@@ -10,14 +10,25 @@ import type { X402Client } from '../integrations/x402/client.js'
 import type { X402ServiceCatalog } from '../integrations/x402/serviceCatalog.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { XmtpNotifier } from '../integrations/xmtp/client.js'
-import type { SessionKernel } from '../../runtime/index.js'
+import {
+  FileWalletRegistry,
+  type SessionKernel,
+} from '../../runtime/index.js'
 import {
   continueRuntimeBoundPaidExecution,
   loadRuntimeRunState,
   type ExecutePaidServiceCallDependencies,
 } from './executePaidServiceCall.js'
+import {
+  createUmbraSettlementKernelFromConfig,
+  isUmbraPaidCall,
+  prepareUmbraFundingForApprovedExecution,
+  readUmbraRuntimeConfig,
+  updateUmbraExecutionFromRun,
+} from '../integrations/umbra/index.js'
 
 export type ReviewPendingPaidCallDependencies = {
+  baseDir?: string
   kernel: SessionKernel
   agentRegistry: AgentRegistry
   paidCalls: PaidCallRegistry
@@ -26,6 +37,7 @@ export type ReviewPendingPaidCallDependencies = {
   owsClient?: OwsClient
   serviceCatalog?: PalmosServiceCatalog | X402ServiceCatalog
   xmtpNotifier?: XmtpNotifier
+  env?: Record<string, string | undefined>
   now?: () => string
 }
 
@@ -155,7 +167,31 @@ export async function resolvePendingPaidCallApproval(
     throw new Error(`Paid execution ${input.executionId} has no runtime runId.`)
   }
 
-  await deps.kernel.ingestCallback({
+  let approvalKernel = deps.kernel
+  if (input.decision === 'approved' && isUmbraPaidCall(execution)) {
+    if (!deps.baseDir) {
+      throw new Error(
+        `Umbra approval for ${input.executionId} requires ReviewPendingPaidCallDependencies.baseDir.`,
+      )
+    }
+    const umbraConfig = readUmbraRuntimeConfig(deps.env ?? process.env)
+    await prepareUmbraFundingForApprovedExecution({
+      baseDir: deps.baseDir,
+      execution,
+      config: umbraConfig,
+      prefundWrappedSol: (deps.env ?? process.env).UMBRA_PREFUND_WSOL !== 'false',
+      now: deps.now,
+    })
+    approvalKernel = await createUmbraSettlementKernelFromConfig({
+      baseDir: deps.baseDir,
+      agentRegistry: deps.agentRegistry,
+      walletRegistry: new FileWalletRegistry(deps.baseDir),
+      config: umbraConfig,
+      now: deps.now,
+    })
+  }
+
+  await approvalKernel.ingestCallback({
     type: 'approval_decision',
     runId: execution.runId,
     status: input.decision,
@@ -175,7 +211,10 @@ export async function resolvePendingPaidCallApproval(
   })
 
   const refreshedRun = await loadRuntimeRunState({
-    deps: deps as ExecutePaidServiceCallDependencies,
+    deps: {
+      ...(deps as ExecutePaidServiceCallDependencies),
+      kernel: approvalKernel,
+    },
     sessionId: execution.sessionId,
     runId: execution.runId,
   })
@@ -229,6 +268,50 @@ export async function resolvePendingPaidCallApproval(
       kind: 'still_pending',
       execution: pendingRecord,
       agent: updatedAgent,
+    }
+  }
+
+  if (input.decision === 'approved' && isUmbraPaidCall(execution)) {
+    const updatedExecution = await updateUmbraExecutionFromRun({
+      paidCallRegistry: deps.paidCalls,
+      execution,
+      run: refreshedRun,
+      now: deps.now,
+    })
+    const updatedAgent = nextAgentStatusFromReview({
+      agent,
+      recordStatus: updatedExecution.status,
+      runStatus: updatedExecution.runtimeStatus,
+      decision: input.decision,
+    })
+    await updateAgent(deps.agentRegistry, updatedAgent)
+    await deps.xmtpNotifier?.sendApprovalResolved({
+      agent: updatedAgent,
+      execution: updatedExecution,
+      decision: input.decision,
+    })
+
+    if (updatedExecution.status === 'executed') {
+      return {
+        kind: 'executed',
+        execution: updatedExecution,
+        agent: updatedAgent,
+      }
+    }
+    if (updatedExecution.status === 'waiting_for_execution') {
+      return {
+        kind: 'waiting_for_execution',
+        execution: updatedExecution,
+        agent: updatedAgent,
+      }
+    }
+    return {
+      kind: 'execution_failed',
+      execution: updatedExecution,
+      agent: updatedAgent,
+      error:
+        updatedExecution.errorMessage ??
+        'Umbra private settlement did not complete after approval.',
     }
   }
 

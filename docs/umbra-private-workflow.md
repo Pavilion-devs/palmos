@@ -33,6 +33,14 @@ npm run palmos:private -- --agent <agent-id> --require-existing-agent --recipien
 
 The command returns JSON with the proof source, policy attachment state, privacy path, report ID, reconciliation status, final transaction signature, and explorer URL.
 
+If the amount is above the agent's auto-approve threshold, the command returns `approval_pending` and stops before Umbra settlement. Approve it through the dashboard or CLI:
+
+```bash
+npm run approval:pending -- approve <execution-id> --base-dir <workspace-dir>
+```
+
+Approval resumes the original runtime run with the Umbra-capable kernel, executes the mixer/UTXO path, updates the same paid-call record, and writes the final transaction plus reconciliation report.
+
 ## Claude Code / Codex Demo
 
 Use the slash command guide:
@@ -46,3 +54,5 @@ This keeps the story clean: the external agent has the brain, PalmOS controls po
 ## Dashboard Behavior
 
 The agent detail page shows whether Umbra private settlement policy is attached. Normal PUSD settlement remains unchanged. Umbra paid calls also appear in Transactions with the private rail, privacy path, proof source, report ID, reconciliation status, and explorer link.
+
+Approval-gated Umbra payouts appear in Approvals first. Once approved, the transaction moves from `approval_pending` to `executed` or `failed` with the same execution ID.

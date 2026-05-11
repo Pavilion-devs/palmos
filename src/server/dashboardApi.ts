@@ -2022,6 +2022,7 @@ async function main() {
     try {
       const result = await resolvePendingPaidCallApproval(
         {
+          baseDir,
           kernel: workspace.kernel,
           agentRegistry: workspace.agentRegistry,
           paidCalls: workspace.paidCallRegistry,
@@ -2029,6 +2030,7 @@ async function main() {
           owsClient,
           serviceCatalog: await buildPalmosServiceCatalog(),
           xmtpNotifier,
+          env,
         },
         {
           executionId,

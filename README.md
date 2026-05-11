@@ -146,6 +146,14 @@ npm run palmos:private -- --agent <agent-id> --require-existing-agent --amount 0
 
 This attaches the minimum Umbra proof policy to the existing agent identity and records the private settlement proof in the dashboard. It does not replace the normal PUSD payment rail. See [docs/umbra-private-workflow.md](./docs/umbra-private-workflow.md) for the full private workflow.
 
+If the private amount exceeds the agent's auto-approve threshold, PalmOS records it as approval-pending first:
+
+```bash
+npm run approval:pending -- approve <execution-id> --base-dir <workspace-dir>
+```
+
+Only after approval does the Umbra mixer/UTXO settlement execute and reconcile.
+
 Agent settlement mode is selected at onboarding and persisted with the agent:
 
 - `local-demo` uses the local PUSD service-test receipt path.
