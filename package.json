@@ -35,7 +35,8 @@
     "dashboard:export": "bun src/cli/exportDashboard.ts",
     "frontend:snapshot": "bun src/cli/syncFrontendSnapshot.ts",
     "dashboard:api": "node --import tsx src/server/dashboardApi.ts",
-    "palmos:umbra-private": "node --import tsx src/cli/runUmbraPrivateProof.ts"
+    "palmos:umbra-private": "node --import tsx src/cli/runUmbraPrivateProof.ts",
+    "palmos:private": "node --import tsx src/cli/runUmbraPrivateProof.ts"
   },
   "dependencies": {
     "@open-wallet-standard/core": "^1.2.0",

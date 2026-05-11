@@ -47,6 +47,7 @@ Demo references:
 
 - [examples/external-agent-demo.md](./examples/external-agent-demo.md)
 - [examples/codex-claude-agent.md](./examples/codex-claude-agent.md)
+- [docs/umbra-private-workflow.md](./docs/umbra-private-workflow.md)
 - [docs/qvac-tether-integration.md](./docs/qvac-tether-integration.md)
 
 Submission references:
@@ -135,6 +136,15 @@ npm run palmos:external-agent
 ```
 
 This calls the authenticated SDK routes and executes a policy-governed PUSD paid service call for the token's agent. See [sdk.md](./sdk.md) for the API contract and JavaScript client example.
+
+Run an explicit Umbra private settlement proof for a registered dashboard agent:
+
+```bash
+UMBRA_SECRET_KEY_BASE64=... \
+npm run palmos:private -- --agent <agent-id> --require-existing-agent --amount 0.001 --token wSOL
+```
+
+This attaches the minimum Umbra proof policy to the existing agent identity and records the private settlement proof in the dashboard. It does not replace the normal PUSD payment rail. See [docs/umbra-private-workflow.md](./docs/umbra-private-workflow.md) for the full private workflow.
 
 Agent settlement mode is selected at onboarding and persisted with the agent:
 

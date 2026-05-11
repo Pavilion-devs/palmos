@@ -31,9 +31,16 @@ function shortHash(value) {
 }
 
 function formatSettlementMode(value) {
+  if (value === 'umbra') return 'Umbra private'
   if (value === 'ows') return 'OWS Solana'
   if (value === 'real-solana') return 'Real Solana'
   return 'Local service-test'
+}
+
+function formatUmbraPath(value) {
+  if (value === 'umbra_mixer_utxo') return 'Umbra mixer/UTXO'
+  if (value === 'umbra_direct_deposit') return 'Umbra direct deposit'
+  return value ?? 'not attached'
 }
 
 function Section({ title, action, children }) {
@@ -354,6 +361,49 @@ function AgentServicesManager({
   )
 }
 
+function PrivateSettlementSummary({ agent }) {
+  const enabled = Boolean(agent.policy?.umbraEnabled)
+  const command = `npm run palmos:private -- --agent ${agent.id} --require-existing-agent`
+
+  return (
+    <div className="space-y-4">
+      <div
+        className={`border px-3 py-3 text-sm ${
+          enabled
+            ? 'border-violet-500/30 bg-violet-500/5 text-violet-200'
+            : 'border-neutral-800 bg-black text-neutral-400'
+        }`}
+      >
+        <div className="text-[10px] uppercase tracking-widest text-neutral-600">
+          Umbra policy
+        </div>
+        <div className="mt-1 font-medium text-neutral-100">
+          {enabled ? 'Attached to this external agent' : 'Not attached'}
+        </div>
+        <p className="mt-2 text-xs leading-5 text-neutral-500">
+          {enabled
+            ? 'Private settlement runs through PalmOS policy first, then Umbra devnet mixer/UTXO proof, then audit.'
+            : 'Run the private command once to attach the minimum Umbra proof policy. Normal PUSD permissions stay unchanged.'}
+        </p>
+      </div>
+
+      <DetailRow
+        label="Private command"
+        value={command}
+        mono
+      />
+      <DetailRow
+        label="Privacy path"
+        value={formatUmbraPath(agent.policy?.umbraDefaultPath)}
+      />
+      <DetailRow
+        label="Disclosure"
+        value={agent.policy?.umbraDisclosureRecipients}
+      />
+    </div>
+  )
+}
+
 function NotFound({ agentId }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
@@ -485,6 +535,10 @@ export default function AgentDetailPage({
           <DetailRow label="Wallet state" value={agent.policy?.walletState} />
           <DetailRow label="Chain" value={agent.policy?.chain} />
           <DetailRow label="Trust tier" value={agent.trustTier} />
+        </Section>
+
+        <Section title="Private settlement">
+          <PrivateSettlementSummary agent={agent} />
         </Section>
 
         <Section title="Policy">

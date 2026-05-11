@@ -528,6 +528,7 @@ function getLatestPaidCall(paidCalls) {
 function deriveAgent(agentSnapshot) {
   const agent = agentSnapshot.agent
   const paidCalls = agentSnapshot.paidCalls ?? []
+  const umbraPolicy = agent.policyConfig?.umbra
   const zerion = buildZerionSummary(agentSnapshot.zerion)
   const executedAmount = paidCalls
     .filter((record) => record.status === 'executed')
@@ -616,6 +617,13 @@ function deriveAgent(agentSnapshot) {
       zerionSyncChainId: zerion.syncChainId,
       zerionPortfolioDisplay: formatZerionPortfolioDisplay(zerion),
       zerionLatestDisplay: formatZerionLatestDisplay(zerion),
+      umbraEnabled: Boolean(umbraPolicy?.mixerRequired),
+      umbraDefaultPath: umbraPolicy?.defaultPath ?? 'not attached',
+      umbraViewingKeyRetention: umbraPolicy?.viewingKeyRetention ?? 'not attached',
+      umbraDisclosureRecipients:
+        umbraPolicy?.disclosureRecipients?.length
+          ? umbraPolicy.disclosureRecipients.join(', ')
+          : 'artifact only',
     },
   }
 }

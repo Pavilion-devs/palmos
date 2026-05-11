@@ -1467,6 +1467,8 @@ Current phase status as of May 9, 2026:
    - Done: Store privacy proof fields in the paid-call/audit model.
    - Done: Add read-only dashboard visibility for Umbra settlement rail, privacy path, report id, final transaction, reconciliation, and disclosure posture.
    - Done: Support running `npm run palmos:umbra-private -- --require-existing-agent` against a dashboard-registered agent by attaching the minimum Umbra proof policy to that existing agent identity. Live devnet validation succeeded with `proofSource=existing`, `syntheticProofAgent=false`, `privacyPath=umbra_mixer_utxo`, and `reconciliationStatus=matched`.
+   - Done: Add `npm run palmos:private`, `/palmos-private-pay`, and `docs/umbra-private-workflow.md` as the explicit private-settlement workflow for Claude Code/Codex demos.
+   - Done: Add read-only agent detail visibility for whether Umbra private settlement policy is attached to a registered external agent.
 
 ## Superteam Submission Angle
 
