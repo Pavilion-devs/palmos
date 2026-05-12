@@ -73,7 +73,7 @@ export async function runDashboardScenario(
 
   const marketMonitor = await executePaidServiceCall(sharedDeps, {
     agentId: marketMonitorAgent.agentId,
-    serviceId: 'local.pusd.spot_price',
+    serviceId: 'palmos.intel.onchain_flow',
     request: {
       base: 'BTC',
       quote: 'USD',
@@ -82,7 +82,7 @@ export async function runDashboardScenario(
 
   const vendorProcurement = await executePaidServiceCall(sharedDeps, {
     agentId: vendorProcurementAgent.agentId,
-    serviceId: 'local.pusd.ops_brief',
+    serviceId: 'palmos.research.defi_risk',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
       focus: 'ops market pulse',
@@ -91,7 +91,7 @@ export async function runDashboardScenario(
 
   const growthCampaign = await executePaidServiceCall(sharedDeps, {
     agentId: growthCampaignAgent.agentId,
-    serviceId: 'local.pusd.ops_brief',
+    serviceId: 'palmos.research.defi_risk',
     request: {
       symbols: ['BTC', 'ETH'],
       focus: 'growth budget check',

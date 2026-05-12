@@ -636,6 +636,9 @@ async function resolveDemoPayToAddress(baseDir: string): Promise<string | undefi
     const destination =
       agent.policyConfig?.allowedVendors?.find(
         (vendor) =>
+          vendor.vendorId === 'palmos_intel_vendor' ||
+          vendor.vendorId === 'palmos_research_vendor' ||
+          vendor.vendorId === 'palmos_ops_vendor' ||
           vendor.vendorId === 'local_pusd_demo' ||
           vendor.vendorId === 'ops_research_vendor',
       )?.destinationAddress
@@ -691,8 +694,11 @@ async function main() {
 
   const defaultServiceCatalog = createDefaultPalmosServiceCatalog({
     localDemoBaseUrl,
-    localDemoSpotPriceAmount: env.PUSD_DEMO_SPOT_PRICE,
-    localDemoOpsBriefAmount: env.PUSD_DEMO_OPS_BRIEF_PRICE,
+    localDemoSpotPriceAmount:
+      env.PUSD_DEMO_ONCHAIN_FLOW_PRICE ?? env.PUSD_DEMO_SPOT_PRICE,
+    localDemoOpsBriefAmount:
+      env.PUSD_DEMO_DEFI_RISK_PRICE ?? env.PUSD_DEMO_OPS_BRIEF_PRICE,
+    localDemoVendorBriefAmount: env.PUSD_DEMO_VENDOR_BRIEF_PRICE,
   })
 
   async function buildPalmosServiceCatalog(): Promise<PalmosServiceCatalog> {
@@ -893,20 +899,22 @@ async function main() {
 
     res.json({
       ok: true,
-      services: Object.values(catalog).map((service) => {
-        const registered = registeredById.get(service.serviceId)
-        return {
-          serviceId: service.serviceId,
-          label: service.label,
-          vendorId: service.vendorId,
-          chainId: service.chainId,
-          assetSymbol: service.assetSymbol,
-          expectedAmount: service.expectedAmount,
-          paymentRail: service.paymentRail,
-          source: registered ? 'registered' : 'built_in',
-          registered: registered ? sanitizeService(registered) : undefined,
-        }
-      }),
+      services: Object.values(catalog)
+        .filter((service) => service.visible !== false)
+        .map((service) => {
+          const registered = registeredById.get(service.serviceId)
+          return {
+            serviceId: service.serviceId,
+            label: service.label,
+            vendorId: service.vendorId,
+            chainId: service.chainId,
+            assetSymbol: service.assetSymbol,
+            expectedAmount: service.expectedAmount,
+            paymentRail: service.paymentRail,
+            source: registered ? 'registered' : 'built_in',
+            registered: registered ? sanitizeService(registered) : undefined,
+          }
+        }),
     })
   })
 
@@ -1127,16 +1135,18 @@ async function main() {
     res.json({
       ok: true,
       agentId: auth.agent.agentId,
-      services: Object.values(serviceCatalog).map((service) => ({
-        serviceId: service.serviceId,
-        label: service.label,
-        vendorId: service.vendorId,
-        chainId: service.chainId,
-        assetSymbol: service.assetSymbol,
-        expectedAmount: service.expectedAmount,
-        paymentRail: service.paymentRail,
-        allowed: allowedVendorIds.has(service.vendorId),
-      })),
+      services: Object.values(serviceCatalog)
+        .filter((service) => service.visible !== false)
+        .map((service) => ({
+          serviceId: service.serviceId,
+          label: service.label,
+          vendorId: service.vendorId,
+          chainId: service.chainId,
+          assetSymbol: service.assetSymbol,
+          expectedAmount: service.expectedAmount,
+          paymentRail: service.paymentRail,
+          allowed: allowedVendorIds.has(service.vendorId),
+        })),
     })
   })
 

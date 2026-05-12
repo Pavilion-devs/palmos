@@ -139,7 +139,7 @@ const ONBOARDING_PROMPTS: Record<OnboardingField, OnboardingPrompt> = {
     message:
       'Which paid services should this agent be allowed to use? List service ids separated by commas.',
     inputType: 'text',
-    placeholder: 'local.pusd.ops_brief, local.pusd.spot_price',
+    placeholder: 'palmos.intel.onchain_flow, palmos.research.defi_risk',
   },
   walletMode: {
     field: 'walletMode',
@@ -895,7 +895,7 @@ function validationMessage(field: OnboardingField, validationError: string): str
   }
 
   if (field === 'allowedVendors') {
-    return 'List service ids separated by commas, for example local.pusd.ops_brief, local.pusd.spot_price.'
+    return 'List service ids separated by commas, for example palmos.intel.onchain_flow, palmos.research.defi_risk.'
   }
 
   if (field === 'walletMode') {
@@ -928,7 +928,11 @@ function completeOnboardingState(state: OnboardingState): OnboardingState {
     allowedVendors:
       state.allowedVendors && state.allowedVendors.length > 0
         ? state.allowedVendors
-        : ['local.pusd.ops_brief', 'local.pusd.spot_price'],
+        : [
+            'palmos.intel.onchain_flow',
+            'palmos.research.defi_risk',
+            'palmos.ops.vendor_brief',
+          ],
     walletMode: state.walletMode || 'local-demo',
     managerAddress: state.managerAddress || '',
     hasAnthropicKey: Boolean(state.hasAnthropicKey),

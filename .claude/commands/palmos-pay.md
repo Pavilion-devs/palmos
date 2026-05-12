@@ -7,9 +7,9 @@ Arguments: $ARGUMENTS
 1. Check that `PALMOS_AGENT_TOKEN` is available in the environment. If it is not set, tell the user to run `npm run palmos:init` first to create an agent and get a token.
 
 2. Parse the arguments to identify the service and optional request payload:
-   - If the argument looks like a service ID (e.g. `local.pusd.spot_price`, `local.pusd.ops_brief`), use `--service <id>`
+   - If the argument looks like a service ID (e.g. `palmos.intel.onchain_flow`, `palmos.research.defi_risk`), use `--service <id>`
    - If JSON is present (e.g. `{"base":"BTC","quote":"USD"}`), use `--request-json '<json>'`
-   - If no arguments are given, use the default service from `PALMOS_SERVICE_ID` or `local.pusd.spot_price`
+   - If no arguments are given, use the default service from `PALMOS_SERVICE_ID` or `palmos.intel.onchain_flow`
 
 3. Run the external agent command:
    ```bash
@@ -28,6 +28,7 @@ Arguments: $ARGUMENTS
 |---|---|---|---|
 | `palmos.intel.onchain_flow` | On-Chain Flow Intelligence | 0.02 PUSD | Auto-approved at default threshold |
 | `palmos.research.defi_risk` | DeFi Protocol Risk Report | 0.25 PUSD | Triggers approval flow above 0.05 PUSD |
+| `palmos.ops.vendor_brief` | Vendor Ops Brief | 0.10 PUSD | Triggers approval flow above 0.05 PUSD |
 
 If no service is specified in the arguments, default to `palmos.intel.onchain_flow`.
 
@@ -64,4 +65,4 @@ Reason: No allowed vendor or destination was resolved for the paid action.
 
 - The agent must be running (`npm run dashboard:api`) for this to work
 - All outcomes — executed, pending, blocked — appear in the PalmOS dashboard at `#dashboard/transactions`
-- If you want to demo the approval flow, use `local.pusd.ops_brief` which costs 0.25 PUSD and exceeds the default 0.05 PUSD auto-approve threshold
+- If you want to demo the approval flow, use `palmos.research.defi_risk` which costs 0.25 PUSD and exceeds the default 0.05 PUSD auto-approve threshold

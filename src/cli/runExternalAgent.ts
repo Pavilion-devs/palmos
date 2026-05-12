@@ -251,7 +251,7 @@ Usage:
 Options:
   --api-url <url>          PalmOS backend URL. Defaults to PALMOS_API_URL or http://127.0.0.1:4030
   --token <palmos_...>     Agent SDK token. Defaults to PALMOS_AGENT_TOKEN
-  --service <serviceId>    Service to request. Defaults to PALMOS_SERVICE_ID or local.pusd.spot_price
+  --service <serviceId>    Service to request. Defaults to PALMOS_SERVICE_ID or palmos.intel.onchain_flow
   --request-json <json>    JSON request payload. Defaults to PALMOS_AGENT_REQUEST_JSON or {"base":"BTC","quote":"USD"}
   --amount <amount>        Optional PUSD amount override
   --note <text>            Optional audit note
@@ -275,7 +275,7 @@ const apiUrl =
 const serviceId =
   readFlag(args, 'service') ??
   env.PALMOS_SERVICE_ID ??
-  'local.pusd.spot_price'
+  'palmos.intel.onchain_flow'
 const amount = readFlag(args, 'amount') ?? env.PALMOS_AGENT_AMOUNT
 const note =
   readFlag(args, 'note') ??

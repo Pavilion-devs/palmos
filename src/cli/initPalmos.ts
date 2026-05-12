@@ -12,15 +12,21 @@ const env = loadProcessEnv()
 
 const BUILT_IN_SERVICES = [
   {
-    id: 'local.pusd.spot_price',
-    label: 'Spot price data',
-    amount: '0.01 PUSD',
+    id: 'palmos.intel.onchain_flow',
+    label: 'On-chain flow intelligence',
+    amount: '0.02 PUSD',
     note: 'auto-approved at default threshold',
   },
   {
-    id: 'local.pusd.ops_brief',
-    label: 'Market ops brief',
+    id: 'palmos.research.defi_risk',
+    label: 'DeFi protocol risk report',
     amount: '0.25 PUSD',
+    note: 'approval-required above 0.05 PUSD threshold',
+  },
+  {
+    id: 'palmos.ops.vendor_brief',
+    label: 'Vendor ops brief',
+    amount: '0.10 PUSD',
     note: 'approval-required above 0.05 PUSD threshold',
   },
 ]
@@ -226,7 +232,7 @@ async function main(): Promise<void> {
     exit(1)
   }
 
-  const primaryService = allowedVendors[0] ?? 'local.pusd.spot_price'
+  const primaryService = allowedVendors[0] ?? 'palmos.intel.onchain_flow'
 
   // Print result
   console.log()

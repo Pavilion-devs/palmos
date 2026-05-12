@@ -42,13 +42,13 @@ function defaultTask(): string {
 function createFallbackPlan(): ResearchAgentPlan {
   return {
     kind: 'service_call',
-    serviceId: 'local.pusd.spot_price',
+    serviceId: 'palmos.intel.onchain_flow',
     request: {
       base: 'BTC',
       quote: 'USD',
     },
     rationale:
-      'Fallback worker plan: use the local PUSD-protected spot-price service for the requested market lookup.',
+      'Fallback worker plan: use the PalmOS PUSD-protected market intelligence service for the requested lookup.',
   }
 }
 

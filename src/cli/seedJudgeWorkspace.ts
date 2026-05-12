@@ -47,7 +47,7 @@ const sharedDeps = {
 
 const marketMonitor = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.marketMonitor,
-  serviceId: 'local.pusd.spot_price',
+  serviceId: 'palmos.intel.onchain_flow',
   request: {
     base: 'BTC',
     quote: 'USD',
@@ -56,7 +56,7 @@ const marketMonitor = await executePaidServiceCall(sharedDeps, {
 
 const vendorProcurement = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.vendorProcurement,
-  serviceId: 'local.pusd.ops_brief',
+  serviceId: 'palmos.research.defi_risk',
   request: {
     symbols: ['BTC', 'ETH', 'SOL'],
     focus: 'ops market pulse',
@@ -65,7 +65,7 @@ const vendorProcurement = await executePaidServiceCall(sharedDeps, {
 
 const growthCampaign = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.growthCampaign,
-  serviceId: 'local.pusd.ops_brief',
+  serviceId: 'palmos.research.defi_risk',
   request: {
     symbols: ['BTC', 'ETH'],
     focus: 'growth budget check',

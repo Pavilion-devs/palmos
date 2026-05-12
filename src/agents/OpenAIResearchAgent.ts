@@ -166,7 +166,7 @@ export class OpenAIResearchAgent {
             'Allowed services:',
             buildServiceSummary(input.serviceCatalog),
             `Task: ${input.task}`,
-            'Use only listed services. Prefer the local.pusd.spot_price service for simple crypto price lookups when available.',
+            'Use only listed services. Prefer palmos.intel.onchain_flow for simple market intelligence when available.',
           ].join('\n'),
         },
       ],

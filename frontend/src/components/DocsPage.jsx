@@ -5,7 +5,7 @@ const installCommand = 'npm install @palmos/agent'
 
 const envSnippet = `PALMOS_API_URL=http://127.0.0.1:4030
 PALMOS_AGENT_TOKEN=palmos_YOUR_AGENT_TOKEN
-PALMOS_SERVICE_ID=local.pusd.spot_price
+PALMOS_SERVICE_ID=palmos.intel.onchain_flow
 PALMOS_AGENT_REQUEST_JSON={"base":"BTC","quote":"USD"}`
 
 const currentCliCommand = 'npm run palmos:external-agent'

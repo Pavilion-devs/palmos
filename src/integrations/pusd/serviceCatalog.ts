@@ -14,6 +14,7 @@ export type PalmosServiceRequestSpec = {
 export type PalmosPaidServiceDefinition<TRequest = unknown> = {
   serviceId: string
   label: string
+  visible?: boolean
   paymentRail: typeof PALMOS_PAYMENT_RAIL
   vendorId: string
   chainId: string
@@ -32,6 +33,12 @@ export type LocalSpotPriceRequest = {
 
 export type LocalOpsBriefRequest = {
   symbols?: string[]
+  focus?: string
+}
+
+export type VendorBriefRequest = {
+  vendor?: string
+  service?: string
   focus?: string
 }
 
@@ -78,6 +85,7 @@ export function createLocalPusdSpotPriceService(input?: {
   return {
     serviceId: 'local.pusd.spot_price',
     label: 'PUSD Market Data API',
+    visible: false,
     paymentRail: PALMOS_PAYMENT_RAIL,
     vendorId: 'local_pusd_demo',
     chainId: SOLANA_MAINNET_CHAIN_ID,
@@ -118,6 +126,7 @@ export function createLocalPusdOpsBriefService(input?: {
   return {
     serviceId: 'local.pusd.ops_brief',
     label: 'PUSD Ops Brief Vendor',
+    visible: false,
     paymentRail: PALMOS_PAYMENT_RAIL,
     vendorId: 'ops_research_vendor',
     chainId: SOLANA_MAINNET_CHAIN_ID,
@@ -149,11 +158,143 @@ export function createLocalPusdOpsBriefService(input?: {
   }
 }
 
+export function createPalmosOnchainFlowService(input?: {
+  baseUrl?: string
+  expectedAmount?: string
+}): PalmosPaidServiceDefinition<LocalSpotPriceRequest> {
+  const baseUrl = trimTrailingSlash(input?.baseUrl ?? 'http://127.0.0.1:4021')
+
+  return {
+    serviceId: 'palmos.intel.onchain_flow',
+    label: 'On-Chain Flow Intelligence',
+    paymentRail: PALMOS_PAYMENT_RAIL,
+    vendorId: 'palmos_intel_vendor',
+    chainId: SOLANA_MAINNET_CHAIN_ID,
+    assetSymbol: PUSD_SYMBOL,
+    expectedAmount: input?.expectedAmount ?? '0.02',
+    buildRequest(request) {
+      const baseSymbol =
+        normalizeSymbol(request.baseSymbol) ||
+        normalizeSymbol(request.base) ||
+        normalizeSymbol(request.symbol) ||
+        'SOL'
+      const quoteSymbol =
+        normalizeSymbol(request.quoteSymbol) || normalizeSymbol(request.quote) || 'USD'
+      const url = new URL(`${baseUrl}/api/premium/onchain-flow`)
+      url.searchParams.set('base', baseSymbol)
+      url.searchParams.set('quote', quoteSymbol)
+
+      return {
+        url: url.toString(),
+        init: {
+          method: 'GET',
+        },
+        requestSummary: {
+          baseSymbol,
+          quoteSymbol,
+        },
+      }
+    },
+  }
+}
+
+export function createPalmosDefiRiskService(input?: {
+  baseUrl?: string
+  expectedAmount?: string
+}): PalmosPaidServiceDefinition<LocalOpsBriefRequest> {
+  const baseUrl = trimTrailingSlash(input?.baseUrl ?? 'http://127.0.0.1:4021')
+
+  return {
+    serviceId: 'palmos.research.defi_risk',
+    label: 'DeFi Protocol Risk Report',
+    paymentRail: PALMOS_PAYMENT_RAIL,
+    vendorId: 'palmos_research_vendor',
+    chainId: SOLANA_MAINNET_CHAIN_ID,
+    assetSymbol: PUSD_SYMBOL,
+    expectedAmount: input?.expectedAmount ?? '0.25',
+    buildRequest(request) {
+      const symbols = request.symbols?.map(normalizeSymbol).filter(Boolean) ?? [
+        'SOL',
+      ]
+      const url = new URL(`${baseUrl}/api/premium/defi-risk`)
+      url.searchParams.set('symbols', symbols.join(','))
+      if (request.focus?.trim()) {
+        url.searchParams.set('focus', request.focus.trim())
+      }
+
+      return {
+        url: url.toString(),
+        init: {
+          method: 'GET',
+        },
+        requestSummary: {
+          symbols,
+          focus: request.focus,
+        },
+      }
+    },
+  }
+}
+
+export function createPalmosVendorBriefService(input?: {
+  baseUrl?: string
+  expectedAmount?: string
+}): PalmosPaidServiceDefinition<VendorBriefRequest> {
+  const baseUrl = trimTrailingSlash(input?.baseUrl ?? 'http://127.0.0.1:4021')
+
+  return {
+    serviceId: 'palmos.ops.vendor_brief',
+    label: 'Vendor Ops Brief',
+    paymentRail: PALMOS_PAYMENT_RAIL,
+    vendorId: 'palmos_ops_vendor',
+    chainId: SOLANA_MAINNET_CHAIN_ID,
+    assetSymbol: PUSD_SYMBOL,
+    expectedAmount: input?.expectedAmount ?? '0.10',
+    buildRequest(request) {
+      const url = new URL(`${baseUrl}/api/premium/vendor-brief`)
+      if (request.vendor?.trim()) {
+        url.searchParams.set('vendor', request.vendor.trim())
+      }
+      if (request.service?.trim()) {
+        url.searchParams.set('service', request.service.trim())
+      }
+      if (request.focus?.trim()) {
+        url.searchParams.set('focus', request.focus.trim())
+      }
+
+      return {
+        url: url.toString(),
+        init: {
+          method: 'GET',
+        },
+        requestSummary: {
+          vendor: request.vendor,
+          service: request.service,
+          focus: request.focus,
+        },
+      }
+    },
+  }
+}
+
 export function createDefaultPalmosServiceCatalog(input?: {
   localDemoBaseUrl?: string
   localDemoSpotPriceAmount?: string
   localDemoOpsBriefAmount?: string
+  localDemoVendorBriefAmount?: string
 }): PalmosServiceCatalog {
+  const onchainFlow = createPalmosOnchainFlowService({
+    baseUrl: input?.localDemoBaseUrl,
+    expectedAmount: input?.localDemoSpotPriceAmount,
+  }) as PalmosPaidServiceDefinition<unknown>
+  const defiRisk = createPalmosDefiRiskService({
+    baseUrl: input?.localDemoBaseUrl,
+    expectedAmount: input?.localDemoOpsBriefAmount,
+  }) as PalmosPaidServiceDefinition<unknown>
+  const vendorBrief = createPalmosVendorBriefService({
+    baseUrl: input?.localDemoBaseUrl,
+    expectedAmount: input?.localDemoVendorBriefAmount,
+  }) as PalmosPaidServiceDefinition<unknown>
   const spotPrice = createLocalPusdSpotPriceService({
     baseUrl: input?.localDemoBaseUrl,
     expectedAmount: input?.localDemoSpotPriceAmount,
@@ -164,6 +305,9 @@ export function createDefaultPalmosServiceCatalog(input?: {
   }) as PalmosPaidServiceDefinition<unknown>
 
   return {
+    [onchainFlow.serviceId]: onchainFlow,
+    [defiRisk.serviceId]: defiRisk,
+    [vendorBrief.serviceId]: vendorBrief,
     [spotPrice.serviceId]: spotPrice,
     [opsBrief.serviceId]: opsBrief,
   }

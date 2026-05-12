@@ -75,6 +75,15 @@ function resolveAllowedVendorIds(
   serviceCatalog: PalmosServiceCatalog,
 ): string[] {
   const aliases = new Map<string, string>([
+    ['palmos.intel.onchain_flow', 'palmos_intel_vendor'],
+    ['palmos_intel_onchain_flow', 'palmos_intel_vendor'],
+    ['palmos_intel_vendor', 'palmos_intel_vendor'],
+    ['palmos.research.defi_risk', 'palmos_research_vendor'],
+    ['palmos_research_defi_risk', 'palmos_research_vendor'],
+    ['palmos_research_vendor', 'palmos_research_vendor'],
+    ['palmos.ops.vendor_brief', 'palmos_ops_vendor'],
+    ['palmos_ops_vendor_brief', 'palmos_ops_vendor'],
+    ['palmos_ops_vendor', 'palmos_ops_vendor'],
     ['local.palmos.ops', 'ops_research_vendor'],
     ['local_palmos_ops', 'ops_research_vendor'],
     ['local.palmos.ops_brief', 'ops_research_vendor'],

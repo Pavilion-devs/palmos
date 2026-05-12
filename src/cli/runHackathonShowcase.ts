@@ -131,7 +131,7 @@ const procurementSubmitted = await executePaidServiceCall(
   },
   {
     agentId: vendorProcurementAgent.agentId,
-    serviceId: 'local.pusd.ops_brief',
+    serviceId: 'palmos.research.defi_risk',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
       focus: 'ops market pulse',
@@ -173,7 +173,7 @@ const growthCampaignBlocked = await executePaidServiceCall(
   },
   {
     agentId: growthCampaignAgent.agentId,
-    serviceId: 'local.pusd.ops_brief',
+    serviceId: 'palmos.research.defi_risk',
     request: {
       symbols: ['BTC', 'ETH'],
       focus: 'growth budget check',

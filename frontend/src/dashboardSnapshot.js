@@ -163,16 +163,22 @@ function buildActionLabel(agentSnapshot, record) {
 
   if (
     record.serviceId === 'local.demo.ops_brief' ||
-    record.serviceId === 'local.pusd.ops_brief'
+    record.serviceId === 'local.pusd.ops_brief' ||
+    record.serviceId === 'palmos.research.defi_risk'
   ) {
-    return `Ops brief via ${vendorLabel}`
+    return `Risk report via ${vendorLabel}`
   }
 
   if (
     record.serviceId === 'local.demo.spot_price' ||
-    record.serviceId === 'local.pusd.spot_price'
+    record.serviceId === 'local.pusd.spot_price' ||
+    record.serviceId === 'palmos.intel.onchain_flow'
   ) {
-    return `Spot price query via ${vendorLabel}`
+    return `On-chain flow query via ${vendorLabel}`
+  }
+
+  if (record.serviceId === 'palmos.ops.vendor_brief') {
+    return `Vendor brief via ${vendorLabel}`
   }
 
   const requestSummary = record.requestSummary ?? {}

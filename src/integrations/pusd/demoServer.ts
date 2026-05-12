@@ -14,8 +14,9 @@ import {
 export type LocalPusdServerConfig = {
   port: number
   payToAddress: string
-  spotPriceAmount: string
-  opsBriefPriceAmount: string
+  onchainFlowAmount: string
+  defiRiskAmount: string
+  vendorBriefAmount: string
   acceptLocalDemoPayments: boolean
   rpcUrl?: string
 }
@@ -182,6 +183,43 @@ function buildSpotPrice(base: string, quote: string) {
   }
 }
 
+function buildDefiRiskReport(symbols: string[]) {
+  return {
+    protocol: symbols[0] ?? 'SOL',
+    riskScore: 72,
+    riskLevel: 'moderate',
+    tvlTrend: '+18.4% (30d)',
+    auditStatus: 'audited',
+    smartContractExposure: 'low',
+    liquidityDepth: symbols.map((symbol) => ({
+      asset: symbol,
+      price: buildSpotPrice(symbol, 'USD').amount,
+      flow24h: buildOnchainFlowIntel(symbol, 'USD').onchainFlow.net24h,
+    })),
+    recommendation: 'Allocation within policy limits is supported. Large positions above session budget require operator approval before execution.',
+    provider: 'palmos.research',
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+function buildVendorBrief(vendor: string, service: string, focus: string) {
+  return {
+    vendor: vendor.trim() || 'PalmOS Data Vendor',
+    service: service.trim() || 'Premium API access',
+    focus: focus.trim() || 'payment readiness',
+    status: 'eligible',
+    settlementAsset: 'PUSD',
+    controls: [
+      'allowlist verified',
+      'budget checked',
+      'approval threshold evaluated',
+    ],
+    recommendation: 'Vendor payment is eligible under the configured PalmOS policy. Higher-value requests should remain approval-gated.',
+    provider: 'palmos.ops',
+    generatedAt: new Date().toISOString(),
+  }
+}
+
 export function readLocalPusdServerConfigFromEnv(
   env: Record<string, string | undefined> = readProcessEnv(),
 ): LocalPusdServerConfig {
@@ -190,8 +228,15 @@ export function readLocalPusdServerConfigFromEnv(
     payToAddress:
       env.PUSD_MERCHANT_WALLET?.trim() ||
       PALMOS_LOCAL_DEMO_MERCHANT_WALLET,
-    spotPriceAmount: normalizeAmount(env.PUSD_DEMO_SPOT_PRICE, '0.01'),
-    opsBriefPriceAmount: normalizeAmount(env.PUSD_DEMO_OPS_BRIEF_PRICE, '0.25'),
+    onchainFlowAmount: normalizeAmount(
+      env.PUSD_DEMO_ONCHAIN_FLOW_PRICE ?? env.PUSD_DEMO_SPOT_PRICE,
+      '0.02',
+    ),
+    defiRiskAmount: normalizeAmount(
+      env.PUSD_DEMO_DEFI_RISK_PRICE ?? env.PUSD_DEMO_OPS_BRIEF_PRICE,
+      '0.25',
+    ),
+    vendorBriefAmount: normalizeAmount(env.PUSD_DEMO_VENDOR_BRIEF_PRICE, '0.10'),
     acceptLocalDemoPayments: env.PALMOS_ACCEPT_LOCAL_DEMO_PAYMENTS !== '0',
     rpcUrl: readSolanaRpcUrlFromEnv(env),
   }
@@ -211,22 +256,98 @@ export async function startLocalPusdDemoServer(
       rail: 'palmos-pusd',
       payToAddress: config.payToAddress,
       prices: {
-        spotPrice: config.spotPriceAmount,
-        opsBrief: config.opsBriefPriceAmount,
+        onchainFlow: config.onchainFlowAmount,
+        defiRisk: config.defiRiskAmount,
+        vendorBrief: config.vendorBriefAmount,
       },
       acceptLocalDemoPayments: config.acceptLocalDemoPayments,
     })
   })
 
   app.get(
+    '/api/premium/onchain-flow',
+    buildPaymentMiddleware({
+      requests,
+      amount: config.onchainFlowAmount,
+      recipient: config.payToAddress,
+      serviceId: 'palmos.intel.onchain_flow',
+      vendorId: 'palmos_intel_vendor',
+      description: 'PalmOS on-chain flow intelligence protected by PUSD.',
+      acceptLocalDemoPayments: config.acceptLocalDemoPayments,
+      rpcUrl: config.rpcUrl,
+    }),
+    (req, res) => {
+      const base = typeof req.query.base === 'string' ? req.query.base : 'SOL'
+      const quote = typeof req.query.quote === 'string' ? req.query.quote : 'USD'
+      res.json({
+        ok: true,
+        service: 'palmos.intel.onchain_flow',
+        data: buildOnchainFlowIntel(base, quote),
+      })
+    },
+  )
+
+  app.get(
+    '/api/premium/defi-risk',
+    buildPaymentMiddleware({
+      requests,
+      amount: config.defiRiskAmount,
+      recipient: config.payToAddress,
+      serviceId: 'palmos.research.defi_risk',
+      vendorId: 'palmos_research_vendor',
+      description: 'PalmOS DeFi protocol risk report protected by PUSD.',
+      acceptLocalDemoPayments: config.acceptLocalDemoPayments,
+      rpcUrl: config.rpcUrl,
+    }),
+    (req, res) => {
+      const symbols =
+        typeof req.query.symbols === 'string'
+          ? req.query.symbols
+              .split(',')
+              .map((value) => value.trim().toUpperCase())
+              .filter(Boolean)
+          : ['BTC', 'ETH', 'SOL']
+      res.json({
+        ok: true,
+        service: 'palmos.research.defi_risk',
+        data: buildDefiRiskReport(symbols),
+      })
+    },
+  )
+
+  app.get(
+    '/api/premium/vendor-brief',
+    buildPaymentMiddleware({
+      requests,
+      amount: config.vendorBriefAmount,
+      recipient: config.payToAddress,
+      serviceId: 'palmos.ops.vendor_brief',
+      vendorId: 'palmos_ops_vendor',
+      description: 'PalmOS vendor ops brief protected by PUSD.',
+      acceptLocalDemoPayments: config.acceptLocalDemoPayments,
+      rpcUrl: config.rpcUrl,
+    }),
+    (req, res) => {
+      const vendor = typeof req.query.vendor === 'string' ? req.query.vendor : ''
+      const service = typeof req.query.service === 'string' ? req.query.service : ''
+      const focus = typeof req.query.focus === 'string' ? req.query.focus : ''
+      res.json({
+        ok: true,
+        service: 'palmos.ops.vendor_brief',
+        data: buildVendorBrief(vendor, service, focus),
+      })
+    },
+  )
+
+  app.get(
     '/api/premium/spot-price',
     buildPaymentMiddleware({
       requests,
-      amount: config.spotPriceAmount,
+      amount: config.onchainFlowAmount,
       recipient: config.payToAddress,
       serviceId: 'local.pusd.spot_price',
       vendorId: 'local_pusd_demo',
-      description: 'PalmOS spot-price lookup protected by PUSD.',
+      description: 'PalmOS market-data compatibility endpoint protected by PUSD.',
       acceptLocalDemoPayments: config.acceptLocalDemoPayments,
       rpcUrl: config.rpcUrl,
     }),
@@ -245,11 +366,11 @@ export async function startLocalPusdDemoServer(
     '/api/premium/ops-brief',
     buildPaymentMiddleware({
       requests,
-      amount: config.opsBriefPriceAmount,
+      amount: config.defiRiskAmount,
       recipient: config.payToAddress,
       serviceId: 'local.pusd.ops_brief',
       vendorId: 'ops_research_vendor',
-      description: 'PalmOS market-ops brief protected by PUSD.',
+      description: 'PalmOS research compatibility endpoint protected by PUSD.',
       acceptLocalDemoPayments: config.acceptLocalDemoPayments,
       rpcUrl: config.rpcUrl,
     }),
@@ -264,22 +385,7 @@ export async function startLocalPusdDemoServer(
       res.json({
         ok: true,
         service: 'palmos.research.defi_risk',
-        data: {
-          protocol: symbols[0] ?? 'SOL',
-          riskScore: 72,
-          riskLevel: 'moderate',
-          tvlTrend: '+18.4% (30d)',
-          auditStatus: 'audited',
-          smartContractExposure: 'low',
-          liquidityDepth: symbols.map((symbol) => ({
-            asset: symbol,
-            price: buildSpotPrice(symbol, 'USD').amount,
-            flow24h: buildOnchainFlowIntel(symbol, 'USD').onchainFlow.net24h,
-          })),
-          recommendation: 'Allocation within policy limits is supported. Large positions above session budget require operator approval before execution.',
-          provider: 'palmos.research',
-          generatedAt: new Date().toISOString(),
-        },
+        data: buildDefiRiskReport(symbols),
       })
     },
   )
