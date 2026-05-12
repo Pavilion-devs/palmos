@@ -13,6 +13,8 @@ frontend/node_modules/
 .DS_Store
 
 # Planning / internal docs — keep locally, don't ship
+docs/
+examples/
 architecture-handoff.md
 dashboard.md
 live-dashboard-scope.md
