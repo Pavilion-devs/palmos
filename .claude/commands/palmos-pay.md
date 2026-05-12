@@ -22,20 +22,30 @@ Arguments: $ARGUMENTS
    - `outcome.kind === "blocked"` → Policy blocked the payment. Show `outcome.reason`
    - Command fails entirely → Check that `PALMOS_AGENT_TOKEN` is set and the backend is running on `PALMOS_API_URL` (default `http://127.0.0.1:4030`)
 
-## Built-in services
+## Available services
 
 | Service ID | Description | Amount | Behavior |
 |---|---|---|---|
-| `local.pusd.spot_price` | Spot price data | 0.01 PUSD | Auto-approved at default threshold |
-| `local.pusd.ops_brief` | Market ops brief | 0.25 PUSD | Triggers approval flow above 0.05 PUSD |
+| `palmos.intel.onchain_flow` | On-Chain Flow Intelligence | 0.02 PUSD | Auto-approved at default threshold |
+| `palmos.research.defi_risk` | DeFi Protocol Risk Report | 0.25 PUSD | Triggers approval flow above 0.05 PUSD |
+
+If no service is specified in the arguments, default to `palmos.intel.onchain_flow`.
 
 ## Example outputs to expect
 
-Auto-approved:
+Auto-approved (with service data returned):
 ```
 Outcome: AUTO-APPROVED / EXECUTED
-Amount: 0.01 PUSD
+Amount: 0.02 PUSD
 Execution: paid_call_...
+
+Service response:
+  {
+    "asset": "SOL",
+    "price": "150.00",
+    "onchainFlow": { "net24h": "+$31.5M", "whaleWallets": 21, "bias": "strong accumulation" },
+    "provider": "palmos.intel"
+  }
 ```
 
 Approval pending:
