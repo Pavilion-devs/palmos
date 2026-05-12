@@ -7,7 +7,7 @@ WORKDIR /opt/render/project/src
 
 COPY package.json package-lock.json ./
 COPY packages/agent/package.json ./packages/agent/package.json
-RUN npm ci --include=dev
+RUN npm ci --include=dev --legacy-peer-deps
 
 COPY . .
 
