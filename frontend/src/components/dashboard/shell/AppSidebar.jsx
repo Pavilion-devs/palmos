@@ -4,10 +4,14 @@ import { NAV_ITEMS } from './navItems'
 export default function AppSidebar({ activePage, pendingCount }) {
   return (
     <aside className="hidden w-[220px] shrink-0 flex-col border-r border-neutral-800 bg-neutral-950 md:flex">
-      <div className="flex h-14 items-center gap-2 border-b border-neutral-800 px-5">
+      <button
+        type="button"
+        onClick={() => navigate('#dashboard')}
+        className="flex h-14 items-center gap-2 border-b border-neutral-800 px-5 w-full text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+      >
         <div className="h-4 w-4 rounded-sm bg-white" />
         <span className="text-sm font-medium tracking-tight text-white">PalmOS</span>
-      </div>
+      </button>
 
       <nav className="flex-1 overflow-y-auto py-3">
         {NAV_ITEMS.map((item) => {

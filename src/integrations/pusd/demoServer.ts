@@ -142,21 +142,43 @@ function buildPaymentMiddleware(input: {
   }
 }
 
-function buildSpotPrice(base: string, quote: string) {
+function buildOnchainFlowIntel(base: string, quote: string) {
   const normalizedBase = base.trim().toUpperCase() || 'SOL'
   const normalizedQuote = quote.trim().toUpperCase() || 'USD'
-  const fixtures: Record<string, string> = {
+  const prices: Record<string, string> = {
     BTC: '64000.00',
     ETH: '3200.00',
     SOL: '150.00',
   }
+  const flows: Record<string, { netFlow: string; whaleCount: number; bias: string }> = {
+    BTC: { netFlow: '+$48.2M', whaleCount: 14, bias: 'accumulation' },
+    ETH: { netFlow: '+$12.7M', whaleCount: 8, bias: 'neutral' },
+    SOL: { netFlow: '+$31.5M', whaleCount: 21, bias: 'strong accumulation' },
+  }
+  const flow = flows[normalizedBase] ?? { netFlow: '+$1.2M', whaleCount: 3, bias: 'neutral' }
 
   return {
-    base: normalizedBase,
+    asset: normalizedBase,
     quote: normalizedQuote,
-    amount: fixtures[normalizedBase] ?? '1.00',
-    provider: 'palmos_service_test_fixture',
+    price: prices[normalizedBase] ?? '1.00',
+    onchainFlow: {
+      net24h: flow.netFlow,
+      whaleWallets: flow.whaleCount,
+      bias: flow.bias,
+    },
+    provider: 'palmos.intel',
     fetchedAt: new Date().toISOString(),
+  }
+}
+
+function buildSpotPrice(base: string, quote: string) {
+  const intel = buildOnchainFlowIntel(base, quote)
+  return {
+    base: intel.asset,
+    quote: intel.quote,
+    amount: intel.price,
+    provider: intel.provider,
+    fetchedAt: intel.fetchedAt,
   }
 }
 
@@ -213,7 +235,8 @@ export async function startLocalPusdDemoServer(
       const quote = typeof req.query.quote === 'string' ? req.query.quote : 'USD'
       res.json({
         ok: true,
-        data: buildSpotPrice(base, quote),
+        service: 'palmos.intel.onchain_flow',
+        data: buildOnchainFlowIntel(base, quote),
       })
     },
   )
@@ -240,16 +263,21 @@ export async function startLocalPusdDemoServer(
           : ['BTC', 'ETH', 'SOL']
       res.json({
         ok: true,
+        service: 'palmos.research.defi_risk',
         data: {
-          symbols,
-          provider: 'palmos_service_test_fixture',
-          summary:
-            'Liquidity is concentrated in majors; agent should keep PUSD spend inside policy and request approval for larger paid calls.',
-          signals: symbols.map((symbol) => ({
-            symbol,
-            spot: buildSpotPrice(symbol, 'USD').amount,
-            bias: symbol === 'SOL' ? 'watch payments activity' : 'neutral',
+          protocol: symbols[0] ?? 'SOL',
+          riskScore: 72,
+          riskLevel: 'moderate',
+          tvlTrend: '+18.4% (30d)',
+          auditStatus: 'audited',
+          smartContractExposure: 'low',
+          liquidityDepth: symbols.map((symbol) => ({
+            asset: symbol,
+            price: buildSpotPrice(symbol, 'USD').amount,
+            flow24h: buildOnchainFlowIntel(symbol, 'USD').onchainFlow.net24h,
           })),
+          recommendation: 'Allocation within policy limits is supported. Large positions above session budget require operator approval before execution.',
+          provider: 'palmos.research',
           generatedAt: new Date().toISOString(),
         },
       })

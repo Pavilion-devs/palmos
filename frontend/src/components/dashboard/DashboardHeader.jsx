@@ -1,4 +1,3 @@
-import { Play, RefreshCcw } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 export default function DashboardHeader({
@@ -7,10 +6,7 @@ export default function DashboardHeader({
   totalSpent,
   pendingCount,
   connectionStatus,
-  isActionPending,
   generatedAt,
-  actionLabel,
-  onAction,
   onResetSetup,
 }) {
   const [clock, setClock] = useState('')
@@ -91,27 +87,6 @@ export default function DashboardHeader({
             {connectionLabel} / Solana
           </span>
         </div>
-        <button
-          onClick={onAction}
-          disabled={isActionPending}
-          className={`flex items-center gap-2 border px-4 py-1.5 text-xs font-medium uppercase tracking-wider transition-all duration-200 ${
-            isActionPending
-              ? 'cursor-wait border-neutral-800 text-neutral-500'
-              : 'border-neutral-700 text-white hover:bg-white hover:text-black'
-          }`}
-        >
-          {isActionPending ? (
-            <>
-              <RefreshCcw className="h-3 w-3 animate-spin" strokeWidth={2} />
-              <span>{actionLabel}</span>
-            </>
-          ) : (
-            <>
-              <Play className="h-3 w-3" strokeWidth={2} />
-              <span>{actionLabel}</span>
-            </>
-          )}
-        </button>
       </div>
     </header>
   )

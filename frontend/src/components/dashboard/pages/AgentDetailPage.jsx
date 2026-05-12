@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ExternalLink,
   PauseCircle,
-  Play,
   Save,
   ShieldCheck,
 } from 'lucide-react'
@@ -432,8 +431,6 @@ export default function AgentDetailPage({
   services = [],
   events,
   pendingApprovals,
-  onRunAgent,
-  isActionPending,
   updateAgentPolicy,
   runAgentLifecycleAction,
   listAgentCredentials,
@@ -460,13 +457,6 @@ export default function AgentDetailPage({
   const transactionCount = agentSpend.length
 
   const statusTone = STATUS_TONE[agent.status] ?? STATUS_TONE.idle
-  const runDisabledReason =
-    agent.lifecycleStatus === 'suspended'
-      ? 'Suspended'
-      : agent.lifecycleStatus === 'archived'
-        ? 'Archived'
-        : null
-  const canRunAgent = !isActionPending && !runDisabledReason
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -490,21 +480,6 @@ export default function AgentDetailPage({
             <h1 className="text-2xl font-medium text-white">{agent.name}</h1>
             <p className="mt-1 truncate font-mono text-[11px] text-neutral-500">{agent.id}</p>
           </div>
-          {onRunAgent && (
-            <button
-              type="button"
-              onClick={() => onRunAgent(agent.id)}
-              disabled={!canRunAgent}
-              className={`flex items-center gap-2 border px-4 py-2 text-xs uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white ${
-                !canRunAgent
-                  ? 'cursor-wait border-neutral-800 text-neutral-500'
-                  : 'border-neutral-700 bg-neutral-900 text-white hover:bg-white hover:text-black'
-              }`}
-            >
-              <Play className="h-3 w-3" aria-hidden="true" />
-              {isActionPending ? 'Running…' : runDisabledReason ?? 'Run agent'}
-            </button>
-          )}
         </div>
       </div>
 

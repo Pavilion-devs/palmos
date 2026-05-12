@@ -49,11 +49,8 @@ export default function Dashboard() {
     events,
     pendingApprovals,
     connectionStatus,
-    isActionPending,
     generatedAt,
     syncError,
-    onPrimaryAction,
-    primaryActionLabel,
     approveRequest,
     denyRequest,
     approvalsInteractive,
@@ -113,34 +110,11 @@ export default function Dashboard() {
     setSetupComplete(false)
   }
 
-  function getFocusedAgentId() {
-    if (route.page === 'agent-detail') return route.agentId
-    return agents[0]?.id ?? null
-  }
-
-  function handlePrimaryAction() {
-    const focusedAgentId = getFocusedAgentId()
-    if (!focusedAgentId) {
-      handleCreateAgent()
-      return
-    }
-    onPrimaryAction(focusedAgentId)
-  }
 
   const meta = PAGE_META[route.page] ?? PAGE_META.home
   const activeNav = STUB_NAV[route.page] ?? 'home'
 
-  const topbarRightSlot =
-    route.page === 'agents' ? (
-      <button
-        type="button"
-        onClick={handleCreateAgent}
-        className="hidden items-center gap-2 border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white sm:inline-flex"
-      >
-        <Plus className="h-3 w-3" aria-hidden="true" />
-        Register agent
-      </button>
-    ) : null
+  const topbarRightSlot = null
 
   const topbar = (
     <Topbar
@@ -148,9 +122,6 @@ export default function Dashboard() {
       pageTitle={meta.title}
       connectionStatus={connectionStatus}
       generatedAt={generatedAt}
-      isActionPending={isActionPending}
-      actionLabel={route.page === 'home' ? primaryActionLabel : null}
-      onAction={route.page === 'home' ? handlePrimaryAction : null}
       rightSlot={topbarRightSlot}
     />
   )
@@ -194,8 +165,6 @@ export default function Dashboard() {
           services={services}
           events={events}
           pendingApprovals={pendingApprovals}
-          onRunAgent={onPrimaryAction}
-          isActionPending={isActionPending}
           updateAgentPolicy={updateAgentPolicy}
           runAgentLifecycleAction={runAgentLifecycleAction}
           listAgentCredentials={listAgentCredentials}

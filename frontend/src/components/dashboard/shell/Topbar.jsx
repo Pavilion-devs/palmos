@@ -1,4 +1,3 @@
-import { Play, RefreshCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 function formatClock(value) {
@@ -11,9 +10,6 @@ export default function Topbar({
   pageTitle,
   connectionStatus,
   generatedAt,
-  isActionPending,
-  actionLabel,
-  onAction,
   rightSlot,
 }) {
   const [clock, setClock] = useState(() =>
@@ -67,26 +63,6 @@ export default function Topbar({
         </div>
 
         {rightSlot}
-
-        {actionLabel && onAction && (
-          <button
-            type="button"
-            onClick={onAction}
-            disabled={isActionPending}
-            className={`flex items-center gap-2 border px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-all ${
-              isActionPending
-                ? 'cursor-wait border-neutral-800 text-neutral-500'
-                : 'border-neutral-700 text-white hover:bg-white hover:text-black'
-            }`}
-          >
-            {isActionPending ? (
-              <RefreshCcw className="h-3 w-3 animate-spin" strokeWidth={2} />
-            ) : (
-              <Play className="h-3 w-3" strokeWidth={2} />
-            )}
-            <span>{actionLabel}</span>
-          </button>
-        )}
       </div>
     </header>
   )

@@ -39,6 +39,7 @@ type ExternalAgentRunSummary = {
     transactionExplorerUrl?: string
     dashboardPath?: string
   }
+  serviceData?: unknown
   error?: string
 }
 
@@ -152,6 +153,12 @@ function buildSummary(input: {
     readString(execution?.errorMessage) ??
     input.error
 
+  const rawPreview = execution?.responsePreview
+  const serviceData =
+    rawPreview && typeof rawPreview === 'object' && !Array.isArray(rawPreview)
+      ? (rawPreview as Record<string, unknown>).data ?? rawPreview
+      : undefined
+
   return {
     ok: !input.error,
     mode: 'external_agent_sdk',
@@ -180,6 +187,7 @@ function buildSummary(input: {
       transactionExplorerUrl: readString(execution?.transactionExplorerUrl),
       dashboardPath: buildDashboardPath(kind, executionId),
     },
+    serviceData: kind === 'executed' ? serviceData : undefined,
     error: input.error,
   }
 }
@@ -221,6 +229,12 @@ function printHuman(summary: ExternalAgentRunSummary): void {
       : undefined,
     summary.outcome?.dashboardPath
       ? `Dashboard: ${summary.outcome.dashboardPath}`
+      : undefined,
+    summary.serviceData
+      ? `\nService response:\n${JSON.stringify(summary.serviceData, null, 2)
+          .split('\n')
+          .map((l) => `  ${l}`)
+          .join('\n')}`
       : undefined,
     '',
   ].filter((line): line is string => line !== undefined)

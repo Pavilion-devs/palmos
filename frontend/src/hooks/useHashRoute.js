@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+const ROUTE_EVENT = 'palmos:route-change'
+
 function readHash() {
   return (window.location.hash || '').replace(/^#/, '')
 }
@@ -9,20 +11,31 @@ export function navigate(target) {
   if (window.location.hash !== next) {
     window.location.hash = next
   }
+  window.dispatchEvent(new Event(ROUTE_EVENT))
 }
 
 export default function useHashRoute() {
-  const [hash, setHash] = useState(() => readHash())
+  const [route, setRoute] = useState(() => ({
+    hash: readHash(),
+    version: 0,
+  }))
 
   useEffect(() => {
     function onChange() {
-      setHash(readHash())
+      setRoute((previous) => ({
+        hash: readHash(),
+        version: previous.version + 1,
+      }))
     }
     window.addEventListener('hashchange', onChange)
-    return () => window.removeEventListener('hashchange', onChange)
+    window.addEventListener(ROUTE_EVENT, onChange)
+    return () => {
+      window.removeEventListener('hashchange', onChange)
+      window.removeEventListener(ROUTE_EVENT, onChange)
+    }
   }, [])
 
-  return hash
+  return route.hash
 }
 
 export function parseDashboardRoute(hash) {
