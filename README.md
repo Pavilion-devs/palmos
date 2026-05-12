@@ -1,3 +1,5 @@
+![PalmOS preview](frontend/public/image.png)
+
 # PalmOS
 
 > Give AI agents wallets, not blank checks.
