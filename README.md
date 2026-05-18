@@ -1,4 +1,6 @@
-![PalmOS preview](frontend/public/image.png)
+<a href="https://x.com/olathepavilion/status/2054172802278682936?s=20">
+  <img src="frontend/public/image.png" alt="Watch PalmOS private payment demo" width="100%">
+</a>
 
 # PalmOS
 
@@ -28,7 +30,7 @@ PalmOS includes Claude Code command guides in `.claude/commands`.
 Standard governed PUSD payment:
 
 ```text
-/palmos-pay palmos.intel.onchain_flow
+/palmos-pay palmos.launch.audit {"target":"https://www.getpalmos.xyz","checks":["security","api-health"]}
 ```
 
 Approval-gated PUSD payment:
@@ -37,13 +39,16 @@ Approval-gated PUSD payment:
 /palmos-pay palmos.research.defi_risk
 ```
 
-Private Umbra settlement:
+Private payments are enabled as an agent mode. Turn it on once, then keep using the normal payment command:
 
 ```text
-/palmos-private-pay --agent <agent-id> --amount 0.001 --token wSOL
+/private on
+/palmos-pay palmos.launch.audit {"target":"https://www.getpalmos.xyz","checks":["security","api-health"],"context":"private launch audit"}
 ```
 
-The slash command runs the PalmOS CLI, reports the result, and points back to the dashboard transaction or approval page. The agent never receives wallet private keys.
+When privacy is required, PalmOS routes the paid-service settlement through Umbra and still returns the service result, dashboard transaction, and explorer link. The agent never receives wallet private keys.
+
+The lower-level `/palmos-private-pay` command remains available as a direct Umbra proof fallback, but the intended Claude Code flow is `/private on` followed by `/palmos-pay`.
 
 ## PUSD Settlement
 
