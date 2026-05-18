@@ -30,8 +30,10 @@ PalmOS includes Claude Code command guides in `.claude/commands`.
 Standard governed PUSD payment:
 
 ```text
-/palmos-pay palmos.launch.audit {"target":"https://www.getpalmos.xyz","checks":["security","api-health"]}
+/palmos-pay
 ```
+
+By default, this pays for the Production Launch Audit API. PalmOS still checks the agent's allowed services, spend limit, approval threshold, settlement mode, and privacy mode before any payment executes. Operators can configure which services each agent is allowed to use from the dashboard.
 
 Approval-gated PUSD payment:
 
@@ -43,12 +45,18 @@ Private payments are enabled as an agent mode. Turn it on once, then keep using 
 
 ```text
 /private on
-/palmos-pay palmos.launch.audit {"target":"https://www.getpalmos.xyz","checks":["security","api-health"],"context":"private launch audit"}
+/palmos-pay
 ```
 
 When privacy is required, PalmOS routes the paid-service settlement through Umbra and still returns the service result, dashboard transaction, and explorer link. The agent never receives wallet private keys.
 
 The lower-level `/palmos-private-pay` command remains available as a direct Umbra proof fallback, but the intended Claude Code flow is `/private on` followed by `/palmos-pay`.
+
+Advanced users can also request a specific service directly:
+
+```text
+/palmos-pay palmos.launch.audit {"target":"https://www.getpalmos.xyz","checks":["security","api-health"]}
+```
 
 ## PUSD Settlement
 
