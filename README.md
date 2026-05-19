@@ -10,6 +10,11 @@ PalmOS is a payment control plane for external AI agents. It lets an operator re
 
 The agent brain stays outside PalmOS. It can be Claude Code, Codex, a QVAC-compatible agent, or any custom worker. PalmOS handles the payment layer: policy, wallets, approvals, settlement, and audit.
 
+Asset split in the current product:
+
+- Standard PalmOS paid-service calls settle in `PUSD`.
+- Umbra private settlement flows currently settle in `wSOL` (Wrapped SOL).
+
 ## Demo Links
 
 - Frontend: https://www.getpalmos.xyz
@@ -84,6 +89,8 @@ Mainnet PUSD test transactions:
 ## Umbra Private Settlement
 
 Umbra is the second settlement rail built into PalmOS. Agents can execute private on-chain transactions — where the recipient and amount are shielded through the Umbra mixer — while PalmOS enforces the same policy, approval gate, and audit trail as any standard PUSD payment.
+
+In the current PalmOS demo and code path, Umbra private settlement uses `wSOL` rather than `PUSD`.
 
 The Umbra path does not bypass controls. It extends them:
 

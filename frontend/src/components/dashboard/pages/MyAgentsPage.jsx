@@ -405,6 +405,7 @@ export default function MyAgentsPage({
   services = [],
   onCreateAgent,
   createAgent,
+  canCreateAgent = Boolean(createAgent),
   createOpen = false,
   onCreateOpenChange,
 }) {
@@ -424,11 +425,13 @@ export default function MyAgentsPage({
   }
 
   function openCreateForm() {
+    if (!canCreateAgent) return
+
     if (createAgent) {
       setCreateOpen(true)
       return
     }
-    onCreateAgent()
+    onCreateAgent?.()
   }
 
   return (
@@ -465,7 +468,13 @@ export default function MyAgentsPage({
           <button
             type="button"
             onClick={openCreateForm}
-            className="flex min-h-10 items-center gap-2 border border-neutral-700 bg-neutral-900 px-4 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            disabled={!canCreateAgent}
+            title={!canCreateAgent ? 'Dashboard role does not allow agent registration.' : undefined}
+            className={`flex min-h-10 items-center gap-2 border px-4 text-xs uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white ${
+              canCreateAgent
+                ? 'border-neutral-700 bg-neutral-900 text-white hover:bg-white hover:text-black'
+                : 'cursor-not-allowed border-neutral-800 bg-black text-neutral-600'
+            }`}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Register agent
@@ -496,7 +505,13 @@ export default function MyAgentsPage({
               <button
                 type="button"
                 onClick={openCreateForm}
-                className="mt-5 inline-flex min-h-10 items-center gap-2 border border-white px-4 text-xs uppercase tracking-widest text-white transition-colors hover:bg-white hover:text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                disabled={!canCreateAgent}
+                title={!canCreateAgent ? 'Dashboard role does not allow agent registration.' : undefined}
+                className={`mt-5 inline-flex min-h-10 items-center gap-2 border px-4 text-xs uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white ${
+                  canCreateAgent
+                    ? 'border-white text-white hover:bg-white hover:text-black'
+                    : 'cursor-not-allowed border-neutral-800 text-neutral-600'
+                }`}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 Register first agent

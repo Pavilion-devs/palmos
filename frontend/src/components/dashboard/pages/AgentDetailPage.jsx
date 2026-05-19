@@ -286,22 +286,21 @@ function AgentLifecycleControls({ agent, runAgentLifecycleAction }) {
 function AgentServicesManager({
   agent,
   services,
-  allowServiceForAgent,
   unallowServiceForAgent,
+  limit = 3,
 }) {
   const [pendingServiceId, setPendingServiceId] = useState('')
   const [error, setError] = useState('')
   const allowedVendorIds = new Set(agent.policy?.allowedVendorIds ?? [])
+  const allowedServices = services.filter((service) => allowedVendorIds.has(service.vendorId))
+  const visibleServices = allowedServices.slice(0, limit)
+  const hiddenCount = Math.max(0, allowedServices.length - visibleServices.length)
 
-  async function updateService(service, allowed) {
+  async function unallowService(service) {
     setPendingServiceId(service.serviceId)
     setError('')
     try {
-      if (allowed) {
-        await allowServiceForAgent(agent.id, service.serviceId)
-      } else {
-        await unallowServiceForAgent(agent.id, service.serviceId)
-      }
+      await unallowServiceForAgent(agent.id, service.serviceId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update service access.')
     } finally {
@@ -313,6 +312,10 @@ function AgentServicesManager({
     return <p className="text-xs text-neutral-500">No services are registered yet.</p>
   }
 
+  if (!allowedServices.length) {
+    return <p className="text-xs text-neutral-500">No services are allowed yet.</p>
+  }
+
   return (
     <div className="space-y-3">
       {error && (
@@ -321,8 +324,7 @@ function AgentServicesManager({
         </div>
       )}
       <ul className="space-y-2">
-        {services.map((service) => {
-          const isAllowed = allowedVendorIds.has(service.vendorId)
+        {visibleServices.map((service) => {
           const pending = pendingServiceId === service.serviceId
           return (
             <li
@@ -337,25 +339,28 @@ function AgentServicesManager({
               </div>
               <button
                 type="button"
-                onClick={() => updateService(service, !isAllowed)}
+                onClick={() => unallowService(service)}
                 disabled={
                   pending ||
-                  !allowServiceForAgent ||
                   !unallowServiceForAgent ||
                   agent.lifecycleStatus === 'archived'
                 }
-                className={`min-h-10 border px-3 text-[10px] uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40 ${
-                  isAllowed
-                    ? 'border-green-500/20 bg-green-500/5 text-green-300 hover:bg-green-500/10'
-                    : 'border-neutral-700 bg-neutral-900 text-white hover:bg-neutral-800'
-                }`}
+                className="min-h-10 border border-green-500/20 bg-green-500/5 px-3 text-[10px] uppercase tracking-widest text-green-300 transition-colors hover:bg-green-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {pending ? 'Updating...' : isAllowed ? 'Unallow' : 'Allow'}
+                {pending ? 'Updating...' : 'Unallow'}
               </button>
             </li>
           )
         })}
       </ul>
+      {hiddenCount > 0 && (
+        <a
+          href="#dashboard/services"
+          className="inline-flex min-h-9 items-center border border-neutral-800 bg-black px-3 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+        >
+          View {hiddenCount} more
+        </a>
+      )}
     </div>
   )
 }
@@ -438,9 +443,9 @@ export default function AgentDetailPage({
   revokeAgentCredential,
   updateAgentCredential,
   rotateAgentCredential,
-  allowServiceForAgent,
   unallowServiceForAgent,
 }) {
+  const [showAllAuditEvents, setShowAllAuditEvents] = useState(false)
   const agent = agents.find((a) => a.id === agentId)
 
   if (!agent) {
@@ -451,6 +456,8 @@ export default function AgentDetailPage({
   const agentSpend = agentEvents.filter((e) => e.type === 'spend')
   const agentAudit = agentEvents.filter((e) => e.type !== 'spend')
   const agentPending = pendingApprovals.filter((p) => p.agentId === agentId)
+  const paidCallPreview = agentSpend.slice(0, 5)
+  const auditPreview = showAllAuditEvents ? agentAudit : agentAudit.slice(0, 5)
 
   const executedSpend = agent.policy?.executedSpend ?? 0
   const blockedCount = agent.policy?.blockedCount ?? 0
@@ -537,11 +544,20 @@ export default function AgentDetailPage({
           />
         </Section>
 
-        <Section title="Allowed services">
+        <Section
+          title="Allowed services"
+          action={
+            <a
+              href="#dashboard/services"
+              className="text-[10px] uppercase tracking-widest text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            >
+              View services
+            </a>
+          }
+        >
           <AgentServicesManager
             agent={agent}
             services={services}
-            allowServiceForAgent={allowServiceForAgent}
             unallowServiceForAgent={unallowServiceForAgent}
           />
         </Section>
@@ -550,10 +566,10 @@ export default function AgentDetailPage({
           title="SDK credentials"
           action={
             <a
-              href="#dashboard/agents"
+              href={`#dashboard/agents/${agent.id}/credentials`}
               className="hidden items-center gap-1 text-[10px] uppercase tracking-widest text-neutral-500 transition-colors hover:text-white sm:inline-flex"
             >
-              Docs
+              Manage
               <ExternalLink className="h-3 w-3" aria-hidden="true" />
             </a>
           }
@@ -566,6 +582,9 @@ export default function AgentDetailPage({
               revokeAgentCredential={revokeAgentCredential}
               updateAgentCredential={updateAgentCredential}
               rotateAgentCredential={rotateAgentCredential}
+              mode="compact"
+              previewLimit={3}
+              manageHref={`#dashboard/agents/${agent.id}/credentials`}
             />
           ) : (
             <p className="text-xs text-neutral-500">
@@ -574,12 +593,24 @@ export default function AgentDetailPage({
           )}
         </Section>
 
-        <Section title="Recent paid calls">
+        <Section
+          title="Recent paid calls"
+          action={
+            agentSpend.length > 0 ? (
+              <a
+                href="#dashboard/transactions"
+                className="text-[10px] uppercase tracking-widest text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+              >
+                View all
+              </a>
+            ) : null
+          }
+        >
           {agentSpend.length === 0 ? (
             <p className="text-xs text-neutral-500">No paid calls recorded for this agent.</p>
           ) : (
             <ul className="space-y-3">
-              {agentSpend.slice(0, 6).map((event) => (
+              {paidCallPreview.map((event) => (
                 <li
                   key={event.id}
                   className="border border-neutral-900 bg-black p-3"
@@ -598,13 +629,33 @@ export default function AgentDetailPage({
                     <span className="font-mono">{event.timestamp}</span>
                   </div>
                   {event.txHashFull && (
-                    <div className="mt-2 font-mono text-[10px] text-neutral-500">
-                      tx: {shortHash(event.txHashFull)}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[10px] text-neutral-500">
+                      <span>tx: {shortHash(event.txHashFull)}</span>
+                      {event.txExplorerUrl && (
+                        <a
+                          href={event.txExplorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-green-300/80 transition-colors hover:text-green-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                          aria-label="Open transaction explorer"
+                        >
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          Open
+                        </a>
+                      )}
                     </div>
                   )}
                 </li>
               ))}
             </ul>
+          )}
+          {agentSpend.length > paidCallPreview.length && (
+            <a
+              href="#dashboard/transactions"
+              className="mt-3 inline-flex min-h-9 items-center border border-neutral-800 bg-black px-3 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            >
+              Show {agentSpend.length - paidCallPreview.length} more
+            </a>
           )}
         </Section>
 
@@ -613,7 +664,7 @@ export default function AgentDetailPage({
             <p className="text-xs text-neutral-500">No XMTP or policy events recorded.</p>
           ) : (
             <ul className="space-y-3">
-              {agentAudit.slice(0, 6).map((event) => (
+              {auditPreview.map((event) => (
                 <li
                   key={event.id}
                   className="border border-neutral-900 bg-black p-3"
@@ -635,6 +686,15 @@ export default function AgentDetailPage({
                 </li>
               ))}
             </ul>
+          )}
+          {agentAudit.length > auditPreview.length && (
+            <button
+              type="button"
+              onClick={() => setShowAllAuditEvents(true)}
+              className="mt-3 inline-flex min-h-9 items-center border border-neutral-800 bg-black px-3 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            >
+              Show {agentAudit.length - auditPreview.length} more
+            </button>
           )}
         </Section>
       </div>

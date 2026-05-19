@@ -154,7 +154,14 @@ function buildActionLabel(agentSnapshot, record) {
   const vendorLabel = getPolicyVendorLabel(agentSnapshot, record.vendorId)
 
   if (record.paymentRail === 'umbra' || record.umbraSettlement) {
+    if (record.serviceId === 'palmos.launch.audit') {
+      return `Private launch audit via ${vendorLabel}`
+    }
     return 'Umbra private settlement proof'
+  }
+
+  if (record.serviceId === 'palmos.launch.audit') {
+    return `Production launch audit via ${vendorLabel}`
   }
 
   if (record.serviceId === 'coingecko.simple_price') {

@@ -49,10 +49,13 @@ export function parseDashboardRoute(hash) {
     return { page: 'home' }
   }
 
-  const [, section, id] = segments
+  const [, section, id, subSection] = segments
 
   if (section === 'onboarding') return { page: 'onboarding' }
   if (section === 'agents') {
+    if (id && subSection === 'credentials') {
+      return { page: 'agent-credentials', agentId: id }
+    }
     return id ? { page: 'agent-detail', agentId: id } : { page: 'agents' }
   }
   if (section === 'services') {

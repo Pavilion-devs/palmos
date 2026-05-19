@@ -8,6 +8,7 @@ import Topbar from './shell/Topbar'
 import DashboardHomePage from './pages/DashboardHomePage'
 import MyAgentsPage from './pages/MyAgentsPage'
 import AgentDetailPage from './pages/AgentDetailPage'
+import AgentCredentialsPage from './pages/AgentCredentialsPage'
 import ServicesPage from './pages/ServicesPage'
 import ServiceDetailPage from './pages/ServiceDetailPage'
 import TransactionsPage from './pages/TransactionsPage'
@@ -19,6 +20,7 @@ const PAGE_META = {
   home: { subtitle: 'Operations', title: 'Dashboard' },
   agents: { subtitle: 'Agents', title: 'My Agents' },
   'agent-detail': { subtitle: 'Agents', title: 'Agent Detail' },
+  'agent-credentials': { subtitle: 'Agents', title: 'SDK Credentials' },
   services: { subtitle: 'Services', title: 'Service Registry' },
   'service-detail': { subtitle: 'Services', title: 'Service Detail' },
   transactions: { subtitle: 'Transactions', title: 'Paid Calls' },
@@ -31,6 +33,7 @@ const STUB_NAV = {
   home: 'home',
   agents: 'agents',
   'agent-detail': 'agents',
+  'agent-credentials': 'agents',
   services: 'services',
   'service-detail': 'services',
   transactions: 'transactions',
@@ -67,6 +70,7 @@ export default function Dashboard() {
     registerService,
     allowServiceForAgent,
     unallowServiceForAgent,
+    capabilities,
   } = useDashboardStore()
 
   const [localCreatedAgentId, setLocalCreatedAgentId] = useState(null)
@@ -79,12 +83,16 @@ export default function Dashboard() {
     )
   })
 
+  const canMutateDashboard = Boolean(capabilities?.canMutateDashboard)
   const shouldShowOnboarding =
     route.page === 'onboarding' ||
     (!setupComplete && !(connectionStatus === 'live' && agents.length > 0)) ||
-    (connectionStatus === 'live' && agents.length === 0 && !localCreatedAgentId)
+    (canMutateDashboard &&
+      connectionStatus === 'live' &&
+      agents.length === 0 &&
+      !localCreatedAgentId)
 
-  if (shouldShowOnboarding) {
+  if (shouldShowOnboarding && canMutateDashboard) {
     return (
       <DashboardOnboarding
         onComplete={(setup) => {
@@ -101,13 +109,10 @@ export default function Dashboard() {
   }
 
   function handleCreateAgent() {
-    if (createAgent) {
-      navigate('#dashboard/agents')
-      setAgentCreateOpen(true)
-      return
-    }
-    navigate('#dashboard/onboarding')
-    setSetupComplete(false)
+    if (!canMutateDashboard || !createAgent) return
+
+    navigate('#dashboard/agents')
+    setAgentCreateOpen(true)
   }
 
 
@@ -153,6 +158,7 @@ export default function Dashboard() {
           services={services}
           onCreateAgent={handleCreateAgent}
           createAgent={createAgent}
+          canCreateAgent={canMutateDashboard}
           createOpen={agentCreateOpen}
           onCreateOpenChange={setAgentCreateOpen}
         />
@@ -172,8 +178,19 @@ export default function Dashboard() {
           revokeAgentCredential={revokeAgentCredential}
           updateAgentCredential={updateAgentCredential}
           rotateAgentCredential={rotateAgentCredential}
-          allowServiceForAgent={allowServiceForAgent}
           unallowServiceForAgent={unallowServiceForAgent}
+        />
+      )}
+
+      {route.page === 'agent-credentials' && (
+        <AgentCredentialsPage
+          agentId={route.agentId}
+          agents={agents}
+          listAgentCredentials={listAgentCredentials}
+          createAgentCredential={createAgentCredential}
+          revokeAgentCredential={revokeAgentCredential}
+          updateAgentCredential={updateAgentCredential}
+          rotateAgentCredential={rotateAgentCredential}
         />
       )}
 

@@ -21,6 +21,15 @@ const EMPTY_DASHBOARD_DATA = {
   summary: {},
 }
 
+const EMPTY_SESSION = {
+  identity: null,
+  capabilities: {
+    canMutateDashboard: false,
+    canManageOperators: false,
+    canUseJudgeMutationMode: false,
+  },
+}
+
 function buildApiUrl(path) {
   if (!API_BASE_URL) {
     return path
@@ -40,7 +49,9 @@ async function readApiPayload(response, fallbackMessage) {
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(payload?.error || `${fallbackMessage} (${response.status})`)
+    throw new Error(
+      payload?.message || payload?.error || `${fallbackMessage} (${response.status})`,
+    )
   }
 
   return payload
@@ -51,6 +62,7 @@ export default function useDashboardStore() {
   const [liveState, setLiveState] = useState({
     connectionStatus: 'connecting',
     data: EMPTY_DASHBOARD_DATA,
+    session: EMPTY_SESSION,
     error: null,
     actionPending: false,
   })
@@ -59,6 +71,7 @@ export default function useDashboardStore() {
     setLiveState((previous) => ({
       ...previous,
       ...overrides,
+      session: overrides.session ?? previous.session,
       connectionStatus: 'live',
       data: {
         ...adaptShowcaseSnapshot(snapshot),
@@ -74,10 +87,12 @@ export default function useDashboardStore() {
     }
 
     try {
-      const [snapshotResult, servicesResult] = await Promise.allSettled([
-        fetchDashboardApi('/api/dashboard/snapshot', { cache: 'no-store' }),
-        fetchDashboardApi('/api/dashboard/services', { cache: 'no-store' }),
-      ])
+      const [snapshotResult, servicesResult, sessionResult] =
+        await Promise.allSettled([
+          fetchDashboardApi('/api/dashboard/snapshot', { cache: 'no-store' }),
+          fetchDashboardApi('/api/dashboard/services', { cache: 'no-store' }),
+          fetchDashboardApi('/api/dashboard/session', { cache: 'no-store' }),
+        ])
 
       if (snapshotResult.status === 'rejected') {
         throw snapshotResult.reason
@@ -90,6 +105,7 @@ export default function useDashboardStore() {
 
       // Services degrade gracefully — a failure keeps the previous lane data
       let servicesOverride
+      let sessionOverride
       if (servicesResult.status === 'fulfilled') {
         try {
           const servicesPayload = await readApiPayload(
@@ -101,8 +117,28 @@ export default function useDashboardStore() {
           // leave servicesOverride undefined; applySnapshot preserves previous value
         }
       }
+      if (sessionResult.status === 'fulfilled') {
+        try {
+          const sessionPayload = await readApiPayload(
+            sessionResult.value,
+            'Unable to load dashboard session',
+          )
+          sessionOverride = {
+            identity: sessionPayload.identity ?? null,
+            capabilities: {
+              ...EMPTY_SESSION.capabilities,
+              ...(sessionPayload.capabilities ?? {}),
+            },
+          }
+        } catch {
+          sessionOverride = undefined
+        }
+      }
 
-      applySnapshot(snapshot, { services: servicesOverride })
+      applySnapshot(snapshot, {
+        services: servicesOverride,
+        session: sessionOverride,
+      })
     } catch (error) {
       const message =
         error instanceof Error
@@ -432,19 +468,27 @@ export default function useDashboardStore() {
 
   return {
     ...liveState.data,
+    session: liveState.session,
+    capabilities: liveState.session.capabilities,
     syncError: liveState.error,
     connectionStatus: liveState.connectionStatus,
     isActionPending: liveState.actionPending,
     approveRequest:
-      liveState.connectionStatus === 'live' && !liveState.actionPending
+      liveState.connectionStatus === 'live' &&
+      liveState.session.capabilities.canMutateDashboard &&
+      !liveState.actionPending
         ? (executionId) => submitApprovalDecision(executionId, 'approve')
         : () => {},
     denyRequest:
-      liveState.connectionStatus === 'live' && !liveState.actionPending
+      liveState.connectionStatus === 'live' &&
+      liveState.session.capabilities.canMutateDashboard &&
+      !liveState.actionPending
         ? (executionId) => submitApprovalDecision(executionId, 'reject')
         : () => {},
     approvalsInteractive:
-      liveState.connectionStatus === 'live' && !liveState.actionPending,
+      liveState.connectionStatus === 'live' &&
+      liveState.session.capabilities.canMutateDashboard &&
+      !liveState.actionPending,
     onPrimaryAction: runScenario,
     primaryActionLabel: liveState.actionPending
       ? 'Running...'
@@ -452,15 +496,35 @@ export default function useDashboardStore() {
         ? 'Run Agent'
         : 'Register Agent',
     listAgentCredentials,
-    createAgent,
-    updateAgentPolicy,
-    runAgentLifecycleAction,
-    createAgentCredential,
-    revokeAgentCredential,
-    updateAgentCredential,
-    rotateAgentCredential,
-    registerService,
-    allowServiceForAgent,
-    unallowServiceForAgent,
+    createAgent: liveState.session.capabilities.canMutateDashboard
+      ? createAgent
+      : undefined,
+    updateAgentPolicy: liveState.session.capabilities.canMutateDashboard
+      ? updateAgentPolicy
+      : undefined,
+    runAgentLifecycleAction: liveState.session.capabilities.canMutateDashboard
+      ? runAgentLifecycleAction
+      : undefined,
+    createAgentCredential: liveState.session.capabilities.canMutateDashboard
+      ? createAgentCredential
+      : undefined,
+    revokeAgentCredential: liveState.session.capabilities.canMutateDashboard
+      ? revokeAgentCredential
+      : undefined,
+    updateAgentCredential: liveState.session.capabilities.canMutateDashboard
+      ? updateAgentCredential
+      : undefined,
+    rotateAgentCredential: liveState.session.capabilities.canMutateDashboard
+      ? rotateAgentCredential
+      : undefined,
+    registerService: liveState.session.capabilities.canMutateDashboard
+      ? registerService
+      : undefined,
+    allowServiceForAgent: liveState.session.capabilities.canMutateDashboard
+      ? allowServiceForAgent
+      : undefined,
+    unallowServiceForAgent: liveState.session.capabilities.canMutateDashboard
+      ? unallowServiceForAgent
+      : undefined,
   }
 }

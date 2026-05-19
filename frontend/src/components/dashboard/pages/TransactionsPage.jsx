@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { navigate } from '../../../hooks/useHashRoute'
 import SettlementBadge from './SettlementBadge'
 
@@ -56,11 +57,25 @@ function TransactionRow({ event, services }) {
   const routeLabel = isUmbra
     ? `${event.umbraSettlement?.privacyPath ?? 'umbra_mixer_utxo'} · ${event.chainId ?? event.umbraSettlement?.network ?? 'solana-devnet'}`
     : null
+  const canOpenExplorer = Boolean(event.txExplorerUrl)
+
+  function openDetail() {
+    navigate(`#dashboard/transactions/${event.id}`)
+  }
+
+  function handleKeyDown(eventKey) {
+    if (eventKey.key === 'Enter' || eventKey.key === ' ') {
+      eventKey.preventDefault()
+      openDetail()
+    }
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`#dashboard/transactions/${event.id}`)}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openDetail}
+      onKeyDown={handleKeyDown}
       className="flex w-full flex-col gap-3 border border-neutral-800 bg-neutral-950 p-4 text-left transition-colors hover:border-neutral-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white sm:flex-row sm:items-center sm:gap-5"
     >
       <div className="shrink-0">
@@ -87,8 +102,21 @@ function TransactionRow({ event, services }) {
           <span className="truncate font-mono">{event.timestamp}</span>
         </div>
         {event.txHashFull && (
-          <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-neutral-600">
+          <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[10px] text-neutral-600">
             <span className="truncate">tx: {shortHash(event.txHashFull)}</span>
+            {canOpenExplorer && (
+              <a
+                href={event.txExplorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(clickEvent) => clickEvent.stopPropagation()}
+                className="inline-flex items-center gap-1 text-green-300/80 transition-colors hover:text-green-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                aria-label="Open transaction explorer"
+              >
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                Open
+              </a>
+            )}
             {routeLabel && (
               <span className="truncate text-violet-300/70">{routeLabel}</span>
             )}
@@ -100,7 +128,7 @@ function TransactionRow({ event, services }) {
           </div>
         )}
       </div>
-    </button>
+    </div>
   )
 }
 

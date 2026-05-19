@@ -236,6 +236,9 @@ export default function CredentialsManager({
   revokeAgentCredential,
   updateAgentCredential,
   rotateAgentCredential,
+  mode = 'full',
+  previewLimit = 3,
+  manageHref,
 }) {
   const [credsState, setCredsState] = useState({
     status: 'idle',
@@ -353,7 +356,20 @@ export default function CredentialsManager({
 
   async function handleRevoke(credentialId) {
     setRevokingId(credentialId)
+    const previousCredentials = credsState.credentials
     try {
+      setCredsState((prev) => ({
+        ...prev,
+        credentials: prev.credentials.map((credential) =>
+          credential.credentialId === credentialId
+            ? {
+                ...credential,
+                status: 'revoked',
+                updatedAt: new Date().toISOString(),
+              }
+            : credential,
+        ),
+      }))
       await revokeAgentCredential(credentialId)
       await refreshCredentials()
       if (latestToken?.credentialId === credentialId) {
@@ -362,6 +378,7 @@ export default function CredentialsManager({
     } catch (err) {
       setCredsState((prev) => ({
         ...prev,
+        credentials: previousCredentials,
         error: err instanceof Error ? err.message : 'Unable to revoke credential',
       }))
     } finally {
@@ -375,6 +392,17 @@ export default function CredentialsManager({
   const revokedCount = credsState.credentials.filter(
     (credential) => credential.status === 'revoked',
   ).length
+  const [statusFilter, setStatusFilter] = useState('active')
+  const isCompact = mode === 'compact'
+  const filteredCredentials = credsState.credentials.filter((credential) => {
+    if (isCompact) return credential.status === 'active'
+    if (statusFilter === 'all') return true
+    return credential.status === statusFilter
+  })
+  const visibleCredentials = isCompact
+    ? filteredCredentials.slice(0, previewLimit)
+    : filteredCredentials
+  const hiddenCount = Math.max(0, filteredCredentials.length - visibleCredentials.length)
 
   return (
     <div>
@@ -389,16 +417,49 @@ export default function CredentialsManager({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen((value) => !value)}
-          disabled={creating}
-          className="flex items-center gap-1 border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-widest text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Plus className="h-3 w-3" aria-hidden="true" />
-          New key
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {manageHref && (
+            <a
+              href={manageHref}
+              className="flex items-center gap-1 border border-neutral-800 bg-black px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            >
+              Manage
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => setCreateOpen((value) => !value)}
+            disabled={creating}
+            className="flex items-center gap-1 border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-widest text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-3 w-3" aria-hidden="true" />
+            New key
+          </button>
+        </div>
       </div>
+
+      {!isCompact && credsState.status === 'ok' && credsState.credentials.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 border border-neutral-900 bg-black p-1">
+          {[
+            ['active', `Active ${activeCount}`],
+            ['revoked', `Revoked ${revokedCount}`],
+            ['all', `All ${credsState.credentials.length}`],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setStatusFilter(id)}
+              className={`min-h-8 px-3 text-[10px] uppercase tracking-widest transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white ${
+                statusFilter === id
+                  ? 'bg-white text-black'
+                  : 'text-neutral-500 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {createOpen && (
         <div className="mb-4 border border-neutral-900 bg-black p-3">
@@ -444,11 +505,21 @@ export default function CredentialsManager({
         </p>
       )}
 
-      {credsState.status === 'ok' && credsState.credentials.length > 0 && (
+      {credsState.status === 'ok' &&
+        credsState.credentials.length > 0 &&
+        visibleCredentials.length === 0 && (
+          <p className="text-xs text-neutral-500">
+            {isCompact
+              ? 'No active credentials. Open credential management to review revoked keys.'
+              : `No ${statusFilter} credentials.`}
+          </p>
+        )}
+
+      {credsState.status === 'ok' && visibleCredentials.length > 0 && (
         <ul className="space-y-2">
-          {credsState.credentials.map((credential) => (
+          {visibleCredentials.map((credential) => (
             <CredentialRow
-              key={`${credential.credentialId}:${credential.label}`}
+              key={`${credential.credentialId}:${credential.label}:${credential.status}`}
               credential={credential}
               revokingId={revokingId}
               rotatingId={rotatingId}
@@ -461,6 +532,15 @@ export default function CredentialsManager({
             />
           ))}
         </ul>
+      )}
+
+      {isCompact && hiddenCount > 0 && manageHref && (
+        <a
+          href={manageHref}
+          className="mt-3 inline-flex min-h-9 items-center border border-neutral-800 bg-black px-3 text-[10px] uppercase tracking-widest text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+        >
+          Show {hiddenCount} more
+        </a>
       )}
 
       {latestToken && (
