@@ -18,6 +18,7 @@ Asset split in the current product:
 ## Demo Links
 
 - Frontend: https://www.getpalmos.xyz
+- Pitch deck: https://www.getpalmos.xyz/pitch
 - API: https://api.getpalmos.xyz
 
 ## Core Flow
