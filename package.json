@@ -13,10 +13,13 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "package:agent:build": "tsc -p packages/agent/tsconfig.json",
-    "package:agent:pack": "npm --cache /tmp/palmos-npm-cache pack --workspace @palmos/agent --dry-run",
+    "package:agent:pack": "npm --cache /tmp/palmos-npm-cache pack --workspace @getpalmos/agent --dry-run",
     "palmos:init": "node --import tsx src/cli/initPalmos.ts",
     "palmos:wallet": "node --import tsx src/cli/generatePusdWallet.ts",
     "palmos:readiness": "node --import tsx src/cli/checkPusdReadiness.ts",
+    "palmos:storage": "node --import tsx src/cli/manageStorage.ts",
+    "palmos:postgres": "node --import tsx src/cli/managePostgres.ts",
+    "palmos:settlements": "node --import tsx src/cli/reconcileSettlements.ts",
     "x402:wallet": "bun src/cli/generateX402Wallet.ts",
     "xmtp:wallet": "node --import tsx src/cli/generateEvmWallet.ts",
     "pusd:server": "bun src/cli/runLocalPusdServer.ts",
@@ -47,6 +50,7 @@
     "@xmtp/node-sdk": "^6.0.0",
     "bs58": "^6.0.0",
     "express": "^5.2.1",
+    "pg": "^8.20.0",
     "snarkjs": "^0.7.6",
     "tsx": "^4.21.0",
     "viem": "^2.21.26",
@@ -56,6 +60,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.2",
+    "@types/pg": "^8.20.0",
     "typescript": "^6.0.2"
   }
 }

@@ -1,11 +1,22 @@
 {
-  "name": "@palmos/agent",
+  "name": "@getpalmos/agent",
   "version": "0.1.0",
   "description": "PalmOS SDK client for external agents that need governed PUSD payments.",
   "type": "module",
   "license": "MIT",
+  "author": "PalmOS",
+  "homepage": "https://www.getpalmos.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pavilion-devs/palmos.git",
+    "directory": "packages/agent"
+  },
+  "bugs": {
+    "url": "https://github.com/Pavilion-devs/palmos/issues"
+  },
   "files": [
     "dist",
+    "examples",
     "README.md"
   ],
   "exports": {

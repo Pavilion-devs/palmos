@@ -8,13 +8,23 @@ node_modules/
 # Build output
 frontend/dist/
 frontend/node_modules/
+# @palmos/agent is built on publish (prepublishOnly); don't commit dist.
+packages/agent/dist/
 
 # OS
 .DS_Store
 
 # Planning / internal docs — keep locally, don't ship
 docs/
+!docs/
+docs/*
+!docs/production-readiness-roadmap.md
+!docs/database/
+!docs/database/*.md
+!docs/database/*.sql
 examples/
+!packages/agent/examples/
+!packages/agent/examples/*.mjs
 architecture-handoff.md
 dashboard.md
 live-dashboard-scope.md
@@ -37,6 +47,8 @@ umbra-migration.md
 .vercel/
 .superstack/
 storage/
+!src/storage/
+!src/storage/**
 ows-home/
 xmtp-local.db3
 waitlist-submissions.json

@@ -29,6 +29,7 @@ export type PalmosSdkAgent = {
   walletBackend?: string
   owsWalletId?: string
   owsWalletName?: string
+  privacyMode?: 'disabled' | 'allowed' | 'required'
   policyConfig?: unknown
 }
 
@@ -48,7 +49,117 @@ export type PalmosSdkPayInput = {
   request?: Record<string, unknown>
   amount?: string
   note?: string
+  idempotencyKey?: string
+  privacy?: 'default' | 'required'
 }
+
+export type PalmosSdkPolicyCheckInput = {
+  serviceId: string
+  amount?: string
+}
+
+export type PalmosSdkToolName =
+  | 'list_services'
+  | 'request_paid_service'
+  | 'check_policy'
+  | 'get_agent_status'
+
+export type PalmosSdkToolDefinition = {
+  name: PalmosSdkToolName
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+export type PalmosSdkPaidCallStatus =
+  | 'blocked'
+  | 'approval_pending'
+  | 'waiting_for_execution'
+  | 'executed'
+  | 'failed'
+
+export type PalmosSdkSettlement = {
+  rail: string
+  mode?: string
+  source: string
+  amount: string
+  assetSymbol: string
+  network?: string
+  mint?: string
+  payer?: string
+  payerTokenAccount?: string
+  recipient?: string
+  recipientTokenAccount?: string
+  reference?: string
+  signature?: string
+  explorerUrl?: string
+  confirmationStatus: string
+  confirmedAt?: string
+  reconciliationStatus?: string
+  reconciledAt?: string
+  reconciliationError?: string
+}
+
+export type PalmosSdkPaidCallExecution = {
+  executionId: string
+  createdAt: string
+  updatedAt: string
+  agentId: string
+  serviceId: string
+  vendorId: string
+  paymentRail: string
+  settlementMode?: string
+  amount: string
+  assetSymbol: string
+  chainId?: string
+  transactionSignature?: string
+  transactionExplorerUrl?: string
+  settlement?: PalmosSdkSettlement
+  status: PalmosSdkPaidCallStatus
+  runId?: string
+  sessionId?: string
+  walletId?: string
+  runtimeStatus?: string
+  runtimePhase?: string
+  requestSummary: Record<string, unknown>
+  requestUrl?: string
+  responseStatus?: number
+  responsePreview?: unknown
+  errorCode?: string
+  errorMessage?: string
+}
+
+export type PalmosSdkPayResult =
+  | {
+      kind: 'blocked'
+      agent: PalmosSdkAgent
+      execution: PalmosSdkPaidCallExecution
+      reason: string
+    }
+  | {
+      kind: 'approval_pending'
+      agent: PalmosSdkAgent
+      execution: PalmosSdkPaidCallExecution
+      turnOutput: string[]
+    }
+  | {
+      kind: 'waiting_for_execution'
+      agent: PalmosSdkAgent
+      execution: PalmosSdkPaidCallExecution
+      turnOutput: string[]
+    }
+  | {
+      kind: 'executed'
+      agent: PalmosSdkAgent
+      execution: PalmosSdkPaidCallExecution
+      turnOutput: string[]
+    }
+  | {
+      kind: 'execution_failed'
+      agent: PalmosSdkAgent
+      execution: PalmosSdkPaidCallExecution
+      turnOutput: string[]
+      error: string
+    }
 
 export type PalmosSdkMeResponse = {
   ok: true
@@ -62,11 +173,54 @@ export type PalmosSdkServicesResponse = {
   services: PalmosSdkService[]
 }
 
+export type PalmosSdkAgentStatus = {
+  agentId: string
+  agentStatus: string
+  credentialStatus: string
+  trustTier: string
+  settlementMode?: string
+  walletState?: string
+  lastCheckInAt?: string
+}
+
+export type PalmosSdkAgentStatusResponse = PalmosSdkMeResponse & {
+  status: PalmosSdkAgentStatus
+}
+
 export type PalmosSdkPayResponse = {
   ok: true
   agentId: string
   credentialId: string
-  result: unknown
+  idempotencyKey?: string
+  idempotentReplay?: boolean
+  result: PalmosSdkPayResult
+}
+
+export type PalmosSdkPolicyCheckResponse = {
+  ok: true
+  agentId: string
+  serviceId: string
+  vendorId: string
+  amount: string
+  allowed: boolean
+  status: 'allowed' | 'restricted' | 'denied'
+  requiresApproval: boolean
+  reasonCode: string
+  effectiveMaxPerTransaction: string
+}
+
+export type PalmosSdkToolsResponse = {
+  ok: true
+  agentId: string
+  tools: PalmosSdkToolDefinition[]
+}
+
+export type PalmosSdkErrorResponse = {
+  ok: false
+  error: string
+  message?: string
+  requestId?: string
+  details?: Record<string, unknown>
 }
 
 export class PalmosAgentClientError extends Error {
@@ -108,7 +262,12 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
 }
 
 function readErrorMessage(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object' && 'error' in payload) {
+  if (payload && typeof payload === 'object') {
+    const message = (payload as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+
     const error = (payload as { error?: unknown }).error
     if (typeof error === 'string' && error.trim()) {
       return error
@@ -128,7 +287,7 @@ export class PalmosAgentClient {
       throw new Error('PalmOS agent token is required.')
     }
 
-    this.baseUrl = trimTrailingSlash(config.baseUrl ?? 'http://127.0.0.1:4030')
+    this.baseUrl = trimTrailingSlash(config.baseUrl ?? 'https://api.getpalmos.xyz')
     this.token = config.token.trim()
     this.fetchImpl = config.fetchImpl ?? fetch
   }
@@ -155,14 +314,62 @@ export class PalmosAgentClient {
     return this.request<PalmosSdkServicesResponse>('/api/sdk/v1/services')
   }
 
+  async listTools(): Promise<PalmosSdkToolsResponse> {
+    return this.request<PalmosSdkToolsResponse>('/api/sdk/v1/tools')
+  }
+
+  async getAgentStatus(): Promise<PalmosSdkAgentStatusResponse> {
+    return this.callTool<PalmosSdkAgentStatusResponse>('get_agent_status')
+  }
+
+  async checkPolicy(
+    input: PalmosSdkPolicyCheckInput,
+  ): Promise<PalmosSdkPolicyCheckResponse> {
+    return this.callTool<PalmosSdkPolicyCheckResponse>('check_policy', input)
+  }
+
+  async requestPaidService(
+    input: PalmosSdkPayInput,
+  ): Promise<PalmosSdkPayResponse> {
+    return this.callTool<PalmosSdkPayResponse>('request_paid_service', input)
+  }
+
+  async callTool<T>(
+    toolName: PalmosSdkToolName,
+    input: Record<string, unknown> = {},
+  ): Promise<T> {
+    const headers = new Headers()
+    const idempotencyKey =
+      typeof input.idempotencyKey === 'string' ? input.idempotencyKey.trim() : ''
+    if (idempotencyKey) {
+      headers.set('idempotency-key', idempotencyKey)
+    }
+
+    return this.request<T>(`/api/sdk/v1/tools/${toolName}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        input,
+      }),
+    })
+  }
+
   async pay(input: PalmosSdkPayInput): Promise<PalmosSdkPayResponse> {
+    const headers = new Headers()
+    if (input.idempotencyKey?.trim()) {
+      headers.set('idempotency-key', input.idempotencyKey.trim())
+    }
+
     return this.request<PalmosSdkPayResponse>('/api/sdk/v1/pay', {
       method: 'POST',
+      headers,
       body: JSON.stringify({
         serviceId: input.serviceId,
         request: input.request ?? {},
         amount: input.amount,
         note: input.note,
+        idempotencyKey: input.idempotencyKey,
+        privacy: input.privacy,
       }),
     })
   }

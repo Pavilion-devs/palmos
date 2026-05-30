@@ -29,6 +29,31 @@ Asset split in the current product:
 4. Use that credential from Claude Code, Codex, or another agent runtime.
 5. PalmOS decides whether each payment is auto-approved, approval-gated, blocked, or privately settled through Umbra.
 
+## Agent SDK (`@getpalmos/agent`)
+
+External agents talk to PalmOS through the published SDK client on npm:
+
+```bash
+npm install @getpalmos/agent
+```
+
+Issue an SDK credential from the agent's detail page in the dashboard, then:
+
+```ts
+import { PalmosAgentClient } from '@getpalmos/agent'
+
+// Defaults to the hosted API (https://api.getpalmos.xyz).
+// Set PALMOS_API_URL only when pointing at a self-hosted backend.
+const palmos = PalmosAgentClient.fromEnv() // reads PALMOS_AGENT_TOKEN
+
+const result = await palmos.pay({
+  serviceId: 'local.pusd.spot_price',
+  request: { base: 'BTC', quote: 'USD' },
+})
+```
+
+Every SDK call runs the same policy, approval, settlement, and audit checks as the dashboard. See [`packages/agent/README.md`](./packages/agent/README.md) for the full client surface and runnable examples.
+
 ## Using PalmOS In Claude Code
 
 PalmOS includes Claude Code command guides in `.claude/commands`.
@@ -188,7 +213,7 @@ cd frontend && npm run lint && npm run build
 - `src/integrations/umbra/` - Umbra private settlement proof and approval-gated privacy rail.
 - `src/integrations/ows/` - governed wallet support.
 - `frontend/` - PalmOS dashboard.
-- `packages/agent/` - `@palmos/agent` SDK package skeleton.
+- `packages/agent/` - source for the published [`@getpalmos/agent`](https://www.npmjs.com/package/@getpalmos/agent) SDK client.
 
 More detail:
 

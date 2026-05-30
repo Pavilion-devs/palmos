@@ -72,13 +72,13 @@ The current MVP surface is:
 - Dashboard-issued agent credentials.
 - SDK routes under `/api/sdk/v1/*`.
 - `src/sdk/PalmosAgentClient.ts`.
-- `packages/agent` as the publishable `@palmos/agent` package.
+- `packages/agent` as the publishable `@getpalmos/agent` package.
 - `npm run palmos:external-agent` for a repo-local external agent demo.
 
 The intended package target is:
 
 ```bash
-npm install @palmos/agent
+npm install @getpalmos/agent
 ```
 
 That package should wrap the same SDK API and make external-agent setup feel like installing a payment skill.
