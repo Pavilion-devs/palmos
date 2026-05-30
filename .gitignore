@@ -8,8 +8,9 @@ node_modules/
 # Build output
 frontend/dist/
 frontend/node_modules/
-# @palmos/agent is built on publish (prepublishOnly); don't commit dist.
+# PalmOS packages are built on publish (prepublishOnly); don't commit dist.
 packages/agent/dist/
+packages/mcp/dist/
 
 # OS
 .DS_Store
