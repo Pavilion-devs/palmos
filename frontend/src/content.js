@@ -2,7 +2,7 @@ export const navLinks = [
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Outcomes', href: '#outcomes' },
   { label: 'Stack', href: '#built-with' },
-  { label: 'Docs', href: '#docs' },
+  // { label: 'Docs', href: '#docs' },
 ]
 
 export const howItWorksSteps = [

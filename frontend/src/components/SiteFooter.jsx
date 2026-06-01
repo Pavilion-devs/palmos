@@ -2,59 +2,50 @@ import ScrollReveal from './motion/ScrollReveal'
 
 export default function SiteFooter() {
   return (
-    <section className="relative w-full overflow-hidden border-neutral-900 border-t bg-[#F5F2EB] px-6 pt-16 pb-0 text-black md:px-12">
-      <ScrollReveal
-        className="mb-16 grid grid-cols-1 gap-8 font-sans text-xs font-semibold tracking-tight uppercase md:mb-24 md:grid-cols-3 md:gap-4 md:text-sm"
-        direction="up"
-        amount={0.3}
-      >
-        <div className="flex flex-col space-y-0.5">
-          <a
-            href="#"
-            className="transition-colors hover:text-neutral-600"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            PalmOS by Pavilion Devs
-          </a>
-          <p>Hackathon 2026</p>
-          <p>Palm USD x Solana builders</p>
-        </div>
+    <footer className="hero-field relative mt-10 w-full overflow-hidden rounded-t-[40px] px-6 pt-20 pb-10 text-white md:px-12">
+      <div className="mx-auto max-w-7xl">
+        <ScrollReveal
+          className="mb-16 grid grid-cols-1 gap-8 text-xs font-medium tracking-wide text-green-light/70 md:mb-20 md:grid-cols-3"
+          direction="up"
+          amount={0.3}
+        >
+          <div className="flex flex-col gap-1.5">
+            <span className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-white">
+              <img src="/mark-white.svg" alt="" aria-hidden="true" className="h-7 w-7" />
+              PalmOS
+            </span>
+          </div>
 
-        <div className="flex flex-col md:items-center">
-          <a href="#" className="transition-colors hover:text-neutral-600">
-            Twitter
-          </a>
-        </div>
+          <div className="flex flex-col gap-2 md:items-center">
+            <span className="text-white/40 uppercase">Connect</span>
+            <a
+              href="#"
+              className="transition-colors hover:text-white"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Twitter
+            </a>
+            {/* <a href="#docs" className="transition-colors hover:text-white">
+              Docs
+            </a> */}
+          </div>
 
-        <div className="flex flex-col space-y-0.5 text-left md:items-end md:text-right">
-          <p>PalmOS</p>
-          <p>©2026 - Hackathon Entry</p>
-        </div>
-      </ScrollReveal>
+          <div className="flex flex-col gap-1.5 md:items-end md:text-right">
+            <span className="text-white/40 uppercase">Legal</span>
+            <p>&copy; 2026 &mdash; Hackathon Entry</p>
+          </div>
+        </ScrollReveal>
 
-      <ScrollReveal
-        className="relative flex w-full flex-col items-center leading-none select-none pb-4 md:pb-8"
-        direction="still"
-        amount={0.25}
-      >
-        <div className="w-full text-center">
-          <h2 className="font-anton block w-full origin-bottom scale-y-[1.4] text-[25vw] leading-[0.8] tracking-[-0.03em] uppercase transform">
-            PALM
+        <ScrollReveal className="select-none" direction="still" amount={0.25}>
+          <h2 className="bg-gradient-to-b from-white to-green-light/40 bg-clip-text text-[17vw] leading-[0.8] font-bold tracking-[-0.05em] whitespace-nowrap text-transparent">
+            PalmOS
           </h2>
-        </div>
-        <div className="-mt-[3vw] w-full text-center md:-mt-[2vw]">
-          <h2 className="font-anton block w-full origin-top scale-y-[1.4] text-[25vw] leading-[0.8] tracking-[-0.03em] uppercase transform">
-            OS
-          </h2>
-        </div>
-
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-          <p className="font-marker rotate-[-6deg] text-center text-5xl leading-tight text-[#FACC15] opacity-90 mix-blend-multiply drop-shadow-sm md:text-7xl lg:text-9xl">
-            wallets not blank checks
+          <p className="mt-4 text-xs font-light tracking-[0.22em] text-green-light/60 uppercase md:text-sm">
+            wallets, not blank checks
           </p>
-        </div>
-      </ScrollReveal>
-    </section>
+        </ScrollReveal>
+      </div>
+    </footer>
   )
 }

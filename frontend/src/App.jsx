@@ -1,7 +1,6 @@
-import { useState } from 'react'
 import AboutSection from './components/AboutSection'
 import CrewSection from './components/CrewSection'
-import DocsPage from './components/DocsPage'
+// import DocsPage from './components/DocsPage'
 import Hero from './components/Hero'
 import JudgeAccessPage from './components/JudgeAccessPage'
 import Navbar from './components/Navbar'
@@ -10,9 +9,10 @@ import ProcessSection from './components/ProcessSection'
 import SectionDivider from './components/SectionDivider'
 import SiteFooter from './components/SiteFooter'
 import Testimonials from './components/Testimonials'
-import WaitlistModal from './components/WaitlistModal'
 import Dashboard from './components/dashboard/Dashboard'
 import useHashRoute from './hooks/useHashRoute'
+
+const WAITLIST_URL = 'https://tally.so/r/aQva1q'
 
 /* --------------------------------------------------------------------------
  * LANDING MOTION STORYBOARD
@@ -34,18 +34,19 @@ const PUBLIC_ACCESS_MODE =
 
 function isJudgeSessionActive() {
   if (!PUBLIC_ACCESS_MODE) return true
-  const expiresAt = Number(window.sessionStorage.getItem('palmos_judge_access'))
+  const expiresAt = Number(
+    window.sessionStorage.getItem('palmos_dashboard_access') ??
+      window.sessionStorage.getItem('palmos_judge_access'),
+  )
   return Number.isFinite(expiresAt) && expiresAt > Date.now()
 }
 
 function LandingPage() {
-  const [waitlistOpen, setWaitlistOpen] = useState(false)
-
   return (
-    <div className="antialiased selection:bg-white selection:text-black">
-      <Navbar onJoinWaitlist={() => setWaitlistOpen(true)} />
-      <main className="relative w-full overflow-hidden pt-32">
-        <Hero onGetStarted={() => setWaitlistOpen(true)} />
+    <div id="top" className="bg-page text-ink antialiased selection:bg-forest selection:text-white">
+      <Navbar waitlistUrl={WAITLIST_URL} />
+      <main className="relative w-full overflow-hidden">
+        <Hero waitlistUrl={WAITLIST_URL} />
         <SectionDivider />
         <AboutSection />
         <SectionDivider />
@@ -53,13 +54,9 @@ function LandingPage() {
         <SectionDivider />
         <Testimonials />
         <CrewSection />
-        <Newsletter onBookDemo={() => setWaitlistOpen(true)} />
+        <Newsletter waitlistUrl={WAITLIST_URL} />
         <SiteFooter />
       </main>
-      <WaitlistModal
-        open={waitlistOpen}
-        onClose={() => setWaitlistOpen(false)}
-      />
     </div>
   )
 }
@@ -71,9 +68,9 @@ export default function App() {
     return <JudgeAccessPage />
   }
 
-  if (hash === 'docs') {
-    return <DocsPage />
-  }
+  // if (hash === 'docs') {
+  //   return <DocsPage />
+  // }
 
   if (hash.startsWith('dashboard')) {
     if (!isJudgeSessionActive()) {
