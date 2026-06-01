@@ -1,14 +1,17 @@
 import AboutSection from './components/AboutSection'
+import AgentCapabilitiesSection from './components/AgentCapabilitiesSection'
 import CrewSection from './components/CrewSection'
 // import DocsPage from './components/DocsPage'
 import Hero from './components/Hero'
 import JudgeAccessPage from './components/JudgeAccessPage'
 import Navbar from './components/Navbar'
 import Newsletter from './components/Newsletter'
+import OperatorControlsSection from './components/OperatorControlsSection'
 import ProcessSection from './components/ProcessSection'
 import SectionDivider from './components/SectionDivider'
 import SiteFooter from './components/SiteFooter'
 import Testimonials from './components/Testimonials'
+import WorkflowsSection from './components/WorkflowsSection'
 import Dashboard from './components/dashboard/Dashboard'
 import useHashRoute from './hooks/useHashRoute'
 
@@ -49,6 +52,12 @@ function LandingPage() {
         <Hero waitlistUrl={WAITLIST_URL} />
         <SectionDivider />
         <AboutSection />
+        <SectionDivider />
+        <AgentCapabilitiesSection />
+        {/* <SectionDivider />
+        <OperatorControlsSection />
+        <SectionDivider />
+        <WorkflowsSection /> */}
         <SectionDivider />
         <ProcessSection />
         <SectionDivider />

@@ -28,18 +28,21 @@ function validate(form) {
 function Field({ id, label, error, children }) {
   return (
     <div>
-      <label htmlFor={id} className="text-[10px] uppercase tracking-widest text-neutral-500">
+      <label htmlFor={id} className="text-[10px] uppercase tracking-widest text-muted">
         {label}
       </label>
       <div className="mt-1">{children}</div>
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-[11px] text-red-300">
+        <p id={`${id}-error`} className="mt-1 text-[11px] text-[#a8414f]">
           {error}
         </p>
       )}
     </div>
   )
 }
+
+const INPUT_CLASS =
+  'min-h-10 w-full rounded-lg border border-line bg-card-muted px-3 text-sm text-ink focus:border-forest focus:outline-none focus-visible:ring-1 focus-visible:ring-forest'
 
 export default function WaitlistModal({ open, onClose }) {
   const [form, setForm] = useState(INITIAL_FORM)
@@ -114,25 +117,25 @@ export default function WaitlistModal({ open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-md"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/50 px-4 py-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="waitlist-title"
     >
-      <div className="w-full max-w-lg border border-neutral-800 bg-black text-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-neutral-900 px-5 py-4">
+      <div className="w-full max-w-lg rounded-[22px] border border-line bg-card text-ink shadow-[0_1px_2px_rgba(16,24,22,0.05),0_14px_34px_rgba(16,24,22,0.12)]">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em] text-neutral-600">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-green-2">
               PalmOS private access
             </div>
-            <h2 id="waitlist-title" className="mt-1 text-xl font-medium">
+            <h2 id="waitlist-title" className="mt-1 text-xl font-semibold">
               Join the waitlist
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-forest"
             aria-label="Close waitlist form"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -141,13 +144,13 @@ export default function WaitlistModal({ open, onClose }) {
 
         {complete ? (
           <div className="p-5">
-            <div className="flex items-start gap-3 border border-green-500/30 bg-green-500/5 px-4 py-4">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-400" aria-hidden="true" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-green-light bg-green-pale px-4 py-4">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-2" aria-hidden="true" />
               <div>
-                <h3 className="text-sm font-medium text-green-200">
+                <h3 className="text-sm font-semibold text-forest">
                   You're on the PalmOS waitlist.
                 </h3>
-                <p className="mt-1 text-sm leading-6 text-green-200/80">
+                <p className="mt-1 text-sm leading-6 text-green-2">
                   We'll reach out when access opens.
                 </p>
               </div>
@@ -155,7 +158,7 @@ export default function WaitlistModal({ open, onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="mt-5 min-h-10 w-full cursor-pointer border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+              className="mt-5 min-h-11 w-full cursor-pointer rounded-full bg-forest px-4 text-xs font-semibold uppercase tracking-widest text-white transition-colors hover:bg-green-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-forest"
             >
               Done
             </button>
@@ -163,7 +166,7 @@ export default function WaitlistModal({ open, onClose }) {
         ) : (
           <form onSubmit={submit} className="space-y-4 p-5">
             {serverError && (
-              <div className="border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-300">
+              <div className="rounded-lg border border-pink/40 bg-pink/10 px-3 py-2 text-sm text-[#a8414f]">
                 {serverError}
               </div>
             )}
@@ -178,7 +181,7 @@ export default function WaitlistModal({ open, onClose }) {
                 onChange={(event) => updateField('name', event.target.value)}
                 aria-invalid={errors.name ? 'true' : undefined}
                 aria-describedby={errors.name ? 'waitlist-name-error' : undefined}
-                className="min-h-10 w-full border border-neutral-800 bg-neutral-950 px-3 text-sm text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                className={INPUT_CLASS}
               />
             </Field>
 
@@ -192,7 +195,7 @@ export default function WaitlistModal({ open, onClose }) {
                 onChange={(event) => updateField('email', event.target.value)}
                 aria-invalid={errors.email ? 'true' : undefined}
                 aria-describedby={errors.email ? 'waitlist-email-error' : undefined}
-                className="min-h-10 w-full border border-neutral-800 bg-neutral-950 px-3 text-sm text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                className={INPUT_CLASS}
               />
             </Field>
 
@@ -205,7 +208,7 @@ export default function WaitlistModal({ open, onClose }) {
                 onChange={(event) => updateField('roleCompany', event.target.value)}
                 aria-invalid={errors.roleCompany ? 'true' : undefined}
                 aria-describedby={errors.roleCompany ? 'waitlist-role-company-error' : undefined}
-                className="min-h-10 w-full border border-neutral-800 bg-neutral-950 px-3 text-sm text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                className={INPUT_CLASS}
               />
             </Field>
 
@@ -221,7 +224,7 @@ export default function WaitlistModal({ open, onClose }) {
                 onChange={(event) => updateField('agentUseCase', event.target.value)}
                 aria-invalid={errors.agentUseCase ? 'true' : undefined}
                 aria-describedby={errors.agentUseCase ? 'waitlist-agent-use-case-error' : undefined}
-                className="w-full resize-none border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm leading-6 text-white focus:border-white focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                className="w-full resize-none rounded-lg border border-line bg-card-muted px-3 py-2 text-sm leading-6 text-ink focus:border-forest focus:outline-none focus-visible:ring-1 focus-visible:ring-forest"
               />
             </Field>
 
@@ -229,7 +232,7 @@ export default function WaitlistModal({ open, onClose }) {
               type="submit"
               disabled={pending}
               aria-busy={pending}
-              className="min-h-10 w-full cursor-pointer border border-white bg-white px-4 text-xs uppercase tracking-widest text-black transition-colors hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
+              className="min-h-11 w-full cursor-pointer rounded-full bg-forest px-4 text-xs font-semibold uppercase tracking-widest text-white transition-colors hover:bg-green-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-forest disabled:cursor-wait disabled:opacity-60"
             >
               {pending ? 'Joining...' : 'Join waitlist'}
             </button>

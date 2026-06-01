@@ -12,7 +12,7 @@ const iconMap = {
 export default function ProcessSection() {
   return (
     <section id="how-it-works" className="px-6 py-20 md:px-12">
-      <div className="grid grid-cols-1 gap-12 border-t border-neutral-800 pt-12 md:grid-cols-3 md:gap-8">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 border-t border-line pt-12 md:grid-cols-3 md:gap-8">
         {howItWorksSteps.map((col, index) => {
           const Icon = iconMap[col.icon]
           return (
@@ -23,22 +23,22 @@ export default function ProcessSection() {
               direction="up"
               amount={0.4}
             >
-              <div className="mb-6 flex items-center gap-3 text-neutral-500">
-                <span className="rounded border border-neutral-800 px-1.5 py-0.5 font-mono text-xs">
+              <div className="mb-6 flex items-center gap-3 text-muted">
+                <span className="rounded border border-line bg-card px-1.5 py-0.5 font-mono text-xs text-green-2">
                   {col.step}
                 </span>
-                <h3 className="text-sm font-medium tracking-widest text-white uppercase">
+                <h3 className="text-sm font-semibold tracking-widest text-ink uppercase">
                   {col.title}
                 </h3>
               </div>
               <div className="flex items-center gap-4 transition-transform duration-300 group-hover:translate-x-2">
                 {Icon && (
                   <Icon
-                    className="h-8 w-8 text-neutral-600 transition-colors group-hover:text-white"
+                    className="h-8 w-8 shrink-0 text-muted transition-colors group-hover:text-forest"
                     strokeWidth={1.5}
                   />
                 )}
-                <span className="text-2xl font-medium tracking-tight text-neutral-300 group-hover:text-white md:text-3xl">
+                <span className="text-2xl font-medium tracking-tight text-ink-dim transition-colors group-hover:text-ink md:text-3xl">
                   {col.description}
                 </span>
               </div>

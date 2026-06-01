@@ -23,10 +23,10 @@ export default function Navbar({ waitlistUrl }) {
       <div className="flex items-center justify-between px-6 py-5 md:px-12 md:py-6">
         <a href="#top" className="flex items-center gap-2">
           <img
-            src={scrolled ? '/mark-ink.svg' : '/mark-white.svg'}
+            src={scrolled ? '/mark-ink.svg' : '/vite.svg'}
             alt=""
             aria-hidden="true"
-            className="h-8 w-8"
+            className="h-6 w-6"
           />
           <span
             className={`text-xl font-bold tracking-tight transition-colors ${

@@ -10,10 +10,10 @@ export default function Newsletter({ waitlistUrl }) {
       >
         <div className="relative z-10">
           <h2 className="mb-4 text-4xl font-semibold tracking-[-0.03em] text-ink md:text-5xl">
-            ready to take control?
+            give your agents financial authority without giving up control
           </h2>
           <p className="mb-10 text-lg font-light text-ink-dim md:text-xl">
-            See agent spend governance in action
+            Let agents read wallets, act within rules, and escalate sensitive actions when needed. PalmOS keeps the operator, the policy, and the audit trail in the loop.
           </p>
 
           <a

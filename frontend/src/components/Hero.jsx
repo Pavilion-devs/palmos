@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Play } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { LANDING_SPRING } from './motion/landingMotion'
 
@@ -11,6 +11,8 @@ const MotionDiv = motion.div
 const MotionHeading = motion.h1
 const MotionParagraph = motion.p
 const MotionA = motion.a
+
+const DEMO_URL = 'https://x.com/olathepavilion/status/2054172802278682936?s=20'
 
 export default function Hero({ waitlistUrl }) {
   const prefersReducedMotion = useReducedMotion()
@@ -68,6 +70,16 @@ export default function Hero({ waitlistUrl }) {
           <span>Get started</span>
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2} />
         </MotionA>
+
+        <a
+          href={DEMO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 px-8 py-4 text-base font-semibold text-white/80 transition-colors hover:border-white/60 hover:text-white sm:w-auto"
+        >
+          <Play className="h-4 w-4 fill-current" strokeWidth={0} />
+          <span>Watch demo</span>
+        </a>
       </MotionDiv>
     </section>
   )

@@ -1,3 +1,3 @@
 export default function SectionDivider() {
-  return <div className="my-20 h-px w-full bg-neutral-900 px-6 md:px-12" />
+  return <div className="mx-auto my-16 h-px w-full max-w-7xl bg-ink/[0.07]" />
 }

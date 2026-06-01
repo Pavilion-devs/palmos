@@ -14,6 +14,22 @@ export default function JudgeAccessPage() {
   const [pending, setPending] = useState(false)
   const inputRef = useRef(null)
 
+  async function requestAccess(path, body) {
+    const response = await fetch(buildApiUrl(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok || payload?.ok === false || !payload?.expiresAt) {
+      return null
+    }
+
+    return payload
+  }
+
   async function submit(event) {
     event.preventDefault()
     setError('')
@@ -26,18 +42,20 @@ export default function JudgeAccessPage() {
 
     setPending(true)
     try {
-      const response = await fetch(buildApiUrl('/api/dashboard/judge-access'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ passcode }),
-      })
-      const payload = await response.json().catch(() => null)
+      const trimmedPasscode = passcode.trim()
+      const payload =
+        (await requestAccess('/api/dashboard/operator-login', {
+          password: trimmedPasscode,
+        })) ??
+        (await requestAccess('/api/dashboard/judge-access', {
+          passcode: trimmedPasscode,
+        }))
 
-      if (!response.ok || payload?.ok === false || !payload?.expiresAt) {
+      if (!payload) {
         throw new Error('Invalid access code. Check the code from the submission notes.')
       }
 
+      window.sessionStorage.setItem('palmos_dashboard_access', String(payload.expiresAt))
       window.sessionStorage.setItem('palmos_judge_access', String(payload.expiresAt))
       navigate('#dashboard')
     } catch (requestError) {
