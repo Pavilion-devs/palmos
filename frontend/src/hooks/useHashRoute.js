@@ -64,6 +64,11 @@ export function parseDashboardRoute(hash) {
   if (section === 'transactions') {
     return id ? { page: 'transaction-detail', executionId: id } : { page: 'transactions' }
   }
+  if (section === 'wallet-actions') {
+    return id
+      ? { page: 'wallet-action-detail', walletActionId: id }
+      : { page: 'transactions' }
+  }
   if (section === 'approvals') return { page: 'approvals' }
   if (section === 'settings') return { page: 'settings' }
 

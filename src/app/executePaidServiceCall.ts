@@ -3,19 +3,26 @@ import {
   createDefaultPalmosServiceCatalog,
   type PalmosServiceCatalog,
 } from '../integrations/pusd/serviceCatalog.js'
-import { type PalmosClient } from '../integrations/pusd/client.js'
-import { parsePusdAmountToBaseUnits } from '../integrations/pusd/amount.js'
+import {
+  type PalmosClient,
+  type PalmosExecutionSettlement,
+} from '../integrations/pusd/client.js'
+import {
+  formatPusdBaseUnits,
+  parsePusdAmountToBaseUnits,
+} from '../integrations/pusd/amount.js'
+import {
+  fetchWithTimeout,
+  parseResponseBodyWithLimit,
+} from '../integrations/pusd/httpSafety.js'
 import {
   PALMOS_PAYMENT_RAIL,
   readPusdMintFromEnv,
-  SOLANA_DEVNET_CHAIN_ID,
-  SOLANA_LOCAL_CHAIN_ID,
-  SOLANA_MAINNET_CHAIN_ID,
-  type SolanaCluster,
 } from '../integrations/pusd/constants.js'
 import {
   assertPusdPaymentInstructionMatchesPolicy,
   type ExpectedPusdPaymentInstruction,
+  type PusdPaymentRequiredResponse,
 } from '../integrations/pusd/paymentInstructions.js'
 import {
   type X402ServiceCatalog,
@@ -24,15 +31,34 @@ import { type X402Client } from '../integrations/x402/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { XmtpNotifier } from '../integrations/xmtp/client.js'
 import {
+  readServiceEndpointAllowlist,
+  type EndpointLookup,
+} from '../server/dashboard/serviceEndpointSafety.js'
+import {
+  evaluatePalmosServiceReadiness,
+  formatServiceReadinessFailure,
+} from '../server/dashboard/serviceReadiness.js'
+import {
   normalizeAgentSettlementMode,
   type AgentRecord,
   type AgentSettlementMode,
 } from '../store/AgentRegistry.js'
 import type {
+  ActionRequestRecord,
+  ActionRequestRegistry,
+  ActionRequestSource,
+} from '../store/ActionRequestRegistry.js'
+import type {
   PaidCallPaymentRail,
   PaidCallRecord,
   PaidCallRegistry,
 } from '../store/PaidCallRegistry.js'
+import {
+  buildPaidCallSettlementRecord,
+  buildSolscanTransactionUrl,
+  toSolanaCluster,
+} from './settlementRecords.js'
+import { readLocalDemoSettlementPosture } from './localDemoSettlement.js'
 
 export type ExecutePaidServiceCallInput = {
   agentId: string
@@ -40,9 +66,11 @@ export type ExecutePaidServiceCallInput = {
   request: Record<string, unknown>
   amount?: string
   note?: string
+  source?: ActionRequestSource
 }
 
 export type ExecutePaidServiceCallDependencies = RequestPaidActionDependencies & {
+  actionRequests?: ActionRequestRegistry
   paidCalls?: PaidCallRegistry
   palmosClient?: PalmosClient
   x402Client?: X402Client
@@ -50,6 +78,9 @@ export type ExecutePaidServiceCallDependencies = RequestPaidActionDependencies &
   serviceCatalog?: PalmosServiceCatalog | X402ServiceCatalog
   xmtpNotifier?: XmtpNotifier
   createId?: (prefix: string) => string
+  serviceEndpointLookup?: EndpointLookup
+  serviceEndpointAllowlist?: string[]
+  env?: Record<string, string | undefined>
 }
 
 export type ExecutePaidServiceCallResult =
@@ -89,6 +120,23 @@ function createExecutionId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 }
 
+function mapActionRequestConnectorKind(
+  paymentRail: PaidCallPaymentRail,
+): ActionRequestRecord['executionPlan'] extends infer Plan
+  ? Plan extends { connectorKind?: infer Kind }
+    ? Kind
+    : string | undefined
+  : string | undefined {
+  switch (paymentRail) {
+    case 'palmos-pusd':
+      return 'pusd'
+    case 'umbra':
+      return 'umbra'
+    default:
+      return paymentRail
+  }
+}
+
 type ParsedXPaymentResponse = {
   success?: boolean
   transaction?: string
@@ -104,6 +152,10 @@ type ParsedPusdPaymentResponse = {
   demo?: boolean
 }
 
+type PalmosSettlementMetadata =
+  | PalmosExecutionSettlement
+  | (Omit<PalmosExecutionSettlement, 'mode'> & { mode: 'ows' })
+
 type SessionBudgetDecision =
   | {
       status: 'allowed'
@@ -118,6 +170,7 @@ type SessionBudgetDecision =
       remaining: string
       projectedSpend: string
       reason: string
+      reasonCode?: 'policy.invalid_amount' | 'policy.session_budget_exceeded'
     }
 
 function isPusdPaymentRequiredBody(body: unknown): body is import('../integrations/pusd/paymentInstructions.js').PusdPaymentRequiredResponse {
@@ -175,16 +228,7 @@ function parsePusdPaymentResponseHeader(
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
-  if (response.status === 204) {
-    return null
-  }
-
-  const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-  if (contentType.includes('application/json')) {
-    return response.json()
-  }
-
-  return response.text()
+  return parseResponseBodyWithLimit(response)
 }
 
 function collectHeaders(headers: Headers): Record<string, string> {
@@ -242,17 +286,26 @@ function assertWithinRealPusdCap(amount: string, cap?: string): void {
   }
 }
 
-function parseAmount(value: string | undefined): number {
-  if (!value) {
-    return 0
+function parseBudgetAmount(value: string | undefined): {
+  amount?: bigint
+  invalid: boolean
+} {
+  if (value == null || value.trim() === '') {
+    return { invalid: false }
   }
 
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+  try {
+    return {
+      amount: parsePusdAmountToBaseUnits(value),
+      invalid: false,
+    }
+  } catch {
+    return { invalid: true }
+  }
 }
 
-function formatBudgetAmount(value: number): string {
-  return value.toFixed(6).replace(/\.?0+$/, '')
+function formatBudgetAmount(value: bigint): string {
+  return formatPusdBaseUnits(value)
 }
 
 function isBudgetCommittedStatus(status: PaidCallRecord['status']): boolean {
@@ -269,14 +322,38 @@ async function evaluateSessionBudget(input: {
   amount: string
   assetSymbol: string
 }): Promise<SessionBudgetDecision> {
-  const budgetAmount = parseAmount(input.agent.policyConfig.sessionBudget)
-  const callAmount = parseAmount(input.amount)
+  const budgetAmount = parseBudgetAmount(input.agent.policyConfig.sessionBudget)
+  const callAmount = parseBudgetAmount(input.amount)
 
-  if (!input.paidCalls || budgetAmount <= 0 || callAmount <= 0) {
+  if (budgetAmount.invalid) {
+    return {
+      status: 'blocked',
+      sessionBudget: input.agent.policyConfig.sessionBudget ?? 'invalid',
+      spent: '0',
+      remaining: '0',
+      projectedSpend: input.amount,
+      reason: `Invalid session budget amount: ${input.agent.policyConfig.sessionBudget}.`,
+      reasonCode: 'policy.invalid_amount',
+    }
+  }
+
+  if (!input.paidCalls || budgetAmount.amount == null || budgetAmount.amount <= 0n) {
     return {
       status: 'allowed',
       sessionBudget: input.agent.policyConfig.sessionBudget,
       spent: '0',
+    }
+  }
+
+  if (callAmount.invalid || callAmount.amount == null || callAmount.amount <= 0n) {
+    return {
+      status: 'blocked',
+      sessionBudget: formatBudgetAmount(budgetAmount.amount),
+      spent: '0',
+      remaining: formatBudgetAmount(budgetAmount.amount),
+      projectedSpend: '0',
+      reason: `Invalid requested payment amount: ${input.amount}.`,
+      reasonCode: 'policy.invalid_amount',
     }
   }
 
@@ -289,12 +366,19 @@ async function evaluateSessionBudget(input: {
       (record) =>
         record.sessionId == null || record.sessionId === input.agent.sessionId,
     )
-    .reduce((total, record) => total + parseAmount(record.amount), 0)
+    .reduce((total, record) => {
+      try {
+        return total + parsePusdAmountToBaseUnits(record.amount)
+      } catch {
+        return total
+      }
+    }, 0n)
 
-  const projectedSpend = spentAmount + callAmount
-  const remaining = Math.max(budgetAmount - spentAmount, 0)
-  if (projectedSpend > budgetAmount) {
-    const sessionBudget = formatBudgetAmount(budgetAmount)
+  const projectedSpend = spentAmount + callAmount.amount
+  const remaining =
+    budgetAmount.amount > spentAmount ? budgetAmount.amount - spentAmount : 0n
+  if (projectedSpend > budgetAmount.amount) {
+    const sessionBudget = formatBudgetAmount(budgetAmount.amount)
     const spent = formatBudgetAmount(spentAmount)
     const remainingFormatted = formatBudgetAmount(remaining)
     const projectedSpendFormatted = formatBudgetAmount(projectedSpend)
@@ -305,15 +389,16 @@ async function evaluateSessionBudget(input: {
       spent,
       remaining: remainingFormatted,
       projectedSpend: projectedSpendFormatted,
-      reason: `Session budget exceeded. Budget ${sessionBudget} ${input.assetSymbol}, spent ${spent} ${input.assetSymbol}, requested ${formatBudgetAmount(callAmount)} ${input.assetSymbol}, projected ${projectedSpendFormatted} ${input.assetSymbol}.`,
+      reason: `Session budget exceeded. Budget ${sessionBudget} ${input.assetSymbol}, spent ${spent} ${input.assetSymbol}, requested ${formatBudgetAmount(callAmount.amount)} ${input.assetSymbol}, projected ${projectedSpendFormatted} ${input.assetSymbol}.`,
+      reasonCode: 'policy.session_budget_exceeded',
     }
   }
 
   return {
     status: 'allowed',
-    sessionBudget: formatBudgetAmount(budgetAmount),
+    sessionBudget: formatBudgetAmount(budgetAmount.amount),
     spent: formatBudgetAmount(spentAmount),
-    remaining: formatBudgetAmount(budgetAmount - projectedSpend),
+    remaining: formatBudgetAmount(budgetAmount.amount - projectedSpend),
   }
 }
 
@@ -327,8 +412,9 @@ async function executePalmosWithOws(input: {
   status: number
   headers: Record<string, string>
   body: unknown
+  settlement?: Omit<PalmosExecutionSettlement, 'mode'> & { mode: 'ows' }
 }> {
-  const initialResponse = await fetch(input.url, input.init)
+  const initialResponse = await fetchWithTimeout(fetch, input.url, input.init)
   const initialBody = await parseResponseBody(initialResponse)
 
   if (initialResponse.status !== 402 || !isPusdPaymentRequiredBody(initialBody)) {
@@ -356,7 +442,7 @@ async function executePalmosWithOws(input: {
     throw new Error('OWS did not return a Solana transaction signature.')
   }
 
-  const retryResponse = await fetch(input.url, {
+  const retryResponse = await fetchWithTimeout(fetch, input.url, {
     ...input.init,
     headers: mergeHeaders(input.init?.headers, {
       'x-pusd-payment': payment.signature,
@@ -370,6 +456,19 @@ async function executePalmosWithOws(input: {
     status: retryResponse.status,
     headers: collectHeaders(retryResponse.headers),
     body: retryBody,
+    settlement: {
+      rail: PALMOS_PAYMENT_RAIL,
+      mode: 'ows',
+      amount: initialBody.amount,
+      assetSymbol: 'PUSD',
+      mint: initialBody.mint,
+      network: initialBody.network,
+      payer:
+        input.deps.owsClient?.getSolanaAddress(input.wallet) ?? input.wallet,
+      recipient: initialBody.recipient,
+      reference: initialBody.reference,
+      signature: payment.signature,
+    },
   }
 }
 
@@ -441,6 +540,7 @@ function toRecordBase(input: {
   sessionId?: string
   runtimeStatus?: string
   runtimePhase?: string
+  requestSource?: ActionRequestSource
   requestPayload: Record<string, unknown>
 }): PaidCallRecord {
   return {
@@ -461,22 +561,83 @@ function toRecordBase(input: {
     walletId: input.agent.walletId,
     runtimeStatus: input.runtimeStatus,
     runtimePhase: input.runtimePhase,
+    requestSource: input.requestSource,
     requestPayload: input.requestPayload,
     requestSummary: input.requestSummary,
     requestUrl: input.requestUrl,
   }
 }
 
-function toSolanaCluster(chainId: string): SolanaCluster | undefined {
-  if (
-    chainId === SOLANA_MAINNET_CHAIN_ID ||
-    chainId === SOLANA_DEVNET_CHAIN_ID ||
-    chainId === SOLANA_LOCAL_CHAIN_ID
-  ) {
-    return chainId
+function buildServicePayActionRequestRecord(input: {
+  executionId: string
+  at: string
+  agent: AgentRecord
+  serviceId: string
+  vendorId: string
+  paymentRail: PaidCallPaymentRail
+  amount: string
+  assetSymbol: string
+  chainId: string
+  requestSummary: Record<string, unknown>
+  requestUrl?: string
+  requestSource?: ActionRequestSource
+  requestPayload: Record<string, unknown>
+}): ActionRequestRecord {
+  const settlementMode = resolveAgentSettlementMode(input.agent)
+  const source = input.requestSource ?? 'system'
+  return {
+    actionRequestId: input.executionId,
+    createdAt: input.at,
+    updatedAt: input.at,
+    agentId: input.agent.agentId,
+    organizationId: input.agent.organizationId,
+    treasuryId: input.agent.treasuryId,
+    walletId: input.agent.walletId,
+    source,
+    kind: 'service.pay',
+    status: 'created',
+    target: {
+      kind: 'service',
+      serviceId: input.serviceId,
+      vendorId: input.vendorId,
+      endpointUrl: input.requestUrl,
+    },
+    value: {
+      assetSymbol: input.assetSymbol,
+      amount: input.amount,
+      chainId: input.chainId,
+    },
+    title: `Service payment ${input.serviceId}`,
+    summary: `Requested ${input.amount} ${input.assetSymbol} for ${input.serviceId}.`,
+    requestPayload: input.requestPayload,
+    requestContext: {
+      legacyRecordType: 'PaidCall',
+      requestSource: source,
+      requestSummary: input.requestSummary,
+      paymentRail: input.paymentRail,
+      settlementMode,
+      intakeStage: 'created',
+    },
+    policy: {
+      approvalRequired: false,
+      limitsApplied: {
+        legacyRecordType: 'PaidCall',
+        paymentRail: input.paymentRail,
+        settlementMode,
+        intakeStatus: 'created',
+      },
+    },
+    executionPlan: {
+      connectorKind: mapActionRequestConnectorKind(input.paymentRail),
+      settlementAsset: input.assetSymbol,
+      privacyMode: input.paymentRail === 'umbra' ? 'required' : 'off',
+      executionMode: settlementMode,
+    },
+    runtimeRefs: {
+      sessionId: input.agent.sessionId,
+      intentIds: [],
+    },
   }
-
-  return undefined
 }
 
 function buildExpectedPusdPaymentInstruction(input: {
@@ -502,22 +663,29 @@ function buildExpectedPusdPaymentInstruction(input: {
   }
 }
 
-function buildSolscanTransactionUrl(
-  signature: string | undefined,
-  chainId: string | undefined,
-): string | undefined {
-  const solanaSignaturePattern = /^[1-9A-HJ-NP-Za-km-z]+$/
-  if (
-    !signature ||
-    signature.length < 80 ||
-    !solanaSignaturePattern.test(signature) ||
-    chainId === SOLANA_LOCAL_CHAIN_ID
-  ) {
-    return undefined
-  }
+function isRegisteredPalmosService(
+  service: PalmosServiceCatalog[string] | X402ServiceCatalog[string],
+): service is PalmosServiceCatalog[string] {
+  return (
+    service.paymentRail === PALMOS_PAYMENT_RAIL &&
+    'source' in service &&
+    service.source === 'registered'
+  )
+}
 
-  const cluster = chainId === SOLANA_DEVNET_CHAIN_ID ? '?cluster=devnet' : ''
-  return `https://solscan.io/tx/${signature}${cluster}`
+function findAllowedVendorRecipient(input: {
+  agent: AgentRecord
+  vendorId: string
+}): string | undefined {
+  return input.agent.policyConfig.allowedVendors.find(
+    (candidate) => candidate.vendorId === input.vendorId,
+  )?.destinationAddress
+}
+
+function readExecutionEndpointAllowlist(
+  deps: ExecutePaidServiceCallDependencies,
+): string[] {
+  return deps.serviceEndpointAllowlist ?? readServiceEndpointAllowlist(process.env)
 }
 
 function classifyExecutionError(input: {
@@ -525,6 +693,10 @@ function classifyExecutionError(input: {
   message: string
 }): string {
   const normalized = input.message.toLowerCase()
+  if (normalized.includes('redirect')) {
+    return 'service.redirect_blocked'
+  }
+
   if (input.isPalmosRail) {
     if (
       normalized.includes('payment instruction') ||
@@ -600,6 +772,66 @@ export async function continueRuntimeBoundPaidExecution(
   const preparedRequest = service.buildRequest(input.requestPayload as never)
   const isPalmosRail = service.paymentRail === PALMOS_PAYMENT_RAIL
   const settlementMode = resolveAgentSettlementMode(input.agent)
+  const localDemoPosture =
+    isPalmosRail && settlementMode === 'local-demo'
+      ? readLocalDemoSettlementPosture(deps.env)
+      : undefined
+  if (localDemoPosture && !localDemoPosture.allowed) {
+    const failedRecord: PaidCallRecord = {
+      ...input.execution,
+      status: 'failed',
+      updatedAt: deps.now?.() ?? new Date().toISOString(),
+      runtimeStatus: currentRun?.status ?? input.execution.runtimeStatus,
+      runtimePhase: currentRun?.currentPhase ?? input.execution.runtimePhase,
+      errorCode: 'palmos.local_demo_not_allowed',
+      errorMessage: localDemoPosture.reason,
+    }
+    await deps.paidCalls?.put(failedRecord)
+    return {
+      kind: 'execution_failed',
+      agent: input.agent,
+      execution: failedRecord,
+      turnOutput: input.turnOutput ?? [],
+      error: failedRecord.errorMessage ?? localDemoPosture.reason,
+    }
+  }
+  const shouldRequireRegisteredReadiness =
+    isRegisteredPalmosService(service) && settlementMode !== 'local-demo'
+  const readiness = isPalmosRail && shouldRequireRegisteredReadiness
+    ? await evaluatePalmosServiceReadiness({
+        service,
+        destinationAddress: findAllowedVendorRecipient({
+          agent: input.agent,
+          vendorId: service.vendorId,
+        }),
+        endpointUrl: preparedRequest.url,
+        requestedAmount: input.execution.amount,
+        requireVerified: shouldRequireRegisteredReadiness,
+        requireSafeEndpoint: shouldRequireRegisteredReadiness,
+        allowedHostnames: readExecutionEndpointAllowlist(deps),
+        lookup: deps.serviceEndpointLookup,
+      })
+    : undefined
+  if (readiness && !readiness.ok) {
+    const failedRecord: PaidCallRecord = {
+      ...input.execution,
+      status: 'failed',
+      updatedAt: deps.now?.() ?? new Date().toISOString(),
+      runtimeStatus: currentRun?.status ?? input.execution.runtimeStatus,
+      runtimePhase: currentRun?.currentPhase ?? input.execution.runtimePhase,
+      errorCode: readiness.checks[0]?.code ?? 'service.not_ready',
+      errorMessage: formatServiceReadinessFailure(readiness),
+    }
+    await deps.paidCalls?.put(failedRecord)
+    return {
+      kind: 'execution_failed',
+      agent: input.agent,
+      execution: failedRecord,
+      turnOutput: input.turnOutput ?? [],
+      error: failedRecord.errorMessage ?? 'Paid service is not ready.',
+    }
+  }
+
   const owsPayEligible =
     deps.owsClient != null &&
     input.agent.owsWalletName != null &&
@@ -779,15 +1011,30 @@ export async function continueRuntimeBoundPaidExecution(
       }
     }
 
-    const paymentResponse = isPalmosRail
+    const pusdPaymentResponse = isPalmosRail
       ? parsePusdPaymentResponseHeader(response.headers)
+      : undefined
+    const xPaymentResponse = isPalmosRail
+      ? undefined
       : parseXPaymentResponseHeader(response.headers)
+    const responseSettlement: PalmosSettlementMetadata | undefined =
+      isPalmosRail && 'settlement' in response
+        ? (response.settlement as PalmosSettlementMetadata | undefined)
+        : undefined
+    const transactionSignature =
+      pusdPaymentResponse?.transaction ??
+      xPaymentResponse?.transaction ??
+      responseSettlement?.signature
+    const transactionExplorerUrl = isPalmosRail
+      ? buildSolscanTransactionUrl(transactionSignature, service.chainId)
+      : undefined
+    const updatedAt = deps.now?.() ?? new Date().toISOString()
     const refreshedRun = await finalizeRuntimeRunFromPaidExecution({
       deps,
       sessionId: input.execution.sessionId ?? input.agent.sessionId,
       runId: input.execution.runId,
       signatureRequestId,
-      transactionHash: paymentResponse?.transaction,
+      transactionHash: transactionSignature,
       status: 'signed',
       summary: isPalmosRail
         ? 'Paid PalmOS PUSD execution succeeded and settlement was observed.'
@@ -797,7 +1044,7 @@ export async function continueRuntimeBoundPaidExecution(
     const executedRecord: PaidCallRecord = {
       ...input.execution,
       status: 'executed',
-      updatedAt: deps.now?.() ?? new Date().toISOString(),
+      updatedAt,
       runtimeStatus: refreshedRun?.status ?? currentRun?.status ?? input.execution.runtimeStatus,
       runtimePhase:
         refreshedRun?.currentPhase ??
@@ -808,13 +1055,34 @@ export async function continueRuntimeBoundPaidExecution(
       responsePreview: response.body,
       errorCode: undefined,
       errorMessage: undefined,
-      transactionSignature: paymentResponse?.transaction,
-      transactionExplorerUrl: isPalmosRail
-        ? buildSolscanTransactionUrl(
-            paymentResponse?.transaction,
-            service.chainId,
-          )
-        : undefined,
+      transactionSignature,
+      transactionExplorerUrl,
+      settlement: buildPaidCallSettlementRecord({
+        rail: service.paymentRail,
+        mode: isPalmosRail ? responseSettlement?.mode ?? settlementMode : 'x402',
+        amount: input.execution.amount,
+        assetSymbol: service.assetSymbol,
+        network: isPalmosRail
+          ? responseSettlement?.network ??
+            pusdPaymentResponse?.network ??
+            expectedPusdPayment?.network
+          : xPaymentResponse?.network,
+        mint: isPalmosRail
+          ? responseSettlement?.mint ?? expectedPusdPayment?.mint
+          : undefined,
+        payer: isPalmosRail
+          ? responseSettlement?.payer
+          : xPaymentResponse?.payer,
+        recipient: isPalmosRail
+          ? responseSettlement?.recipient ?? expectedPusdPayment?.recipient
+          : undefined,
+        reference: isPalmosRail
+          ? responseSettlement?.reference ?? pusdPaymentResponse?.reference
+          : undefined,
+        signature: transactionSignature,
+        explorerUrl: transactionExplorerUrl,
+        confirmedAt: updatedAt,
+      }),
     }
     await deps.paidCalls?.put(executedRecord)
     return {
@@ -882,6 +1150,76 @@ export async function executePaidServiceCall(
     throw new Error(`Unknown agent: ${input.agentId}`)
   }
 
+  if (deps.actionRequests) {
+    await deps.actionRequests.put(
+      buildServicePayActionRequestRecord({
+        executionId,
+        at,
+        agent,
+        serviceId: input.serviceId,
+        vendorId: service.vendorId,
+        paymentRail: service.paymentRail,
+        amount,
+        assetSymbol: service.assetSymbol,
+        chainId: service.chainId,
+        requestPayload: input.request,
+        requestSummary: preparedRequest.requestSummary,
+        requestUrl: preparedRequest.url,
+        requestSource: input.source,
+      }),
+    )
+  }
+
+  const settlementMode = resolveAgentSettlementMode(agent)
+  const shouldRequireRegisteredReadiness =
+    isRegisteredPalmosService(service) && settlementMode !== 'local-demo'
+  const readiness =
+    service.paymentRail === PALMOS_PAYMENT_RAIL && shouldRequireRegisteredReadiness
+      ? await evaluatePalmosServiceReadiness({
+          service,
+          destinationAddress: findAllowedVendorRecipient({
+            agent,
+            vendorId: service.vendorId,
+          }),
+          endpointUrl: preparedRequest.url,
+          requestedAmount: amount,
+          requireVerified: shouldRequireRegisteredReadiness,
+          requireSafeEndpoint: shouldRequireRegisteredReadiness,
+          allowedHostnames: readExecutionEndpointAllowlist(deps),
+          lookup: deps.serviceEndpointLookup,
+        })
+      : undefined
+  if (readiness && !readiness.ok) {
+    const blockedRecord: PaidCallRecord = {
+      ...toRecordBase({
+        executionId,
+        at,
+        agent,
+        serviceId: input.serviceId,
+        vendorId: service.vendorId,
+        paymentRail: service.paymentRail,
+        amount,
+        assetSymbol: service.assetSymbol,
+        chainId: service.chainId,
+        requestPayload: input.request,
+        requestSummary: preparedRequest.requestSummary,
+        requestUrl: preparedRequest.url,
+        sessionId: agent.sessionId,
+        requestSource: input.source,
+      }),
+      status: 'blocked',
+      errorCode: readiness.checks[0]?.code ?? 'service.not_ready',
+      errorMessage: formatServiceReadinessFailure(readiness),
+    }
+    await deps.paidCalls?.put(blockedRecord)
+    return {
+      kind: 'blocked',
+      agent,
+      execution: blockedRecord,
+      reason: blockedRecord.errorMessage ?? 'Paid service is not ready.',
+    }
+  }
+
   const budgetDecision = await evaluateSessionBudget({
     paidCalls: deps.paidCalls,
     agent,
@@ -905,9 +1243,11 @@ export async function executePaidServiceCall(
         requestSummary: preparedRequest.requestSummary,
         requestUrl: preparedRequest.url,
         sessionId: agent.sessionId,
+        requestSource: input.source,
       }),
       status: 'blocked',
-      errorCode: 'policy.session_budget_exceeded',
+      errorCode:
+        budgetDecision.reasonCode ?? 'policy.session_budget_exceeded',
       errorMessage: budgetDecision.reason,
       responsePreview: {
         sessionBudget: budgetDecision.sessionBudget,
@@ -950,6 +1290,7 @@ export async function executePaidServiceCall(
         requestPayload: input.request,
         requestSummary: preparedRequest.requestSummary,
         requestUrl: preparedRequest.url,
+        requestSource: input.source,
       }),
       status: 'blocked',
       errorCode: 'policy.blocked',
@@ -982,6 +1323,7 @@ export async function executePaidServiceCall(
     sessionId: submitted.turn.session.sessionId,
     runtimeStatus: submittedRun?.status,
     runtimePhase: submittedRun?.currentPhase,
+    requestSource: input.source,
   })
 
   if (submittedRun?.status === 'failed') {

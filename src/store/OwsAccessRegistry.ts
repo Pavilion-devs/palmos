@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -36,19 +37,6 @@ function getRecordPath(agentId: string, baseDir?: string): string {
   return join(getRecordsDir(baseDir), `${agentId}.json`)
 }
 
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return undefined
-    }
-
-    throw error
-  }
-}
-
 export class FileOwsAccessRegistry implements OwsAccessRegistry {
   private readonly baseDir: string
 
@@ -62,11 +50,7 @@ export class FileOwsAccessRegistry implements OwsAccessRegistry {
 
   async put(record: OwsAccessRecord): Promise<void> {
     await mkdir(getRecordsDir(this.baseDir), { recursive: true })
-    await writeFile(
-      getRecordPath(record.agentId, this.baseDir),
-      JSON.stringify(record, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getRecordPath(record.agentId, this.baseDir), record)
   }
 
   async list(): Promise<OwsAccessRecord[]> {

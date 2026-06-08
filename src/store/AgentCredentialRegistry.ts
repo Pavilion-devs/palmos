@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm, rmdir } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -19,6 +20,10 @@ export type AgentCredentialRecord = {
 export interface AgentCredentialRegistry {
   get(credentialId: string): Promise<AgentCredentialRecord | undefined>
   put(record: AgentCredentialRecord): Promise<void>
+  putIfStatus(
+    record: AgentCredentialRecord,
+    expectedStatus: AgentCredentialRecord['status'],
+  ): Promise<boolean>
   list(): Promise<AgentCredentialRecord[]>
   listByAgent(agentId: string): Promise<AgentCredentialRecord[]>
   remove(credentialId: string): Promise<void>
@@ -36,20 +41,70 @@ function getCredentialFilePath(credentialId: string, baseDir?: string): string {
   return join(getCredentialsDir(baseDir), `${credentialId}.json`)
 }
 
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
 
-    throw error
+async function acquireCredentialFileLock(lockDir: string): Promise<void> {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir)
+      return
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'EEXIST' &&
+        Date.now() - startedAt < 5_000
+      ) {
+        await wait(25)
+        continue
+      }
+      throw error
+    }
+  }
+}
+
+export class InMemoryAgentCredentialRegistry implements AgentCredentialRegistry {
+  private readonly records = new Map<string, AgentCredentialRecord>()
+
+  constructor(seedRecords: AgentCredentialRecord[] = []) {
+    for (const record of seedRecords) {
+      this.records.set(record.credentialId, record)
+    }
+  }
+
+  async get(credentialId: string): Promise<AgentCredentialRecord | undefined> {
+    return this.records.get(credentialId)
+  }
+
+  async put(record: AgentCredentialRecord): Promise<void> {
+    this.records.set(record.credentialId, record)
+  }
+
+  async putIfStatus(
+    record: AgentCredentialRecord,
+    expectedStatus: AgentCredentialRecord['status'],
+  ): Promise<boolean> {
+    const current = this.records.get(record.credentialId)
+    if (current?.status !== expectedStatus) {
+      return false
+    }
+    this.records.set(record.credentialId, record)
+    return true
+  }
+
+  async list(): Promise<AgentCredentialRecord[]> {
+    return [...this.records.values()]
+  }
+
+  async listByAgent(agentId: string): Promise<AgentCredentialRecord[]> {
+    return (await this.list()).filter((record) => record.agentId === agentId)
+  }
+
+  async remove(credentialId: string): Promise<void> {
+    this.records.delete(credentialId)
   }
 }
 
@@ -68,11 +123,26 @@ export class FileAgentCredentialRegistry implements AgentCredentialRegistry {
 
   async put(record: AgentCredentialRecord): Promise<void> {
     await mkdir(getCredentialsDir(this.baseDir), { recursive: true })
-    await writeFile(
-      getCredentialFilePath(record.credentialId, this.baseDir),
-      JSON.stringify(record, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getCredentialFilePath(record.credentialId, this.baseDir), record)
+  }
+
+  async putIfStatus(
+    record: AgentCredentialRecord,
+    expectedStatus: AgentCredentialRecord['status'],
+  ): Promise<boolean> {
+    await mkdir(getCredentialsDir(this.baseDir), { recursive: true })
+    const lockDir = `${getCredentialFilePath(record.credentialId, this.baseDir)}.lock`
+    await acquireCredentialFileLock(lockDir)
+    try {
+      const current = await this.get(record.credentialId)
+      if (current?.status !== expectedStatus) {
+        return false
+      }
+      await writeJsonFile(getCredentialFilePath(record.credentialId, this.baseDir), record)
+      return true
+    } finally {
+      await rmdir(lockDir).catch(() => undefined)
+    }
   }
 
   async list(): Promise<AgentCredentialRecord[]> {

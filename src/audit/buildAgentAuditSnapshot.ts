@@ -1,14 +1,20 @@
 import { readFile, readdir } from 'fs/promises'
-import type { AgentRecord } from '../store/AgentRegistry.js'
+import type { AgentRecord, AgentRegistry } from '../store/AgentRegistry.js'
 import { FileAgentRegistry } from '../store/AgentRegistry.js'
 import {
   FileAgentControlEventRegistry,
   type AgentControlEventRecord,
+  type AgentControlEventRegistry,
 } from '../store/AgentControlEventRegistry.js'
-import { FilePaidCallRegistry, type PaidCallRecord } from '../store/PaidCallRegistry.js'
+import {
+  FilePaidCallRegistry,
+  type PaidCallRecord,
+  type PaidCallRegistry,
+} from '../store/PaidCallRegistry.js'
 import {
   FileXMTPAlertRegistry,
   type XMTPAlertRecord,
+  type XMTPAlertRegistry,
 } from '../store/XMTPAlertRegistry.js'
 import { getRunLedgerEventsPath, getRunsDir } from '../../runtime/runtime/fileLayout.js'
 
@@ -249,11 +255,18 @@ function mapXmtpAlert(
 export async function buildAgentAuditSnapshot(input: {
   baseDir: string
   agentId: string
+  agentRegistry?: AgentRegistry
+  controlEventRegistry?: AgentControlEventRegistry
+  paidCallRegistry?: PaidCallRegistry
+  xmtpAlertRegistry?: XMTPAlertRegistry
 }): Promise<AgentAuditSnapshot> {
-  const agentRegistry = new FileAgentRegistry(input.baseDir)
-  const controlEventRegistry = new FileAgentControlEventRegistry(input.baseDir)
-  const paidCallRegistry = new FilePaidCallRegistry(input.baseDir)
-  const xmtpAlertRegistry = new FileXMTPAlertRegistry(input.baseDir)
+  const agentRegistry = input.agentRegistry ?? new FileAgentRegistry(input.baseDir)
+  const controlEventRegistry =
+    input.controlEventRegistry ?? new FileAgentControlEventRegistry(input.baseDir)
+  const paidCallRegistry =
+    input.paidCallRegistry ?? new FilePaidCallRegistry(input.baseDir)
+  const xmtpAlertRegistry =
+    input.xmtpAlertRegistry ?? new FileXMTPAlertRegistry(input.baseDir)
 
   const agent = await agentRegistry.get(input.agentId)
   if (!agent) {
@@ -270,33 +283,39 @@ export async function buildAgentAuditSnapshot(input: {
     (record) => record.agentId === input.agentId,
   )
 
-  const runEntries = await readdir(getRunsDir(input.baseDir), {
-    withFileTypes: true,
-  }).catch((error: unknown) => {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return []
-    }
+  const runtimeEvents =
+    input.agentRegistry ||
+    input.controlEventRegistry ||
+    input.paidCallRegistry ||
+    input.xmtpAlertRegistry
+      ? []
+      : (
+          await Promise.all(
+            (
+              await readdir(getRunsDir(input.baseDir), {
+                withFileTypes: true,
+              }).catch((error: unknown) => {
+                if (
+                  error instanceof Error &&
+                  'code' in error &&
+                  error.code === 'ENOENT'
+                ) {
+                  return []
+                }
 
-    throw error
-  })
-
-  const runtimeEvents = (
-    await Promise.all(
-      runEntries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) =>
-          readJsonLines<LedgerEvent>(
-            getRunLedgerEventsPath(entry.name, input.baseDir),
-          ),
-        ),
-    )
-  )
-    .flat()
-    .filter((event) => isEventRelevant(agent, event))
+                throw error
+              })
+            )
+              .filter((entry) => entry.isDirectory())
+              .map((entry) =>
+                readJsonLines<LedgerEvent>(
+                  getRunLedgerEventsPath(entry.name, input.baseDir),
+                ),
+              ),
+          )
+        )
+          .flat()
+          .filter((event) => isEventRelevant(agent, event))
 
   const agentCreatedEntry: AgentAuditEntry = {
     entryId: `agent:${agent.agentId}:created`,

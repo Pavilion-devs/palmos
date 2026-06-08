@@ -21,6 +21,8 @@
     "palmos:readiness": "node --import tsx src/cli/checkPusdReadiness.ts",
     "palmos:storage": "node --import tsx src/cli/manageStorage.ts",
     "palmos:postgres": "node --import tsx src/cli/managePostgres.ts",
+    "palmos:action-requests": "node --import tsx src/cli/reconcileActionRequests.ts",
+    "palmos:action-lifecycle": "node --import tsx src/cli/reconcileNativeActionRequests.ts",
     "palmos:settlements": "node --import tsx src/cli/reconcileSettlements.ts",
     "x402:wallet": "bun src/cli/generateX402Wallet.ts",
     "xmtp:wallet": "node --import tsx src/cli/generateEvmWallet.ts",

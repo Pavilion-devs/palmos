@@ -57,11 +57,15 @@ export async function authenticateAgentCredential(
   }
 
   const at = deps.now?.() ?? new Date().toISOString()
-  await deps.credentials.put({
+  const updatedCredential = {
     ...credential,
     updatedAt: at,
     lastUsedAt: at,
-  })
+  }
+  const touched = await deps.credentials.putIfStatus(updatedCredential, 'active')
+  if (!touched) {
+    return undefined
+  }
 
   return {
     agent,

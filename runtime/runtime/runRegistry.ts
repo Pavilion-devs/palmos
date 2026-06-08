@@ -1,11 +1,12 @@
 import type { RunState } from '../contracts/runtime.js'
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm } from 'fs/promises'
 import {
   getRunDir,
   getRunManifestPath,
   getRunsDir,
   resolveStorageBaseDir,
 } from './fileLayout.js'
+import { readJsonFile, writeJsonFile } from './jsonFile.js'
 
 export interface RunRegistry {
   get(runId: string): Promise<RunState | undefined>
@@ -34,22 +35,6 @@ export class InMemoryRunRegistry implements RunRegistry {
   }
 }
 
-async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(filePath, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
-    throw error
-  }
-}
-
 export class FileRunRegistry implements RunRegistry {
   private readonly baseDir: string
 
@@ -64,11 +49,7 @@ export class FileRunRegistry implements RunRegistry {
   async put(run: RunState): Promise<void> {
     const dir = getRunDir(run.runId, this.baseDir)
     await mkdir(dir, { recursive: true })
-    await writeFile(
-      getRunManifestPath(run.runId, this.baseDir),
-      JSON.stringify(run, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getRunManifestPath(run.runId, this.baseDir), run)
   }
 
   async listBySession(sessionId: string): Promise<RunState[]> {

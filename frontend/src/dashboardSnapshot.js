@@ -280,6 +280,87 @@ function mapPaidCallResult(record) {
   return 'denied'
 }
 
+function getActionRequestAmount(record) {
+  return parseAmount(record.value?.amount)
+}
+
+function getActionRequestAssetSymbol(record) {
+  return record.value?.assetSymbol ?? record.executionPlan?.settlementAsset ?? 'PUSD'
+}
+
+function getActionRequestCounterpartyId(record) {
+  return record.target?.kind === 'address'
+    ? record.target.counterpartyId
+    : undefined
+}
+
+function buildActionRequestActionLabel(agentSnapshot, record) {
+  if (record.kind === 'asset.transfer' && record.target?.kind === 'address') {
+    const counterpartyId = getActionRequestCounterpartyId(record)
+    const counterpartyLabel = counterpartyId
+      ? getPolicyVendorLabel(agentSnapshot, counterpartyId)
+      : shortTxHash(record.target.address) ?? 'external address'
+    return `Wallet transfer to ${counterpartyLabel}`
+  }
+
+  return humanizeToken(record.kind)
+}
+
+function mapActionRequestResult(record) {
+  if (record.status === 'executed') {
+    return 'approved'
+  }
+
+  if (
+    record.status === 'approval_pending' ||
+    record.status === 'waiting_for_execution' ||
+    record.status === 'executing' ||
+    record.status === 'policy_checked'
+  ) {
+    return 'pending'
+  }
+
+  return 'denied'
+}
+
+function buildActionRequestReason(record) {
+  if (record.status === 'approval_pending') {
+    return record.policy?.approvalReason
+      ? humanizeToken(record.policy.approvalReason)
+      : 'Awaiting operator approval'
+  }
+
+  if (record.status === 'waiting_for_execution' || record.status === 'executing') {
+    return 'Transfer is waiting for execution'
+  }
+
+  if (record.status === 'blocked' || record.status === 'failed') {
+    return record.errorMessage ?? humanizeToken(record.errorCode ?? record.status)
+  }
+
+  if (record.status === 'executed') {
+    return 'Native wallet action executed'
+  }
+
+  return 'Native wallet action recorded'
+}
+
+function deriveActionRequestSettlementMode(record) {
+  if (record.status === 'approval_pending') {
+    return 'approval_pending'
+  }
+
+  if (record.status === 'blocked' || record.status === 'failed') {
+    return 'blocked'
+  }
+
+  if (record.status === 'executed') {
+    return record.executionPlan?.executionMode === 'real-solana' ? 'real' : 'local'
+  }
+
+  return 'approval_pending'
+}
+
 function buildEvent(agentSnapshot, record) {
   const requiredApproval =
     parseAmount(record.amount) >
@@ -530,6 +611,16 @@ function getCommittedSpend(paidCalls) {
     .reduce((sum, record) => sum + parseAmount(record.amount), 0)
 }
 
+function getCommittedActionRequestSpend(actionRequests) {
+  return actionRequests
+    .filter((record) =>
+      ['executed', 'approval_pending', 'waiting_for_execution'].includes(
+        record.status,
+      ),
+    )
+    .reduce((sum, record) => sum + getActionRequestAmount(record), 0)
+}
+
 function getLatestPaidCall(paidCalls) {
   return [...paidCalls].sort(
     (left, right) =>
@@ -541,12 +632,17 @@ function getLatestPaidCall(paidCalls) {
 function deriveAgent(agentSnapshot) {
   const agent = agentSnapshot.agent
   const paidCalls = agentSnapshot.paidCalls ?? []
+  const actionRequests = agentSnapshot.actionRequests ?? []
   const umbraPolicy = agent.policyConfig?.umbra
   const zerion = buildZerionSummary(agentSnapshot.zerion)
   const executedAmount = paidCalls
     .filter((record) => record.status === 'executed')
     .reduce((sum, record) => sum + parseAmount(record.amount), 0)
-  const committedAmount = getCommittedSpend(paidCalls)
+  const executedActionRequestAmount = actionRequests
+    .filter((record) => record.status === 'executed')
+    .reduce((sum, record) => sum + getActionRequestAmount(record), 0)
+  const committedAmount =
+    getCommittedSpend(paidCalls) + getCommittedActionRequestSpend(actionRequests)
   const maxPerTransaction = parseAmount(agent.policyConfig?.maxPerTransaction)
   const sessionBudget = parseAmount(agent.policyConfig?.sessionBudget)
   const budgetTotal = sessionBudget || maxPerTransaction
@@ -568,7 +664,7 @@ function deriveAgent(agentSnapshot) {
     balance: remainingSessionBudget,
     budgetTotal,
     budgetUsed: committedAmount,
-    executedSpend: executedAmount,
+    executedSpend: executedAmount + executedActionRequestAmount,
     blockedCount,
     lastCheckIn: parseTimestamp(agent.lastCheckInAt),
     deadManSeconds: Number(agent.policyConfig?.heartbeatTimeoutSeconds ?? 0),
@@ -616,7 +712,7 @@ function deriveAgent(agentSnapshot) {
       latestReason: latestPaidCall?.errorMessage ?? null,
       latestServiceId: latestPaidCall?.serviceId ?? null,
       latestAmount: latestPaidCall ? parseAmount(latestPaidCall.amount) : null,
-      executedSpend: executedAmount,
+      executedSpend: executedAmount + executedActionRequestAmount,
       committedSpend: committedAmount,
       blockedCount,
       zerionWalletAddress: zerion.walletAddress,
@@ -641,12 +737,217 @@ function deriveAgent(agentSnapshot) {
   }
 }
 
+function buildNativeTransactionAction(row) {
+  const target = row.target ?? {}
+  if (row.actionRequestKind === 'asset.transfer' && target.kind === 'address') {
+    const counterparty = target.counterpartyId
+      ? humanizeToken(target.counterpartyId)
+      : shortTxHash(target.address) ?? 'external address'
+    return `Wallet transfer to ${counterparty}`
+  }
+
+  return humanizeToken(row.actionRequestKind)
+}
+
+function buildNativeTransactionVendor(row) {
+  const target = row.target ?? {}
+  if (target.kind === 'address') {
+    return target.counterpartyId
+      ? humanizeToken(target.counterpartyId)
+      : shortTxHash(target.address) ?? 'External address'
+  }
+
+  return humanizeToken(target.kind)
+}
+
+function adaptNativeWalletActionRow(row, agentsById) {
+  const target = row.target ?? {}
+  const runtime = row.runtime ?? {}
+  const txHashFull = row.transactionRef ?? row.resultRef ?? null
+  const counterpartyId =
+    target.kind === 'address' ? target.counterpartyId ?? null : null
+
+  return {
+    id: row.id ?? row.walletActionId,
+    transactionKind: 'native_wallet_action',
+    atMs: parseTimestamp(row.updatedAt || row.createdAt),
+    createdAtMs: parseTimestamp(row.createdAt),
+    timestamp: formatClock(row.updatedAt || row.createdAt),
+    agentId: row.agentId,
+    agentName: agentsById.get(row.agentId)?.name ?? humanizeToken(row.agentId),
+    type: 'spend',
+    action: buildNativeTransactionAction(row),
+    amount: getActionRequestAmount({ value: row.value }),
+    assetSymbol: row.value?.assetSymbol ?? 'PUSD',
+    result: mapActionRequestResult({ status: row.status }),
+    reason: buildActionRequestReason({
+      status: row.status,
+      policy: { approvalReason: row.approval?.reason },
+      errorCode: row.errorCode,
+      errorMessage: row.errorMessage,
+    }),
+    vendor: buildNativeTransactionVendor(row),
+    vendorId: counterpartyId,
+    serviceId: null,
+    paymentRail: runtime.connectorKind ?? 'direct',
+    umbraSettlement: null,
+    chainId: row.value?.chainId ?? target.chainId ?? null,
+    txHash: shortTxHash(txHashFull),
+    txHashFull,
+    txExplorerUrl: null,
+    status: row.status,
+    errorCode: row.errorCode ?? null,
+    errorMessage: row.errorMessage ?? null,
+    settlementMode: deriveActionRequestSettlementMode({
+      status: row.status,
+      executionPlan: { executionMode: runtime.executionMode },
+    }),
+    requiredApproval: Boolean(row.approval?.required),
+    actionRequestKind: row.actionRequestKind ?? null,
+    walletId: row.walletId ?? null,
+  }
+}
+
+function adaptLegacyPaidCallRow(row, agentsById) {
+  const legacy = row.legacy ?? {}
+  const paymentRail = legacy.paymentRail ?? null
+  const isUmbra = paymentRail === 'umbra'
+  const txHashFull = legacy.transactionSignature ?? null
+  const chainId = legacy.chainId ?? row.value?.chainId ?? null
+  const vendorLabel = legacy.vendorId ? humanizeToken(legacy.vendorId) : '—'
+
+  return {
+    id: row.id ?? legacy.executionId,
+    transactionKind: 'legacy_paid_call',
+    atMs: parseTimestamp(row.updatedAt || row.createdAt),
+    createdAtMs: parseTimestamp(row.createdAt),
+    timestamp: formatClock(row.updatedAt || row.createdAt),
+    agentId: row.agentId,
+    agentName: agentsById.get(row.agentId)?.name ?? humanizeToken(row.agentId),
+    type: 'spend',
+    action: isUmbra
+      ? 'Umbra private settlement proof'
+      : `${humanizeToken(legacy.serviceId)} via ${vendorLabel}`,
+    amount: parseAmount(legacy.amount ?? row.value?.amount),
+    assetSymbol: legacy.assetSymbol ?? row.value?.assetSymbol ?? 'PUSD',
+    result: mapPaidCallResult({ status: row.status }),
+    reason:
+      row.errorMessage ??
+      legacy.errorMessage ??
+      humanizeToken(row.status),
+    vendor: vendorLabel,
+    vendorId: legacy.vendorId ?? null,
+    serviceId: legacy.serviceId ?? null,
+    paymentRail,
+    umbraSettlement: null,
+    chainId,
+    txHash: shortTxHash(txHashFull),
+    txHashFull,
+    txExplorerUrl:
+      legacy.transactionExplorerUrl ?? buildSolscanTxUrl(txHashFull, chainId),
+    status: row.status,
+    errorCode: legacy.errorCode ?? row.errorCode ?? null,
+    errorMessage: legacy.errorMessage ?? row.errorMessage ?? null,
+    settlementMode: deriveSettlementMode(
+      { paymentRail, umbraSettlement: null, status: row.status },
+      txHashFull,
+    ),
+    requiredApproval:
+      row.status === 'approval_pending' ||
+      row.status === 'waiting_for_execution',
+  }
+}
+
+/**
+ * Adapt the unified `/api/dashboard/transactions` projection rows into the same
+ * spend-event shape that {@link adaptShowcaseSnapshot} produces, so the existing
+ * Transactions list, filters, and detail lookup keep working unchanged. Field
+ * selection branches on `transactionKind`: native rows read native fields,
+ * legacy rows read the scoped `legacy.*` compatibility block.
+ */
+export function adaptDashboardTransactions(rows, options = {}) {
+  const agents = options.agents ?? []
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+
+  return (rows ?? [])
+    .map((row) =>
+      row?.transactionKind === 'native_wallet_action'
+        ? adaptNativeWalletActionRow(row, agentsById)
+        : adaptLegacyPaidCallRow(row, agentsById),
+    )
+    .sort((left, right) => right.atMs - left.atMs)
+}
+
+function buildApprovalAction(row) {
+  if (row.transactionKind === 'native_wallet_action') {
+    const target = row.targets?.target ?? {}
+    if (row.approvalKind === 'asset.transfer' && target.kind === 'address') {
+      const counterparty = target.counterpartyId
+        ? humanizeToken(target.counterpartyId)
+        : shortTxHash(target.address) ?? 'external address'
+      return `Wallet transfer to ${counterparty}`
+    }
+    return row.title || humanizeToken(row.approvalKind)
+  }
+
+  const serviceId = row.targets?.serviceId
+  const vendorLabel = row.targets?.vendorId
+    ? humanizeToken(row.targets.vendorId)
+    : '—'
+  return serviceId
+    ? `${humanizeToken(serviceId)} via ${vendorLabel}`
+    : row.title || 'Service payment'
+}
+
+/**
+ * Adapt the unified `/api/dashboard/approvals` projection rows into the same
+ * pending-approval shape that {@link adaptShowcaseSnapshot} produces, so the
+ * approval queue and nav badge keep working unchanged when sourced from the
+ * dedicated route. Rows arrive newest-first; ordering is preserved.
+ */
+export function adaptDashboardApprovals(rows, options = {}) {
+  const agents = options.agents ?? []
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+
+  return (rows ?? []).map((row) => {
+    const isNative = row.transactionKind === 'native_wallet_action'
+    const counterpartyId = row.targets?.counterpartyId ?? null
+
+    return {
+      id: row.id,
+      transactionKind: row.transactionKind,
+      approvalKind: row.approvalKind,
+      agentId: row.agentId,
+      agentName: agentsById.get(row.agentId)?.name ?? humanizeToken(row.agentId),
+      action: buildApprovalAction(row),
+      vendor: isNative
+        ? counterpartyId
+          ? humanizeToken(counterpartyId)
+          : humanizeToken(row.approvalKind)
+        : row.targets?.vendorId
+          ? humanizeToken(row.targets.vendorId)
+          : '—',
+      vendorId: row.targets?.vendorId ?? counterpartyId,
+      serviceId: row.targets?.serviceId ?? null,
+      assetSymbol: row.assetSymbol ?? 'PUSD',
+      amount: parseAmount(row.amount),
+      reason: row.reason ?? row.approval?.reason ?? null,
+      createdAt: parseTimestamp(row.createdAt),
+      xmtpSent: Boolean(row.xmtp?.requested),
+      walletId: row.walletId ?? null,
+    }
+  })
+}
+
 export function adaptShowcaseSnapshot(snapshot) {
   const sortedSnapshots = [...(snapshot.agents ?? [])].sort(
     (left, right) =>
       parseTimestamp(left.agent?.createdAt) - parseTimestamp(right.agent?.createdAt),
   )
   const agents = sortedSnapshots.map(deriveAgent)
+  // Snapshot events are now limited to legacy paid-call activity plus audit
+  // alerts. Native wallet actions are read through /api/dashboard/transactions
+  // and /api/dashboard/wallet-actions/:id instead.
   const events = sortedSnapshots
     .flatMap((agentSnapshot) => [
       ...(agentSnapshot.paidCalls ?? []).map((record) =>
@@ -687,6 +988,33 @@ export function adaptShowcaseSnapshot(snapshot) {
             ),
           }
         })
+        .concat(
+          (agentSnapshot.actionRequests ?? [])
+            .filter((record) => record.status === 'approval_pending')
+            .map((record) => {
+              const counterpartyId = getActionRequestCounterpartyId(record)
+              return {
+                id: record.actionRequestId,
+                agentId: record.agentId,
+                agentName,
+                action: buildActionRequestActionLabel(agentSnapshot, record),
+                vendor: counterpartyId
+                  ? getPolicyVendorLabel(agentSnapshot, counterpartyId)
+                  : record.target?.kind === 'address'
+                    ? shortTxHash(record.target.address)
+                    : humanizeToken(record.target?.kind),
+                vendorId: counterpartyId ?? null,
+                serviceId: null,
+                assetSymbol: getActionRequestAssetSymbol(record),
+                amount: getActionRequestAmount(record),
+                reason: buildActionRequestReason(record),
+                createdAt: parseTimestamp(record.createdAt),
+                xmtpSent: false,
+                transactionKind: 'native_wallet_action',
+                actionRequestKind: record.kind,
+              }
+            }),
+        )
     })
     .sort((left, right) => right.createdAt - left.createdAt)
 

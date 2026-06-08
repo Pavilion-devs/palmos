@@ -15,6 +15,8 @@ export type PalmosPaidServiceDefinition<TRequest = unknown> = {
   serviceId: string
   label: string
   visible?: boolean
+  source?: 'built_in' | 'registered'
+  verificationStatus?: RegisteredPalmosServiceRecord['verificationStatus']
   paymentRail: typeof PALMOS_PAYMENT_RAIL
   vendorId: string
   chainId: string
@@ -40,6 +42,12 @@ export type VendorBriefRequest = {
   vendor?: string
   service?: string
   focus?: string
+}
+
+export type LaunchAuditRequest = {
+  target?: string
+  checks?: string[]
+  context?: string
 }
 
 export type PalmosServiceCatalog = Record<
@@ -277,12 +285,59 @@ export function createPalmosVendorBriefService(input?: {
   }
 }
 
+export function createPalmosLaunchAuditService(input?: {
+  baseUrl?: string
+  expectedAmount?: string
+}): PalmosPaidServiceDefinition<LaunchAuditRequest> {
+  const baseUrl = trimTrailingSlash(input?.baseUrl ?? 'http://127.0.0.1:4021')
+
+  return {
+    serviceId: 'palmos.launch.audit',
+    label: 'Production Launch Audit API',
+    paymentRail: PALMOS_PAYMENT_RAIL,
+    vendorId: 'palmos_launch_auditor',
+    chainId: SOLANA_MAINNET_CHAIN_ID,
+    assetSymbol: PUSD_SYMBOL,
+    expectedAmount: input?.expectedAmount ?? '0.02',
+    buildRequest(request) {
+      const url = new URL(`${baseUrl}/api/premium/launch-audit`)
+      const target = request.target?.trim() || 'https://www.getpalmos.xyz'
+      const checks = request.checks?.map((item) => item.trim()).filter(Boolean)
+
+      url.searchParams.set('target', target)
+      if (checks?.length) {
+        url.searchParams.set('checks', checks.join(','))
+      }
+      if (request.context?.trim()) {
+        url.searchParams.set('context', request.context.trim())
+      }
+
+      return {
+        url: url.toString(),
+        init: {
+          method: 'GET',
+        },
+        requestSummary: {
+          target,
+          checks: checks?.length ? checks : ['security', 'performance', 'seo', 'api-health'],
+          context: request.context,
+        },
+      }
+    },
+  }
+}
+
 export function createDefaultPalmosServiceCatalog(input?: {
   localDemoBaseUrl?: string
   localDemoSpotPriceAmount?: string
   localDemoOpsBriefAmount?: string
   localDemoVendorBriefAmount?: string
+  localDemoLaunchAuditAmount?: string
 }): PalmosServiceCatalog {
+  const launchAudit = createPalmosLaunchAuditService({
+    baseUrl: input?.localDemoBaseUrl,
+    expectedAmount: input?.localDemoLaunchAuditAmount,
+  }) as PalmosPaidServiceDefinition<unknown>
   const onchainFlow = createPalmosOnchainFlowService({
     baseUrl: input?.localDemoBaseUrl,
     expectedAmount: input?.localDemoSpotPriceAmount,
@@ -305,6 +360,7 @@ export function createDefaultPalmosServiceCatalog(input?: {
   }) as PalmosPaidServiceDefinition<unknown>
 
   return {
+    [launchAudit.serviceId]: launchAudit,
     [onchainFlow.serviceId]: onchainFlow,
     [defiRisk.serviceId]: defiRisk,
     [vendorBrief.serviceId]: vendorBrief,
@@ -319,6 +375,8 @@ export function createRegisteredPalmosServiceDefinition(
   return {
     serviceId: record.serviceId,
     label: record.label,
+    source: 'registered',
+    verificationStatus: record.verificationStatus ?? 'unchecked',
     paymentRail: PALMOS_PAYMENT_RAIL,
     vendorId: record.vendorId,
     chainId: record.chainId,

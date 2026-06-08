@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm, rmdir } from 'fs/promises'
 import { resolve, join } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 import type {
   RuntimeEnvironment,
   WalletLifecycleState,
@@ -68,6 +69,7 @@ export function normalizeAgentSettlementMode(
 export interface AgentRegistry {
   get(agentId: string): Promise<AgentRecord | undefined>
   put(agent: AgentRecord): Promise<void>
+  putIfUpdatedAt(agent: AgentRecord, expectedUpdatedAt: string): Promise<boolean>
   list(): Promise<AgentRecord[]>
   getByActorId(actorId: string): Promise<AgentRecord | undefined>
   getByWalletId(walletId: string): Promise<AgentRecord | undefined>
@@ -86,20 +88,28 @@ function getAgentFilePath(agentId: string, baseDir?: string): string {
   return join(getAgentsDir(baseDir), `${agentId}.json`)
 }
 
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
 
-    throw error
+async function acquireAgentFileLock(lockDir: string): Promise<void> {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir)
+      return
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'EEXIST' &&
+        Date.now() - startedAt < 5_000
+      ) {
+        await wait(25)
+        continue
+      }
+      throw error
+    }
   }
 }
 
@@ -118,6 +128,18 @@ export class InMemoryAgentRegistry implements AgentRegistry {
 
   async put(agent: AgentRecord): Promise<void> {
     this.agents.set(agent.agentId, agent)
+  }
+
+  async putIfUpdatedAt(
+    agent: AgentRecord,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    const current = this.agents.get(agent.agentId)
+    if (current?.updatedAt !== expectedUpdatedAt) {
+      return false
+    }
+    this.agents.set(agent.agentId, agent)
+    return true
   }
 
   async list(): Promise<AgentRecord[]> {
@@ -150,11 +172,26 @@ export class FileAgentRegistry implements AgentRegistry {
 
   async put(agent: AgentRecord): Promise<void> {
     await mkdir(getAgentsDir(this.baseDir), { recursive: true })
-    await writeFile(
-      getAgentFilePath(agent.agentId, this.baseDir),
-      JSON.stringify(agent, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getAgentFilePath(agent.agentId, this.baseDir), agent)
+  }
+
+  async putIfUpdatedAt(
+    agent: AgentRecord,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    await mkdir(getAgentsDir(this.baseDir), { recursive: true })
+    const lockDir = `${getAgentFilePath(agent.agentId, this.baseDir)}.lock`
+    await acquireAgentFileLock(lockDir)
+    try {
+      const current = await this.get(agent.agentId)
+      if (current?.updatedAt !== expectedUpdatedAt) {
+        return false
+      }
+      await writeJsonFile(getAgentFilePath(agent.agentId, this.baseDir), agent)
+      return true
+    } finally {
+      await rmdir(lockDir).catch(() => undefined)
+    }
   }
 
   async list(): Promise<AgentRecord[]> {

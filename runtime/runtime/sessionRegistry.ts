@@ -1,11 +1,12 @@
 import type { SessionState } from '../contracts/runtime.js'
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm } from 'fs/promises'
 import {
   getSessionDir,
   getSessionsDir,
   getSessionStatePath,
   resolveStorageBaseDir,
 } from './fileLayout.js'
+import { readJsonFile, writeJsonFile } from './jsonFile.js'
 
 export interface SessionRegistry {
   get(sessionId: string): Promise<SessionState | undefined>
@@ -34,22 +35,6 @@ export class InMemorySessionRegistry implements SessionRegistry {
   }
 }
 
-async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(filePath, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
-    throw error
-  }
-}
-
 export class FileSessionRegistry implements SessionRegistry {
   private readonly baseDir: string
 
@@ -64,11 +49,7 @@ export class FileSessionRegistry implements SessionRegistry {
   async put(session: SessionState): Promise<void> {
     const dir = getSessionDir(session.sessionId, this.baseDir)
     await mkdir(dir, { recursive: true })
-    await writeFile(
-      getSessionStatePath(session.sessionId, this.baseDir),
-      JSON.stringify(session, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getSessionStatePath(session.sessionId, this.baseDir), session)
   }
 
   async list(): Promise<SessionState[]> {

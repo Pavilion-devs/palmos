@@ -70,3 +70,21 @@ assets/logo-with-background.png
 /tmp/
 *.db3
 bun.lock
+
+# Large media + working artifacts — keep local, don't commit to git history
+frontend/public/Main.mp4
+frontend/public/Untitled
+frontend/public/ig_*.png
+palmos-codex-conversation.md
+.agents/
+.claude/skills/
+skills-lock.json
+article-draft.md
+article-source-notes.md
+structure.md
+brand-board.html
+font-lab.html
+video/
+pusd-vision-banner/
+assets/logos/
+assets/pusdbanner.png

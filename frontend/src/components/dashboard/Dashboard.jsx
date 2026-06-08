@@ -1,6 +1,8 @@
 import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import useDashboardStore from '../../useDashboardStore'
+import useDashboardApprovals from '../../hooks/useDashboardApprovals'
+import { adaptDashboardApprovals } from '../../dashboardSnapshot'
 import useHashRoute, { navigate, parseDashboardRoute } from '../../hooks/useHashRoute'
 import DashboardOnboarding from './DashboardOnboarding'
 import DashboardShell from './shell/DashboardShell'
@@ -13,6 +15,7 @@ import ServicesPage from './pages/ServicesPage'
 import ServiceDetailPage from './pages/ServiceDetailPage'
 import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailPage from './pages/TransactionDetailPage'
+import WalletActionDetailPage from './pages/WalletActionDetailPage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import SettingsPage from './pages/SettingsPage'
 
@@ -25,6 +28,7 @@ const PAGE_META = {
   'service-detail': { subtitle: 'Services', title: 'Service Detail' },
   transactions: { subtitle: 'Transactions', title: 'Paid Calls' },
   'transaction-detail': { subtitle: 'Transactions', title: 'Transaction Detail' },
+  'wallet-action-detail': { subtitle: 'Transactions', title: 'Wallet Action' },
   approvals: { subtitle: 'Approvals', title: 'Approval Queue' },
   settings: { subtitle: 'Settings', title: 'Workspace Controls' },
 }
@@ -38,6 +42,7 @@ const STUB_NAV = {
   'service-detail': 'services',
   transactions: 'transactions',
   'transaction-detail': 'transactions',
+  'wallet-action-detail': 'transactions',
   approvals: 'approvals',
   settings: 'settings',
 }
@@ -70,8 +75,26 @@ export default function Dashboard() {
     registerService,
     allowServiceForAgent,
     unallowServiceForAgent,
+    session,
     capabilities,
   } = useDashboardStore()
+
+  // Prefer the dedicated approvals projection for the queue and nav badge;
+  // fall back to the snapshot-derived approvals while it loads or is
+  // unavailable. (Other surfaces — home, agent detail — stay on the snapshot.)
+  const { status: approvalsStatus, approvals: approvalRows } =
+    useDashboardApprovals()
+  const endpointApprovals = useMemo(
+    () => adaptDashboardApprovals(approvalRows, { agents }),
+    [approvalRows, agents],
+  )
+  const usingApprovalsEndpoint = approvalsStatus === 'ready'
+  const effectiveApprovals = usingApprovalsEndpoint
+    ? endpointApprovals
+    : pendingApprovals
+  const effectivePendingCount = usingApprovalsEndpoint
+    ? endpointApprovals.length
+    : pendingCount
 
   const [localCreatedAgentId, setLocalCreatedAgentId] = useState(null)
   const [agentCreateOpen, setAgentCreateOpen] = useState(false)
@@ -134,7 +157,7 @@ export default function Dashboard() {
   return (
     <DashboardShell
       activePage={activeNav}
-      pendingCount={pendingCount}
+      pendingCount={effectivePendingCount}
       topbar={topbar}
       syncError={syncError}
     >
@@ -179,6 +202,14 @@ export default function Dashboard() {
           updateAgentCredential={updateAgentCredential}
           rotateAgentCredential={rotateAgentCredential}
           unallowServiceForAgent={unallowServiceForAgent}
+          canReadActionRequestHistory={
+            Boolean(capabilities?.canMutateDashboard) ||
+            session?.identity?.role === 'judge'
+          }
+          canReadWalletContext={
+            Boolean(capabilities?.canMutateDashboard) ||
+            session?.identity?.role === 'judge'
+          }
         />
       )}
 
@@ -221,9 +252,16 @@ export default function Dashboard() {
         />
       )}
 
+      {route.page === 'wallet-action-detail' && (
+        <WalletActionDetailPage
+          walletActionId={route.walletActionId}
+          agents={agents}
+        />
+      )}
+
       {route.page === 'approvals' && (
         <ApprovalsPage
-          pendingApprovals={pendingApprovals}
+          pendingApprovals={effectiveApprovals}
           events={events}
           agents={agents}
           services={services}
@@ -234,7 +272,12 @@ export default function Dashboard() {
       )}
 
       {route.page === 'settings' && (
-        <SettingsPage agents={agents} services={services} events={events} />
+        <SettingsPage
+          agents={agents}
+          services={services}
+          events={events}
+          pendingApprovals={pendingApprovals}
+        />
       )}
     </DashboardShell>
   )

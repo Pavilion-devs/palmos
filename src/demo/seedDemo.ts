@@ -8,11 +8,11 @@ import {
   FileWalletRegistry,
   type RuntimeEnvironment,
 } from '../../runtime/index.js'
+import { Keypair } from '@solana/web3.js'
 import { activateAgentWallet } from '../app/activateAgentWallet.js'
 import { createAgentWallet } from '../app/createAgentWallet.js'
 import { OwsClient } from '../integrations/ows/client.js'
 import {
-  PALMOS_LOCAL_DEMO_MERCHANT_WALLET,
   PUSD_SYMBOL,
   SOLANA_MAINNET_CHAIN_ID,
 } from '../integrations/pusd/constants.js'
@@ -56,7 +56,7 @@ function buildDemoPolicies(
   const localPusdVendor =
     localDemoPayToAddress ??
     process.env.PUSD_MERCHANT_WALLET ??
-    PALMOS_LOCAL_DEMO_MERCHANT_WALLET
+    Keypair.generate().publicKey.toBase58()
 
   return [
     {
@@ -197,7 +197,7 @@ export async function seedDemo(input: SeedDemoInput): Promise<{
         organizationId: input.organizationId,
         treasuryId: input.treasuryId,
         environment,
-        managerActorId: 'manager_demo',
+        managerActorId: 'manager_dashboard',
         managerRoleIds: ['manager'],
         walletType: seed.walletType,
         subjectType: seed.walletType === 'vendor' ? 'business' : 'team',

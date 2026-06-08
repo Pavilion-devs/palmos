@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs'
+import { mkdirSync, readdirSync } from 'fs'
 import type { SignerProfile } from '../contracts/signerProfile.js'
 import { SignerProfileRegistry } from './SignerProfileRegistry.js'
 import {
@@ -7,23 +7,7 @@ import {
   getSignerProfilesDir,
   resolveStorageBaseDir,
 } from '../runtime/fileLayout.js'
-
-function readJsonFile<T>(filePath: string): T | undefined {
-  try {
-    const contents = readFileSync(filePath, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
-
-    throw error
-  }
-}
+import { readJsonFileSync, writeJsonFileSync } from '../runtime/jsonFile.js'
 
 export class PersistentSignerProfileRegistry extends SignerProfileRegistry {
   private readonly baseDir: string
@@ -50,10 +34,9 @@ export class PersistentSignerProfileRegistry extends SignerProfileRegistry {
     mkdirSync(getSignerProfileDir(profile.signerProfileId, this.baseDir), {
       recursive: true,
     })
-    writeFileSync(
+    writeJsonFileSync(
       getSignerProfileStatePath(profile.signerProfileId, this.baseDir),
-      JSON.stringify(profile, null, 2),
-      'utf8',
+      profile,
     )
   }
 
@@ -66,7 +49,7 @@ export class PersistentSignerProfileRegistry extends SignerProfileRegistry {
       return entries
         .filter((entry) => entry.isDirectory())
         .map((entry) =>
-          readJsonFile<SignerProfile>(
+          readJsonFileSync<SignerProfile>(
             getSignerProfileStatePath(entry.name, this.baseDir),
           ),
         )

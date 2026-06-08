@@ -95,7 +95,7 @@ function PendingRow({
             Amount
           </div>
           <div className="mt-1 font-mono text-lg text-yellow-200">
-            {formatPusd(approval.amount)} PUSD
+            {formatPusd(approval.amount)} {approval.assetSymbol ?? 'PUSD'}
           </div>
         </div>
       </div>
@@ -150,6 +150,12 @@ function PendingRow({
 function HistoryRow({ event, services }) {
   const service = services.find((s) => s.serviceId === event.serviceId)
   const serviceLabel = service?.label ?? event.serviceId ?? event.vendor
+  const isNativeWalletAction =
+    event.transactionKind === 'native_wallet_action' ||
+    Boolean(event.actionRequestKind)
+  const target = isNativeWalletAction
+    ? `#dashboard/wallet-actions/${event.id}`
+    : `#dashboard/transactions/${event.id}`
 
   let outcomeLabel
   let outcomeTone
@@ -168,7 +174,7 @@ function HistoryRow({ event, services }) {
   return (
     <button
       type="button"
-      onClick={() => navigate(`#dashboard/transactions/${event.id}`)}
+      onClick={() => navigate(target)}
       className="flex w-full flex-col gap-2 border border-neutral-800 bg-neutral-950 p-4 text-left transition-colors hover:border-neutral-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white sm:flex-row sm:items-center"
     >
       <span
@@ -180,7 +186,9 @@ function HistoryRow({ event, services }) {
         <div className="truncate text-neutral-300">{serviceLabel}</div>
         <div className="mt-0.5 truncate text-[11px] text-neutral-500">
           {event.agentName} ·{' '}
-          <span className="font-mono">{formatPusd(event.amount)} PUSD</span>
+          <span className="font-mono">
+            {formatPusd(event.amount)} {event.assetSymbol ?? 'PUSD'}
+          </span>
           {event.xmtpResolutionSent && ' · XMTP resolved'}
         </div>
       </div>

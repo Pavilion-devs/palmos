@@ -3,6 +3,7 @@ import { join, relative, resolve } from 'path'
 import { readOwsConfigFromEnv } from '../integrations/ows/client.js'
 
 const WORKSPACE_DIRS = [
+  'action-requests',
   'agents',
   'agent-credentials',
   'control-events',

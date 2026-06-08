@@ -17,6 +17,7 @@ export type RequestPaidActionInput = {
   destinationAddress?: string
   chainId?: string
   note?: string
+  eligibleAgentStatuses?: AgentRecord['status'][]
 }
 
 export type RequestPaidActionDependencies = {
@@ -94,7 +95,8 @@ export async function requestPaidAction(
     throw new Error(`Agent ${input.agentId} does not have a wallet yet.`)
   }
 
-  if (agent.status !== 'ready') {
+  const eligibleAgentStatuses = input.eligibleAgentStatuses ?? ['ready']
+  if (!eligibleAgentStatuses.includes(agent.status)) {
     return {
       kind: 'blocked',
       reason: `Agent ${input.agentId} is not spend-ready. Current status: ${agent.status}.`,

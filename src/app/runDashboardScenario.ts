@@ -43,8 +43,8 @@ export async function runDashboardScenario(
 
   const seeded = await seedDemo({
     baseDir: deps.baseDir,
-    organizationId: 'org_demo',
-    treasuryId: 'treasury_demo',
+    organizationId: deps.env?.PALMOS_ORG_ID?.trim() || 'palmos_showcase_workspace',
+    treasuryId: deps.env?.PALMOS_TREASURY_ID?.trim() || 'palmos_showcase_treasury',
   })
 
   const marketMonitorAgent = seeded.agents.find(
@@ -64,16 +64,19 @@ export async function runDashboardScenario(
   const sharedDeps = {
     kernel: deps.workspace.kernel,
     agentRegistry: deps.workspace.agentRegistry,
+    actionRequests: deps.workspace.actionRequestRegistry,
     paidCalls: deps.workspace.paidCallRegistry,
     palmosClient: deps.palmosClient,
     owsClient: deps.owsClient,
     serviceCatalog: deps.serviceCatalog,
     xmtpNotifier: deps.xmtpNotifier,
+    env: deps.env,
   }
 
   const marketMonitor = await executePaidServiceCall(sharedDeps, {
     agentId: marketMonitorAgent.agentId,
     serviceId: 'palmos.intel.onchain_flow',
+    source: 'system',
     request: {
       base: 'BTC',
       quote: 'USD',
@@ -83,6 +86,7 @@ export async function runDashboardScenario(
   const vendorProcurement = await executePaidServiceCall(sharedDeps, {
     agentId: vendorProcurementAgent.agentId,
     serviceId: 'palmos.research.defi_risk',
+    source: 'system',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
       focus: 'ops market pulse',
@@ -92,6 +96,7 @@ export async function runDashboardScenario(
   const growthCampaign = await executePaidServiceCall(sharedDeps, {
     agentId: growthCampaignAgent.agentId,
     serviceId: 'palmos.research.defi_risk',
+    source: 'system',
     request: {
       symbols: ['BTC', 'ETH'],
       focus: 'growth budget check',

@@ -81,6 +81,7 @@ async function main(): Promise<void> {
     assetSymbol,
     config,
     note: 'PalmOS governed Umbra private settlement proof',
+    source: 'system',
     prefundWrappedSol: env.UMBRA_PREFUND_WSOL !== 'false',
     requireExistingAgent: hasFlag(args, 'require-existing-agent'),
   })

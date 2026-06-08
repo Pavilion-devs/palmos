@@ -10,6 +10,7 @@ import type { AgentSpendWorkspace } from '../workspace/loadWorkspace.js'
 
 export type PusdResearchWorkerInput = {
   baseDir: string
+  env?: Record<string, string | undefined>
   workspace: AgentSpendWorkspace
   palmosClient: PalmosClient
   serviceCatalog: PalmosServiceCatalog
@@ -103,16 +104,19 @@ export async function runPusdResearchWorker(
           {
             kernel: input.workspace.kernel,
             agentRegistry: input.workspace.agentRegistry,
+            actionRequests: input.workspace.actionRequestRegistry,
             paidCalls: input.workspace.paidCallRegistry,
             palmosClient: input.palmosClient,
             owsClient: input.owsClient,
             serviceCatalog: input.serviceCatalog,
             xmtpNotifier: input.xmtpNotifier,
+            env: input.env,
           },
           {
             agentId: agent.agentId,
             serviceId: plan.serviceId,
             request: plan.request,
+            source: 'worker',
           },
         )
       : await Promise.resolve({

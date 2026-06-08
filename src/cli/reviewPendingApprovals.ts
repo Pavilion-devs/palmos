@@ -78,7 +78,7 @@ function parseCommand(args: string[], env: Record<string, string | undefined>): 
       baseDir,
       executionId: maybeExecutionId,
       approverActorId:
-        readFlag(args, 'approver')?.trim() || 'manager_demo',
+        readFlag(args, 'approver')?.trim() || 'manager_dashboard',
       approverRole: readFlag(args, 'role')?.trim() || 'manager',
       comment: readFlag(args, 'comment')?.trim(),
     }

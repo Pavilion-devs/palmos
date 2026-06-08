@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -38,23 +39,6 @@ function getControlEventFilePath(
   baseDir?: string,
 ): string {
   return join(getControlEventsDir(baseDir), `${controlEventId}.json`)
-}
-
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
-
-    throw error
-  }
 }
 
 export class InMemoryAgentControlEventRegistry
@@ -106,10 +90,9 @@ export class FileAgentControlEventRegistry
 
   async put(record: AgentControlEventRecord): Promise<void> {
     await mkdir(getControlEventsDir(this.baseDir), { recursive: true })
-    await writeFile(
+    await writeJsonFile(
       getControlEventFilePath(record.controlEventId, this.baseDir),
-      JSON.stringify(record, null, 2),
-      'utf8',
+      record,
     )
   }
 
@@ -150,4 +133,3 @@ export class FileAgentControlEventRegistry
     })
   }
 }
-

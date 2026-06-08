@@ -1,6 +1,5 @@
 import { mkdir, readdir, stat, writeFile } from 'fs/promises'
-import { resolve, join } from 'path'
-import { fileURLToPath } from 'url'
+import { join } from 'path'
 import {
   buildShowcaseSnapshot,
   type ShowcaseSnapshot,
@@ -107,9 +106,12 @@ if (!baseDir) {
   )
 }
 
-const frontendPublicDir =
-  env.AGENT_SPEND_OS_FRONTEND_PUBLIC_DIR?.trim() ||
-  resolve(fileURLToPath(new URL('../../frontend/public', import.meta.url)))
+const frontendPublicDir = env.AGENT_SPEND_OS_FRONTEND_PUBLIC_DIR?.trim()
+if (!frontendPublicDir) {
+  throw new Error(
+    'Refusing to write a static dashboard snapshot into frontend/public by default. Set AGENT_SPEND_OS_FRONTEND_PUBLIC_DIR to an explicit output directory if you need a snapshot export.',
+  )
+}
 const outputPath = join(frontendPublicDir, 'showcase-snapshot.json')
 
 const snapshot = sanitizeSnapshot(

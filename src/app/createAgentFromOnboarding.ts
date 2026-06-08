@@ -2,6 +2,10 @@ import { activateAgentWallet } from './activateAgentWallet.js'
 import { createAgentCredential } from './createAgentCredential.js'
 import { createAgentWallet } from './createAgentWallet.js'
 import {
+  formatPusdBaseUnits,
+  parsePusdAmountToBaseUnits,
+} from '../integrations/pusd/amount.js'
+import {
   PUSD_SYMBOL,
   SOLANA_MAINNET_CHAIN_ID,
 } from '../integrations/pusd/constants.js'
@@ -12,6 +16,7 @@ import type {
   AgentCredentialRecord,
   AgentCredentialRegistry,
 } from '../store/AgentCredentialRegistry.js'
+import type { RegisteredPalmosServiceRecord } from '../store/PalmosServiceRegistry.js'
 import {
   normalizeAgentSettlementMode,
   type AgentSettlementMode,
@@ -37,6 +42,7 @@ export type CreateAgentFromOnboardingDependencies = {
   workspace: AgentSpendWorkspace
   credentials: AgentCredentialRegistry
   serviceCatalog: PalmosServiceCatalog
+  registeredServices?: RegisteredPalmosServiceRecord[]
   now?: () => string
   createId?: (prefix: string) => string
 }
@@ -58,12 +64,16 @@ function normalizePositiveAmount(
   value: string | undefined,
   fallback: string,
 ): string {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!value) {
     return fallback
   }
 
-  return parsed.toFixed(6).replace(/\.?0+$/, '')
+  try {
+    const parsed = parsePusdAmountToBaseUnits(value)
+    return parsed > 0n ? formatPusdBaseUnits(parsed) : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function normalizeVendorAlias(value: string): string {
@@ -75,6 +85,9 @@ function resolveAllowedVendorIds(
   serviceCatalog: PalmosServiceCatalog,
 ): string[] {
   const aliases = new Map<string, string>([
+    ['palmos.launch.audit', 'palmos_launch_auditor'],
+    ['palmos_launch_audit', 'palmos_launch_auditor'],
+    ['palmos_launch_auditor', 'palmos_launch_auditor'],
     ['palmos.intel.onchain_flow', 'palmos_intel_vendor'],
     ['palmos_intel_onchain_flow', 'palmos_intel_vendor'],
     ['palmos_intel_vendor', 'palmos_intel_vendor'],
@@ -119,16 +132,32 @@ function resolveAllowedVendorIds(
 function buildVendorRules(input: {
   allowedVendors?: string[]
   serviceCatalog: PalmosServiceCatalog
+  registeredServices?: RegisteredPalmosServiceRecord[]
   servicePayToAddress: string
 }): AgentVendorRule[] {
   const requestedVendorIds = resolveAllowedVendorIds(
     input.allowedVendors,
     input.serviceCatalog,
   )
+  const registeredByServiceId = new Map(
+    (input.registeredServices ?? []).map((service) => [
+      service.serviceId,
+      service,
+    ]),
+  )
+  const registeredByVendorId = new Map(
+    (input.registeredServices ?? []).map((service) => [
+      service.vendorId,
+      service,
+    ]),
+  )
   const catalogRules: AgentVendorRule[] = Object.values(input.serviceCatalog).map((service) => ({
     vendorId: service.vendorId,
     label: service.label,
-    destinationAddress: input.servicePayToAddress,
+    destinationAddress:
+      registeredByServiceId.get(service.serviceId)?.destinationAddress ??
+      registeredByVendorId.get(service.vendorId)?.destinationAddress ??
+      input.servicePayToAddress,
     chainId: service.chainId,
   }))
 
@@ -179,6 +208,7 @@ export async function createAgentFromOnboarding(
   const allowedVendors = buildVendorRules({
     allowedVendors: input.allowedVendors,
     serviceCatalog: deps.serviceCatalog,
+    registeredServices: deps.registeredServices,
     servicePayToAddress: input.servicePayToAddress,
   })
   const policyConfig: AgentPolicyTemplateInput = {
@@ -201,10 +231,12 @@ export async function createAgentFromOnboarding(
       kernel: deps.workspace.kernel,
       agentRegistry: deps.workspace.agentRegistry,
       walletRegistry: deps.workspace.walletRegistry,
+      actionRequests: deps.workspace.actionRequestRegistry,
       owsClient: settlementMode === 'ows' ? deps.workspace.owsClient : undefined,
       owsAccessRegistry:
         settlementMode === 'ows' ? deps.workspace.owsAccessRegistry : undefined,
       now: deps.now,
+      createId: deps.createId,
     },
     {
       agentId,

@@ -10,12 +10,30 @@ import { assertPusdPaymentInstructionMatchesPolicy } from './paymentInstructions
 import { readSolanaKeypairFromEnv, type ReadSolanaKeypairInput } from './keypair.js'
 import { sendPusdPayment } from './transfer.js'
 import { readSolanaRpcUrlFromEnv } from './constants.js'
+import {
+  fetchWithTimeout,
+  parseResponseBodyWithLimit,
+} from './httpSafety.js'
 import type { AgentSettlementMode } from '../../store/AgentRegistry.js'
+
+export type PalmosExecutionSettlement = {
+  rail: 'palmos-pusd'
+  mode: Extract<AgentSettlementMode, 'local-demo' | 'real-solana'>
+  amount: string
+  assetSymbol: 'PUSD'
+  mint: string
+  network: string
+  payer: string
+  recipient: string
+  reference: string
+  signature: string
+}
 
 export type PalmosExecutionResult = {
   status: number
   headers: Record<string, string>
   body: unknown
+  settlement?: PalmosExecutionSettlement
 }
 
 export type PalmosClientConfig = {
@@ -24,24 +42,13 @@ export type PalmosClientConfig = {
   rpcUrl?: string
   keypair?: ReadSolanaKeypairInput
   realPaymentMaxAmount?: string
+  requestTimeoutMs?: number
+  maxResponseBytes?: number
 }
 
 export type PalmosExecuteOptions = {
   expectedPayment?: ExpectedPusdPaymentInstruction
   settlementMode?: Extract<AgentSettlementMode, 'local-demo' | 'real-solana'>
-}
-
-async function parseResponseBody(response: Response): Promise<unknown> {
-  if (response.status === 204) {
-    return null
-  }
-
-  const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-  if (contentType.includes('application/json')) {
-    return response.json()
-  }
-
-  return response.text()
 }
 
 function collectHeaders(headers: Headers): Record<string, string> {
@@ -121,6 +128,10 @@ export class PalmosClient {
       realPaymentMaxAmount:
         env.PALMOS_REAL_PUSD_MAX_PER_CALL?.trim() ||
         env.PUSD_MAX_PER_CALL?.trim(),
+      requestTimeoutMs: Number(env.PALMOS_SERVICE_TIMEOUT_MS ?? '15000'),
+      maxResponseBytes: Number(
+        env.PALMOS_SERVICE_MAX_RESPONSE_BYTES ?? '1000000',
+      ),
     })
   }
 
@@ -130,11 +141,16 @@ export class PalmosClient {
     options: PalmosExecuteOptions = {},
   ): Promise<PalmosExecutionResult> {
     const preparedRequest = service.buildRequest(request)
-    const initialResponse = await this.fetchImpl(
+    const initialResponse = await fetchWithTimeout(
+      this.fetchImpl,
       preparedRequest.url,
       preparedRequest.init,
+      this.config.requestTimeoutMs,
     )
-    const initialBody = await parseResponseBody(initialResponse)
+    const initialBody = await parseResponseBodyWithLimit(
+      initialResponse,
+      this.config.maxResponseBytes,
+    )
 
     if (initialResponse.status !== 402 || !isPaymentRequiredPayload(initialBody)) {
       return {
@@ -201,21 +217,43 @@ export class PalmosClient {
         amount: initialBody.amount,
         recipient: initialBody.recipient,
       })
-    const retryResponse = await this.fetchImpl(preparedRequest.url, {
-      ...preparedRequest.init,
-      headers: mergeHeaders(preparedRequest.init?.headers, {
-        'x-pusd-payment': demoSignature,
-        'x-pusd-reference': initialBody.reference,
-        'x-palmos-demo-payment': signature ? '0' : '1',
-        'x-palmos-demo-payer': this.config.demoPayer ?? 'palmos-demo-agent',
-      }),
-    })
-    const retryBody = await parseResponseBody(retryResponse)
+    const retryResponse = await fetchWithTimeout(
+      this.fetchImpl,
+      preparedRequest.url,
+      {
+        ...preparedRequest.init,
+        headers: mergeHeaders(preparedRequest.init?.headers, {
+          'x-pusd-payment': demoSignature,
+          'x-pusd-reference': initialBody.reference,
+          'x-palmos-demo-payment': signature ? '0' : '1',
+          'x-palmos-demo-payer': this.config.demoPayer ?? 'palmos-demo-agent',
+        }),
+      },
+      this.config.requestTimeoutMs,
+    )
+    const retryBody = await parseResponseBodyWithLimit(
+      retryResponse,
+      this.config.maxResponseBytes,
+    )
 
     return {
       status: retryResponse.status,
       headers: collectHeaders(retryResponse.headers),
       body: retryBody,
+      settlement: {
+        rail: 'palmos-pusd',
+        mode: signature ? 'real-solana' : 'local-demo',
+        amount: initialBody.amount,
+        assetSymbol: 'PUSD',
+        mint: initialBody.mint,
+        network: initialBody.network,
+        payer: signature
+          ? signer?.publicKey.toBase58() ?? this.config.demoPayer ?? 'palmos-demo-agent'
+          : this.config.demoPayer ?? 'palmos-demo-agent',
+        recipient: initialBody.recipient,
+        reference: initialBody.reference,
+        signature: demoSignature,
+      },
     }
   }
 }

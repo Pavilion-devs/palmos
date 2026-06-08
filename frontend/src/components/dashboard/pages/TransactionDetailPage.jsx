@@ -1,6 +1,7 @@
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { navigate } from '../../../hooks/useHashRoute'
+import { fetchDashboardApi } from '../../../useDashboardStore'
 import SettlementBadge from './SettlementBadge'
 
 function formatPusd(value, digits = 3) {
@@ -121,6 +122,209 @@ function formatNetwork(value) {
   return value ?? 'n/a'
 }
 
+function formatActionRequestStatus(value) {
+  return (value ?? 'unknown').replaceAll('_', ' ')
+}
+
+function formatIsoTimestamp(value) {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) {
+    return value ?? 'n/a'
+  }
+
+  return new Date(parsed).toLocaleString('en-US', {
+    hour12: false,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function formatActionRequestTarget(target) {
+  if (!target) return 'n/a'
+  if (target.kind === 'address') {
+    return [target.address, target.chainId, target.counterpartyId]
+      .filter(Boolean)
+      .join(' · ')
+  }
+  if (target.kind === 'service') {
+    return [target.serviceId, target.vendorId].filter(Boolean).join(' · ')
+  }
+  if (target.kind === 'wallet') {
+    return [target.walletId, target.chainId].filter(Boolean).join(' · ')
+  }
+  if (target.kind === 'portfolio') {
+    return target.portfolioId
+  }
+  return target.kind ?? 'n/a'
+}
+
+function formatActionRequestValue(value) {
+  if (!value) return 'n/a'
+  const amount = [value.amount, value.assetSymbol].filter(Boolean).join(' ')
+  return [amount, value.chainId, value.valueUsd ? `$${value.valueUsd}` : null]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function formatConnector(plan) {
+  if (!plan) return 'n/a'
+  return [plan.connectorKind, plan.executionMode, plan.privacyMode]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function formatRuntimeRefs(runtime) {
+  if (!runtime?.refs) return 'n/a'
+  const counts = [
+    ['sim', runtime.refs.simulationRefs?.length ?? 0],
+    ['sign', runtime.refs.signatureRequestRefs?.length ?? 0],
+    ['result', runtime.refs.signatureResultRefs?.length ?? 0],
+    ['broadcast', runtime.refs.broadcastRefs?.length ?? 0],
+  ]
+  return counts.map(([label, count]) => `${label}:${count}`).join(' · ')
+}
+
+function formatAuditMetadata(metadata) {
+  if (!metadata) return null
+  const parts = [
+    metadata.decision ? `decision:${metadata.decision}` : null,
+    metadata.resultKind ? `result:${metadata.resultKind}` : null,
+    metadata.errorCode ? `error:${metadata.errorCode}` : null,
+    metadata.currentStatus ? `current:${metadata.currentStatus}` : null,
+  ]
+  return parts.filter(Boolean).join(' · ') || null
+}
+
+function NativeActionRequestSection({ state }) {
+  if (state.status === 'loading') {
+    return (
+      <Section title="Native ActionRequest">
+        <p className="text-sm text-neutral-500">Loading native ActionRequest detail...</p>
+      </Section>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <Section title="Native ActionRequest">
+        <p className="text-sm text-red-300">{state.error}</p>
+      </Section>
+    )
+  }
+
+  const detail = state.detail
+  const request = detail?.actionRequest
+  if (!request) {
+    return null
+  }
+
+  const runtime = detail.runtime
+  const compatibility = detail.compatibility
+  const auditTrail = detail.auditTrail ?? []
+
+  return (
+    <Section title="Native ActionRequest">
+      <div className="grid gap-x-6 md:grid-cols-2">
+        <div>
+          <DetailRow label="Action request id" value={request.actionRequestId} mono />
+          <DetailRow label="Kind" value={request.kind} mono />
+          <DetailRow label="Source" value={request.source} mono />
+          <DetailRow
+            label="Status"
+            value={formatActionRequestStatus(request.status)}
+            mono
+          />
+          <DetailRow label="Target" value={formatActionRequestTarget(request.target)} mono />
+          <DetailRow label="Value" value={formatActionRequestValue(request.value)} mono />
+        </div>
+        <div>
+          <DetailRow
+            label="Approval"
+            value={
+              request.policy?.approvalRequired
+                ? request.policy.approvalReason ?? 'required'
+                : 'not required'
+            }
+            mono
+          />
+          <DetailRow
+            label="Execution plan"
+            value={formatConnector(request.executionPlan)}
+            mono
+          />
+          <DetailRow label="Result ref" value={request.resultRef} mono />
+          <DetailRow label="Error code" value={request.errorCode} mono />
+          <DetailRow label="Error message" value={request.errorMessage} />
+          <DetailRow
+            label="Runtime"
+            value={
+              runtime?.runId
+                ? `${runtime.runId} · ${runtime.found ? runtime.status ?? 'found' : 'not found'}`
+                : runtime?.found
+                  ? runtime.status ?? 'found'
+                  : 'not linked'
+            }
+            mono
+          />
+          <DetailRow label="Runtime refs" value={formatRuntimeRefs(runtime)} mono />
+          <DetailRow
+            label="Provenance"
+            value={
+              compatibility?.derivedFromLegacyPaidCall
+                ? `legacy ${compatibility.legacyRecordType ?? 'PaidCall'}`
+                : 'native'
+            }
+            mono
+          />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-x-6 border-t border-neutral-900 pt-4 md:grid-cols-2">
+        <DetailRow label="Created" value={formatIsoTimestamp(request.createdAt)} />
+        <DetailRow label="Updated" value={formatIsoTimestamp(request.updatedAt)} />
+      </div>
+      {auditTrail.length > 0 && (
+        <div className="mt-4 border-t border-neutral-900 pt-4">
+          <div className="mb-3 text-[10px] uppercase tracking-widest text-neutral-700">
+            Operator audit trail
+          </div>
+          <div className="space-y-3">
+            {auditTrail.map((entry) => {
+              const metadata = formatAuditMetadata(entry.metadata)
+              return (
+                <div
+                  key={entry.auditLogId}
+                  className="border border-neutral-900 bg-black/40 px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                      {entry.action} · {entry.status}
+                    </span>
+                    <span className="font-mono text-[10px] text-neutral-600">
+                      {formatIsoTimestamp(entry.at)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-neutral-300">
+                    {entry.summary}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-neutral-600">
+                    <span>{entry.actorId}</span>
+                    <span>{entry.operatorRole}</span>
+                    {metadata && <span>{metadata}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </Section>
+  )
+}
+
 function UmbraProofSection({ event }) {
   const settlement = event.umbraSettlement
   if (!settlement) return null
@@ -191,7 +395,7 @@ function NotFound({ executionId }) {
         <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-600">
           Transaction not found
         </div>
-        <h2 className="text-lg font-medium text-white">No paid call matches this id</h2>
+        <h2 className="text-lg font-medium text-white">No transaction matches this id</h2>
         <p className="mt-3 break-all text-sm text-neutral-500">{executionId}</p>
         <button
           type="button"
@@ -226,6 +430,75 @@ export default function TransactionDetailPage({
   services,
 }) {
   const event = events.find((e) => e.id === executionId)
+  const isNativeActionRequest = Boolean(event?.actionRequestKind)
+  const [actionRequestDetailState, setActionRequestDetailState] = useState({
+    status: 'idle',
+    detail: null,
+    error: null,
+  })
+
+  useEffect(() => {
+    if (!isNativeActionRequest || !executionId) {
+      setActionRequestDetailState({
+        status: 'idle',
+        detail: null,
+        error: null,
+      })
+      return
+    }
+
+    let cancelled = false
+
+    async function loadActionRequestDetail() {
+      setActionRequestDetailState({
+        status: 'loading',
+        detail: null,
+        error: null,
+      })
+
+      try {
+        const response = await fetchDashboardApi(
+          `/api/dashboard/action-requests/${encodeURIComponent(executionId)}`,
+          { cache: 'no-store' },
+        )
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          throw new Error(
+            payload?.message ||
+              payload?.error ||
+              `Unable to load ActionRequest detail (${response.status})`,
+          )
+        }
+
+        if (!cancelled) {
+          setActionRequestDetailState({
+            status: 'loaded',
+            detail: payload,
+            error: null,
+          })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setActionRequestDetailState({
+            status: 'error',
+            detail: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Unable to load ActionRequest detail.',
+          })
+        }
+      }
+    }
+
+    loadActionRequestDetail()
+
+    return () => {
+      cancelled = true
+    }
+  }, [executionId, isNativeActionRequest])
+
   if (!event) {
     return <NotFound executionId={executionId} />
   }
@@ -271,6 +544,12 @@ export default function TransactionDetailPage({
       </div>
 
       <div className="grid gap-4 px-6 py-5 lg:grid-cols-2">
+        {isNativeActionRequest && (
+          <div className="lg:col-span-2">
+            <NativeActionRequestSection state={actionRequestDetailState} />
+          </div>
+        )}
+
         <Section title="Settlement">
           <DetailRow label="Mode" value={settlementText(event.settlementMode)} />
           <DetailRow label="Status" value={event.status} mono />
@@ -291,7 +570,7 @@ export default function TransactionDetailPage({
           )}
         </Section>
 
-        <Section title="Solana transaction">
+        <Section title={isNativeActionRequest ? 'Wallet transaction' : 'Solana transaction'}>
           {event.txHashFull ? (
             <>
               <div className="mb-3 text-[11px] leading-5 text-neutral-400">
@@ -315,7 +594,7 @@ export default function TransactionDetailPage({
             </p>
           ) : (
             <p className="text-sm text-neutral-500">
-              No transaction signature recorded for this paid call.
+              No transaction signature recorded for this {isNativeActionRequest ? 'wallet action' : 'paid call'}.
             </p>
           )}
         </Section>

@@ -3,11 +3,11 @@ import {
   loadProcessEnv,
   loadAgentSpendWorkspace,
   OwsClient,
-  DEMO_AGENT_IDS,
   readPusdMintFromEnv,
   readSolanaKeypairFromEnv,
   readSolanaRpcUrlFromEnv,
 } from '../index.js'
+import { DEMO_AGENT_IDS } from '../demo/seedDemo.js'
 
 function readFlag(args: string[], name: string): string | undefined {
   const exact = `--${name}`

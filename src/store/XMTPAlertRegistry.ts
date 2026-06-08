@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -48,19 +49,6 @@ function getAlertFilePath(alertId: string, baseDir?: string): string {
   return join(getAlertsDir(baseDir), `${alertId}.json`)
 }
 
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return undefined
-    }
-
-    throw error
-  }
-}
-
 export class InMemoryXMTPAlertRegistry implements XMTPAlertRegistry {
   private readonly records = new Map<string, XMTPAlertRecord>()
 
@@ -100,11 +88,7 @@ export class FileXMTPAlertRegistry implements XMTPAlertRegistry {
 
   async put(record: XMTPAlertRecord): Promise<void> {
     await mkdir(getAlertsDir(this.baseDir), { recursive: true })
-    await writeFile(
-      getAlertFilePath(record.alertId, this.baseDir),
-      JSON.stringify(record, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getAlertFilePath(record.alertId, this.baseDir), record)
   }
 
   async list(): Promise<XMTPAlertRecord[]> {

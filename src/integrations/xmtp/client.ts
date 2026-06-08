@@ -135,6 +135,10 @@ export type XmtpNotifierConfig = {
   env: XmtpEnv
   managerInboxId?: string
   managerAddress?: string
+  apiUrl?: string
+  gatewayHost?: string
+  historySyncUrl?: string | null
+  disableDeviceSync?: boolean
   dbPath?: string | null
   dbEncryptionKey?: `0x${string}`
   appVersion?: string
@@ -243,6 +247,15 @@ export function readXmtpNotifierConfigFromEnv(
     env: (env.XMTP_ENV?.trim() as XmtpEnv | undefined) ?? 'dev',
     managerInboxId: env.XMTP_MANAGER_INBOX_ID?.trim(),
     managerAddress: env.XMTP_MANAGER_ADDRESS?.trim(),
+    apiUrl: env.XMTP_API_URL?.trim() || undefined,
+    gatewayHost: env.XMTP_GATEWAY_HOST?.trim() || undefined,
+    historySyncUrl:
+      env.XMTP_HISTORY_SYNC_URL?.trim() === '0'
+        ? null
+        : env.XMTP_HISTORY_SYNC_URL?.trim() || undefined,
+    disableDeviceSync:
+      env.XMTP_DISABLE_DEVICE_SYNC?.trim() === '1' ||
+      env.XMTP_DISABLE_DEVICE_SYNC?.trim().toLowerCase() === 'true',
     dbPath: env.XMTP_DB_PATH?.trim() || undefined,
     dbEncryptionKey: env.XMTP_DB_ENCRYPTION_KEY?.trim()?.startsWith('0x')
       ? (env.XMTP_DB_ENCRYPTION_KEY.trim() as `0x${string}`)
@@ -323,7 +336,7 @@ export class XmtpNotifier {
   }
 
   async assertReady(): Promise<void> {
-    await loadXmtpSdk()
+    await this.getClient()
   }
 
   private async getClient(): Promise<XmtpClient> {
@@ -338,6 +351,10 @@ export class XmtpNotifier {
         createSigner(this.config.walletKey) as never,
         {
           env: this.config.env,
+          apiUrl: this.config.apiUrl,
+          gatewayHost: this.config.gatewayHost,
+          historySyncUrl: this.config.historySyncUrl,
+          disableDeviceSync: this.config.disableDeviceSync,
           dbPath: this.config.dbPath,
           dbEncryptionKey: this.config.dbEncryptionKey,
           appVersion: this.config.appVersion,

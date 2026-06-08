@@ -188,11 +188,17 @@ function ServiceCard({ service }) {
 
 function PaymentCard({ event }) {
   const tone = event.result === 'approved' ? 'green' : event.result === 'pending' ? 'yellow' : 'red'
+  const isNativeWalletAction =
+    event.transactionKind === 'native_wallet_action' ||
+    Boolean(event.actionRequestKind)
+  const target = isNativeWalletAction
+    ? `#dashboard/wallet-actions/${event.id}`
+    : `#dashboard/transactions/${event.id}`
 
   return (
     <BoardButton
       tone={tone}
-      onClick={() => navigate(`#dashboard/transactions/${event.id}`)}
+      onClick={() => navigate(target)}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="rounded-full border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[10px] uppercase tracking-widest text-neutral-400">

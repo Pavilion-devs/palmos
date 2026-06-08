@@ -8,6 +8,10 @@ import type {
   TrustTier,
   RunState,
 } from '../../runtime/index.js'
+import {
+  formatPusdBaseUnits,
+  parsePusdAmountToBaseUnits,
+} from '../integrations/pusd/amount.js'
 
 export type AgentVendorRule = {
   vendorId: string
@@ -15,6 +19,23 @@ export type AgentVendorRule = {
   destinationAddress: string
   chainId: string
 }
+
+export type AgentTransferRecipientRule = {
+  counterpartyId: string
+  label?: string
+  destinationAddress: string
+  chainId: string
+}
+
+export type AgentTransferPolicy = {
+  allowedRecipients?: AgentTransferRecipientRule[]
+  allowedAssets?: string[]
+  allowedChains?: string[]
+  autoApproveUnder?: string
+  maxPerTransfer?: string
+}
+
+export type AgentPrivacyMode = 'disabled' | 'allowed' | 'required'
 
 export type AgentPolicyTemplateInput = {
   agentId: string
@@ -28,12 +49,14 @@ export type AgentPolicyTemplateInput = {
   allowedVendors: AgentVendorRule[]
   autoApproveUnder: string
   maxPerTransaction: string
+  transferPolicy?: AgentTransferPolicy
   sessionBudget?: string
   heartbeatTimeoutSeconds: number
   requireSanctionsScreening?: boolean
   policyProfileId?: string
   approvalExpirySeconds?: number
   minimumWalletTrustTier?: TrustTier
+  privacyMode?: AgentPrivacyMode
   umbra?: PolicyProfile['umbra']
 }
 
@@ -57,10 +80,30 @@ export type SpendDecision =
       requiresApproval: false
       effectiveMaxPerTransaction: string
       reasonCode:
+        | 'policy.invalid_amount'
         | 'policy.vendor_not_allowed'
         | 'policy.agent_restricted'
         | 'policy.amount_exceeds_limit'
     }
+
+export type TransferDecisionReasonCode =
+  | 'policy.invalid_amount'
+  | 'policy.agent_restricted'
+  | 'policy.transfer_chain_not_allowed'
+  | 'policy.transfer_asset_not_allowed'
+  | 'policy.transfer_recipient_not_allowed'
+  | 'policy.transfer_recipient_chain_mismatch'
+  | 'policy.transfer_amount_exceeds_limit'
+  | 'policy.transfer_approval_required'
+  | 'policy.transfer_auto_approved'
+
+export type TransferDecision = {
+  status: 'allowed' | 'restricted' | 'denied'
+  requiresApproval: boolean
+  effectiveMaxTransferAmount: string
+  reasonCode: TransferDecisionReasonCode
+  recipient?: AgentTransferRecipientRule
+}
 
 export type AgentPolicyLookupRecord = {
   agentId: string
@@ -80,28 +123,100 @@ export interface AgentPolicyLookup {
   getByWalletId(walletId: string): Promise<AgentPolicyLookupRecord | undefined>
 }
 
-function parseAmount(amount: string): number {
-  const parsed = Number(amount)
-  return Number.isFinite(parsed) ? parsed : 0
+export type ResolvedAgentTransferPolicy = {
+  allowedRecipients: AgentTransferRecipientRule[]
+  allowedAssets: string[]
+  allowedChains: string[]
+  autoApproveUnder: string | undefined
+  maxPerTransfer: string | undefined
 }
 
-function formatAmount(amount: number): string {
-  return amount.toFixed(2)
+function parsePolicyAmount(amount: string | undefined): bigint | undefined {
+  if (amount == null) {
+    return undefined
+  }
+
+  try {
+    return parsePusdAmountToBaseUnits(amount)
+  } catch {
+    return undefined
+  }
 }
 
-function getTrustMultiplier(trustTier: AgentTrustTier): number {
+function formatPolicyAmount(amount: bigint): string {
+  const formatted = formatPusdBaseUnits(amount)
+  const [whole, fraction] = formatted.split('.')
+  if (fraction == null) {
+    return `${whole}.00`
+  }
+  if (fraction.length === 1) {
+    return `${whole}.${fraction}0`
+  }
+
+  return formatted
+}
+
+function applyTrustMultiplier(
+  amount: bigint,
+  trustTier: AgentTrustTier,
+): bigint {
   switch (trustTier) {
     case 'trusted':
-      return 2
+      return amount * 2n
     case 'healthy':
-      return 1
+      return amount
     case 'new':
-      return 0.25
+      return amount / 4n
     case 'restricted':
-      return 0
+      return 0n
     default:
-      return 1
+      return amount
   }
+}
+
+function mapVendorRulesToTransferRecipients(
+  allowedVendors: AgentVendorRule[],
+): AgentTransferRecipientRule[] {
+  return allowedVendors.map((vendor) => ({
+    counterpartyId: vendor.vendorId,
+    label: vendor.label,
+    destinationAddress: vendor.destinationAddress,
+    chainId: vendor.chainId,
+  }))
+}
+
+export function resolveAgentTransferPolicy(
+  policy: AgentPolicyTemplateInput,
+): ResolvedAgentTransferPolicy {
+  return {
+    allowedRecipients:
+      policy.transferPolicy?.allowedRecipients ??
+      mapVendorRulesToTransferRecipients(policy.allowedVendors),
+    allowedAssets: policy.transferPolicy?.allowedAssets ?? policy.allowedAssets,
+    allowedChains: policy.transferPolicy?.allowedChains ?? policy.allowedChains,
+    autoApproveUnder:
+      policy.transferPolicy?.autoApproveUnder ?? policy.autoApproveUnder,
+    maxPerTransfer:
+      policy.transferPolicy?.maxPerTransfer ?? policy.maxPerTransaction,
+  }
+}
+
+function resolveTransferRecipient(input: {
+  policy: ResolvedAgentTransferPolicy
+  counterpartyId?: string
+  destinationAddress: string
+}): AgentTransferRecipientRule | undefined {
+  if (input.counterpartyId) {
+    return input.policy.allowedRecipients.find(
+      (recipient) =>
+        recipient.counterpartyId === input.counterpartyId &&
+        recipient.destinationAddress === input.destinationAddress,
+    )
+  }
+
+  return input.policy.allowedRecipients.find(
+    (recipient) => recipient.destinationAddress === input.destinationAddress,
+  )
 }
 
 export function evaluateSpendRequest(input: {
@@ -110,9 +225,29 @@ export function evaluateSpendRequest(input: {
   vendorId?: string
   trustTier: AgentTrustTier
 }): SpendDecision {
-  const effectiveMaxPerTransaction = formatAmount(
-    parseAmount(input.policy.maxPerTransaction) * getTrustMultiplier(input.trustTier),
+  const maxPerTransaction = parsePolicyAmount(input.policy.maxPerTransaction)
+  const requestedAmount = parsePolicyAmount(input.amount)
+  const autoApproveUnder = parsePolicyAmount(input.policy.autoApproveUnder)
+  const effectiveMaxPerTransactionBaseUnits = applyTrustMultiplier(
+    maxPerTransaction ?? 0n,
+    input.trustTier,
   )
+  const effectiveMaxPerTransaction = formatPolicyAmount(
+    effectiveMaxPerTransactionBaseUnits,
+  )
+
+  if (
+    maxPerTransaction == null ||
+    requestedAmount == null ||
+    autoApproveUnder == null
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxPerTransaction,
+      reasonCode: 'policy.invalid_amount',
+    }
+  }
 
   if (input.trustTier === 'restricted') {
     return {
@@ -135,7 +270,7 @@ export function evaluateSpendRequest(input: {
     }
   }
 
-  if (parseAmount(input.amount) > parseAmount(effectiveMaxPerTransaction)) {
+  if (requestedAmount > effectiveMaxPerTransactionBaseUnits) {
     return {
       status: 'denied',
       requiresApproval: false,
@@ -144,7 +279,7 @@ export function evaluateSpendRequest(input: {
     }
   }
 
-  if (parseAmount(input.amount) > parseAmount(input.policy.autoApproveUnder)) {
+  if (requestedAmount > autoApproveUnder) {
     return {
       status: 'restricted',
       requiresApproval: true,
@@ -158,6 +293,124 @@ export function evaluateSpendRequest(input: {
     requiresApproval: false,
     effectiveMaxPerTransaction,
     reasonCode: 'policy.auto_approved',
+  }
+}
+
+export function evaluateTransferRequest(input: {
+  policy: AgentPolicyTemplateInput
+  amount: string
+  destinationAddress: string
+  chainId: string
+  assetSymbol: string
+  counterpartyId?: string
+  trustTier: AgentTrustTier
+}): TransferDecision {
+  const transferPolicy = resolveAgentTransferPolicy(input.policy)
+  const recipient = resolveTransferRecipient({
+    policy: transferPolicy,
+    counterpartyId: input.counterpartyId,
+    destinationAddress: input.destinationAddress,
+  })
+  const maxPerTransfer = parsePolicyAmount(transferPolicy.maxPerTransfer)
+  const requestedAmount = parsePolicyAmount(input.amount)
+  const autoApproveUnder = parsePolicyAmount(transferPolicy.autoApproveUnder)
+  const effectiveMaxTransferAmountBaseUnits = applyTrustMultiplier(
+    maxPerTransfer ?? 0n,
+    input.trustTier,
+  )
+  const effectiveMaxTransferAmount = formatPolicyAmount(
+    effectiveMaxTransferAmountBaseUnits,
+  )
+
+  if (!transferPolicy.allowedChains.includes(input.chainId)) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_chain_not_allowed',
+      recipient,
+    }
+  }
+
+  if (!transferPolicy.allowedAssets.includes(input.assetSymbol)) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_asset_not_allowed',
+      recipient,
+    }
+  }
+
+  if (!recipient) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_recipient_not_allowed',
+    }
+  }
+
+  if (recipient.chainId !== input.chainId) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_recipient_chain_mismatch',
+      recipient,
+    }
+  }
+
+  if (
+    maxPerTransfer == null ||
+    requestedAmount == null ||
+    autoApproveUnder == null
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.invalid_amount',
+      recipient,
+    }
+  }
+
+  if (input.trustTier === 'restricted') {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.agent_restricted',
+      recipient,
+    }
+  }
+
+  if (requestedAmount > effectiveMaxTransferAmountBaseUnits) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_amount_exceeds_limit',
+      recipient,
+    }
+  }
+
+  if (requestedAmount > autoApproveUnder) {
+    return {
+      status: 'restricted',
+      requiresApproval: true,
+      effectiveMaxTransferAmount,
+      reasonCode: 'policy.transfer_approval_required',
+      recipient,
+    }
+  }
+
+  return {
+    status: 'allowed',
+    requiresApproval: false,
+    effectiveMaxTransferAmount,
+    reasonCode: 'policy.transfer_auto_approved',
+    recipient,
   }
 }
 
@@ -211,19 +464,21 @@ export function compileAgentPolicy(input: {
   policy: AgentPolicyTemplateInput
   walletId: string
   now: string
-  decision?: SpendDecision
+  decision?: TransferDecision
 }): PolicyProfile {
   const signerClasses = input.policy.allowedSignerClasses ?? ['multisig']
   const policyProfileId =
     input.policy.policyProfileId ?? `policy_agent_${input.policy.agentId}`
+  const transferPolicy = resolveAgentTransferPolicy(input.policy)
   const resolvedDecision =
     input.decision ??
     ({
       status: 'allowed',
       requiresApproval: false,
-      effectiveMaxPerTransaction: input.policy.maxPerTransaction,
-      reasonCode: 'policy.auto_approved',
-    } satisfies SpendDecision)
+      effectiveMaxTransferAmount:
+        transferPolicy.maxPerTransfer ?? input.policy.maxPerTransaction,
+      reasonCode: 'policy.transfer_auto_approved',
+    } satisfies TransferDecision)
 
   return {
     policyProfileId,
@@ -237,26 +492,26 @@ export function compileAgentPolicy(input: {
     mode: input.policy.mode ?? 'copilot',
     scope: {
       environments: [input.policy.environment],
-      allowedChains: input.policy.allowedChains,
+      allowedChains: transferPolicy.allowedChains,
       allowedWalletIds: [input.walletId],
-      allowedAssets: input.policy.allowedAssets,
+      allowedAssets: transferPolicy.allowedAssets,
     },
     permissions: {
       actions: {
         'asset.transfer': {
           enabled: resolvedDecision.status !== 'denied',
-          maxPerTransaction: resolvedDecision.effectiveMaxPerTransaction,
+          maxPerTransaction: resolvedDecision.effectiveMaxTransferAmount,
           allowedSignerClasses: signerClasses,
           simulationRequired: true,
           approvalRequired: resolvedDecision.requiresApproval,
           allowActiveLimitedAutoApproval: !resolvedDecision.requiresApproval,
         },
       },
-      allowedAssets: input.policy.allowedAssets,
+      allowedAssets: transferPolicy.allowedAssets,
       counterparty: {
         allowlistedRecipientOnly: true,
-        approvedCounterpartyIds: input.policy.allowedVendors.map(
-          (vendor) => vendor.vendorId,
+        approvedCounterpartyIds: transferPolicy.allowedRecipients.map(
+          (recipient) => recipient.counterpartyId,
         ),
       },
       protocols: {},
@@ -272,7 +527,7 @@ export function compileAgentPolicy(input: {
     approvals: resolvedDecision.requiresApproval
       ? {
           'asset.transfer': {
-            singleApprovalUnder: resolvedDecision.effectiveMaxPerTransaction,
+            singleApprovalUnder: resolvedDecision.effectiveMaxTransferAmount,
             requiredRoles: ['manager'],
             approvalExpirySeconds: input.policy.approvalExpirySeconds ?? 900,
           },
@@ -356,15 +611,30 @@ export function createAgentPolicyCandidateResolver(input: {
         typeof kernelInput.payload?.amount === 'string'
           ? kernelInput.payload.amount
           : '0'
-      const vendorId =
+      const counterpartyId =
         typeof kernelInput.payload?.counterpartyId === 'string'
           ? kernelInput.payload.counterpartyId
           : undefined
+      const destinationAddress =
+        typeof kernelInput.payload?.destinationAddress === 'string'
+          ? kernelInput.payload.destinationAddress
+          : ''
+      const chainId =
+        typeof kernelInput.payload?.chainId === 'string'
+          ? kernelInput.payload.chainId
+          : ''
+      const assetSymbol =
+        typeof kernelInput.payload?.assetSymbol === 'string'
+          ? kernelInput.payload.assetSymbol
+          : ''
 
-      const decision = evaluateSpendRequest({
+      const decision = evaluateTransferRequest({
         policy: agent.policyConfig,
         amount,
-        vendorId,
+        destinationAddress,
+        chainId,
+        assetSymbol,
+        counterpartyId,
         trustTier: agent.trustTier,
       })
 

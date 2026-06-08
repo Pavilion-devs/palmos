@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { navigate } from '../../../hooks/useHashRoute'
+import useDashboardTransactions from '../../../hooks/useDashboardTransactions'
+import { adaptDashboardTransactions } from '../../../dashboardSnapshot'
 import SettlementBadge from './SettlementBadge'
 
 const SETTLEMENT_FILTER_OPTIONS = [
@@ -60,7 +62,16 @@ function TransactionRow({ event, services }) {
   const canOpenExplorer = Boolean(event.txExplorerUrl)
 
   function openDetail() {
-    navigate(`#dashboard/transactions/${event.id}`)
+    // Native wallet actions get the dedicated wallet-action detail view;
+    // legacy paid calls keep the existing transaction detail route.
+    const isNativeWalletAction =
+      event.transactionKind === 'native_wallet_action' ||
+      Boolean(event.actionRequestKind)
+    navigate(
+      isNativeWalletAction
+        ? `#dashboard/wallet-actions/${event.id}`
+        : `#dashboard/transactions/${event.id}`,
+    )
   }
 
   function handleKeyDown(eventKey) {
@@ -137,9 +148,26 @@ export default function TransactionsPage({ events, agents, services }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [settlementFilter, setSettlementFilter] = useState('all')
 
+  // Prefer the unified backend projection (/api/dashboard/transactions). It
+  // returns legacy paid-call rows and native wallet-action rows in one stable
+  // shape. While it is loading or unavailable we fall back to legacy
+  // snapshot-derived events so the page keeps working against older backends.
+  const {
+    status: transactionsStatus,
+    transactions: transactionRows,
+  } = useDashboardTransactions()
+
+  const endpointEvents = useMemo(
+    () => adaptDashboardTransactions(transactionRows, { agents }),
+    [transactionRows, agents],
+  )
+
+  const usingEndpoint = transactionsStatus === 'ready'
+  const sourceEvents = usingEndpoint ? endpointEvents : events
+
   const spendEvents = useMemo(
-    () => events.filter((event) => event.type === 'spend'),
-    [events],
+    () => sourceEvents.filter((event) => event.type === 'spend'),
+    [sourceEvents],
   )
 
   const filtered = useMemo(() => {
@@ -175,7 +203,8 @@ export default function TransactionsPage({ events, agents, services }) {
             Transactions
           </div>
           <h1 className="mt-1 text-xl font-medium text-white">
-            {spendEvents.length} paid {spendEvents.length === 1 ? 'call' : 'calls'} recorded
+            {spendEvents.length}{' '}
+            {spendEvents.length === 1 ? 'transaction' : 'transactions'} recorded
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -245,7 +274,7 @@ export default function TransactionsPage({ events, agents, services }) {
           <div className="border border-dashed border-neutral-800 px-6 py-12 text-center">
             <p className="text-sm text-neutral-400">
               {spendEvents.length === 0
-                ? 'No paid calls recorded yet.'
+                ? 'No transactions recorded yet.'
                 : 'No transactions match the current filters.'}
             </p>
             {spendEvents.length === 0 && (

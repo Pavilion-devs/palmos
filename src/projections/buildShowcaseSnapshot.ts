@@ -1,26 +1,42 @@
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir } from 'fs/promises'
 import { join } from 'path'
 import { FileWalletRegistry } from '../../runtime/index.js'
+import type { WalletRegistry } from '../../runtime/wallets/WalletRegistry.js'
+import { writeJsonFile } from '../../runtime/runtime/jsonFile.js'
+import {
+  FileActionRequestRegistry,
+  type ActionRequestRecord,
+  type ActionRequestRegistry,
+} from '../store/ActionRequestRegistry.js'
 import {
   FileAgentRegistry,
   type AgentRecord,
+  type AgentRegistry,
 } from '../store/AgentRegistry.js'
 import {
   FileAgentControlEventRegistry,
+  type AgentControlEventRegistry,
 } from '../store/AgentControlEventRegistry.js'
 import {
   FilePaidCallRegistry,
   type PaidCallRecord,
+  type PaidCallRegistry,
 } from '../store/PaidCallRegistry.js'
 import {
   FileXMTPAlertRegistry,
   type XMTPAlertRecord,
+  type XMTPAlertRegistry,
 } from '../store/XMTPAlertRegistry.js'
 import {
   FilePusdReadinessReportRegistry,
   type PusdReadinessReportRecord,
+  type PusdReadinessReportRegistry,
 } from '../store/PusdReadinessReportRegistry.js'
-import { FileOwsAccessRegistry, type OwsAccessRecord } from '../store/OwsAccessRegistry.js'
+import {
+  FileOwsAccessRegistry,
+  type OwsAccessRecord,
+  type OwsAccessRegistry,
+} from '../store/OwsAccessRegistry.js'
 import { buildAgentAuditSnapshot } from '../audit/buildAgentAuditSnapshot.js'
 import type { ZerionClient, ZerionWalletSnapshot } from '../integrations/zerion/client.js'
 
@@ -46,6 +62,7 @@ export type ShowcaseSnapshot = {
   agents: Array<{
     agent: AgentRecord
     paidCalls: PaidCallRecord[]
+    actionRequests: ActionRequestRecord[]
     xmtpAlerts: XMTPAlertRecord[]
     owsAccess?: SafeOwsAccessRecord
     audit: Awaited<ReturnType<typeof buildAgentAuditSnapshot>>
@@ -56,17 +73,34 @@ export type ShowcaseSnapshot = {
 export async function buildShowcaseSnapshot(input: {
   baseDir: string
   zerionClient?: ZerionClient
+  agentRegistry?: AgentRegistry
+  walletRegistry?: WalletRegistry
+  actionRequestRegistry?: ActionRequestRegistry
+  paidCallRegistry?: PaidCallRegistry
+  controlEventRegistry?: AgentControlEventRegistry
+  xmtpAlertRegistry?: XMTPAlertRegistry
+  owsAccessRegistry?: OwsAccessRegistry
+  pusdReadinessRegistry?: PusdReadinessReportRegistry
 }): Promise<ShowcaseSnapshot> {
-  const agentRegistry = new FileAgentRegistry(input.baseDir)
-  const walletRegistry = new FileWalletRegistry(input.baseDir)
-  const paidCallRegistry = new FilePaidCallRegistry(input.baseDir)
-  const controlEventRegistry = new FileAgentControlEventRegistry(input.baseDir)
-  const xmtpAlertRegistry = new FileXMTPAlertRegistry(input.baseDir)
-  const owsAccessRegistry = new FileOwsAccessRegistry(input.baseDir)
-  const pusdReadinessRegistry = new FilePusdReadinessReportRegistry(input.baseDir)
-  const [agents, wallets, paidCalls, controlEvents, xmtpAlerts, owsAccess] = await Promise.all([
+  const agentRegistry = input.agentRegistry ?? new FileAgentRegistry(input.baseDir)
+  const walletRegistry = input.walletRegistry ?? new FileWalletRegistry(input.baseDir)
+  const actionRequestRegistry =
+    input.actionRequestRegistry ?? new FileActionRequestRegistry(input.baseDir)
+  const paidCallRegistry =
+    input.paidCallRegistry ?? new FilePaidCallRegistry(input.baseDir)
+  const controlEventRegistry =
+    input.controlEventRegistry ?? new FileAgentControlEventRegistry(input.baseDir)
+  const xmtpAlertRegistry =
+    input.xmtpAlertRegistry ?? new FileXMTPAlertRegistry(input.baseDir)
+  const owsAccessRegistry =
+    input.owsAccessRegistry ?? new FileOwsAccessRegistry(input.baseDir)
+  const pusdReadinessRegistry =
+    input.pusdReadinessRegistry ??
+    new FilePusdReadinessReportRegistry(input.baseDir)
+  const [agents, wallets, actionRequests, paidCalls, controlEvents, xmtpAlerts, owsAccess] = await Promise.all([
     agentRegistry.list(),
     walletRegistry.list(),
+    actionRequestRegistry.list(),
     paidCallRegistry.list(),
     controlEventRegistry.list(),
     xmtpAlertRegistry.list(),
@@ -76,12 +110,19 @@ export async function buildShowcaseSnapshot(input: {
   const walletsById = new Map(
     wallets.map((wallet) => [wallet.walletId, wallet]),
   )
+  const nativeActionRequests = actionRequests.filter(
+    (record) => record.kind !== 'service.pay',
+  )
 
   const agentSnapshots = await Promise.all(
     agents.map(async (agent) => {
       const audit = await buildAgentAuditSnapshot({
         baseDir: input.baseDir,
         agentId: agent.agentId,
+        agentRegistry,
+        controlEventRegistry,
+        paidCallRegistry,
+        xmtpAlertRegistry,
       })
       const preferredChainId = agent.policyConfig?.allowedChains?.[0]
       const walletAddress = agent.walletId
@@ -105,6 +146,9 @@ export async function buildShowcaseSnapshot(input: {
       return {
         agent,
         paidCalls: paidCalls.filter((record) => record.agentId === agent.agentId),
+        actionRequests: nativeActionRequests.filter(
+          (record) => record.agentId === agent.agentId,
+        ),
         xmtpAlerts: xmtpAlerts.filter((record) => record.agentId === agent.agentId),
         owsAccess: owsAccessRecord
           ? {
@@ -132,8 +176,14 @@ export async function buildShowcaseSnapshot(input: {
     summary: {
       agentCount: agents.length,
       executedCalls: paidCalls.filter((record) => record.status === 'executed').length,
-      approvalPendingCalls: paidCalls.filter((record) => record.status === 'approval_pending').length,
+      approvalPendingCalls:
+        paidCalls.filter((record) => record.status === 'approval_pending').length +
+        nativeActionRequests.filter(
+          (record) => record.status === 'approval_pending',
+        ).length,
       blockedOrFailedCalls: paidCalls.filter((record) =>
+        record.status === 'blocked' || record.status === 'failed',
+      ).length + nativeActionRequests.filter((record) =>
         record.status === 'blocked' || record.status === 'failed',
       ).length,
       staleAgents: agents.filter((agent) => agent.status === 'stale').length,
@@ -155,6 +205,6 @@ export async function writeShowcaseSnapshot(input: {
   const outputDir = join(input.baseDir, 'dashboard')
   await mkdir(outputDir, { recursive: true })
   const outputPath = join(outputDir, 'showcase-snapshot.json')
-  await writeFile(outputPath, JSON.stringify(input.snapshot, null, 2), 'utf8')
+  await writeJsonFile(outputPath, input.snapshot)
   return outputPath
 }

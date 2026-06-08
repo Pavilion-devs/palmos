@@ -1,7 +1,18 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm, rmdir } from 'fs/promises'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 import type { AgentSettlementMode } from './AgentRegistry.js'
+import {
+  FileActionRequestRegistry,
+  InMemoryActionRequestRegistry,
+  type ActionRequestRegistry,
+  type ActionRequestSource,
+} from './ActionRequestRegistry.js'
+import {
+  mirrorPaidCallRecord,
+  removeMirroredActionRequest,
+} from './paidCallActionRequestMirror.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
@@ -35,6 +46,44 @@ export type UmbraSettlementMetadata = {
 export type PaidCallPaymentRail = 'x402' | 'palmos-pusd' | 'umbra'
 export type PaidCallSettlementMode = AgentSettlementMode | 'umbra'
 
+export type PaidCallSettlementRecord = {
+  rail: PaidCallPaymentRail
+  mode?: PaidCallSettlementMode | 'x402'
+  source:
+    | 'local-demo'
+    | 'real-solana'
+    | 'ows'
+    | 'x402'
+    | 'umbra'
+    | 'unknown'
+  amount: string
+  assetSymbol: string
+  network?: string
+  mint?: string
+  payer?: string
+  payerTokenAccount?: string
+  recipient?: string
+  recipientTokenAccount?: string
+  reference?: string
+  signature?: string
+  explorerUrl?: string
+  confirmationStatus:
+    | 'not_applicable'
+    | 'pending'
+    | 'confirmed'
+    | 'failed'
+    | 'unknown'
+  confirmedAt?: string
+  reconciliationStatus?:
+    | 'matched'
+    | 'pending'
+    | 'failed'
+    | 'not_applicable'
+    | 'not_supported'
+  reconciledAt?: string
+  reconciliationError?: string
+}
+
 export type PaidCallRecord = {
   executionId: string
   createdAt: string
@@ -49,6 +98,7 @@ export type PaidCallRecord = {
   chainId?: string
   transactionSignature?: string
   transactionExplorerUrl?: string
+  settlement?: PaidCallSettlementRecord
   umbraSettlement?: UmbraSettlementMetadata
   status: PaidCallStatus
   runId?: string
@@ -56,6 +106,7 @@ export type PaidCallRecord = {
   walletId?: string
   runtimeStatus?: string
   runtimePhase?: string
+  requestSource?: ActionRequestSource
   requestPayload: Record<string, unknown>
   requestSummary: Record<string, unknown>
   requestUrl?: string
@@ -69,6 +120,10 @@ export type PaidCallRecord = {
 export interface PaidCallRegistry {
   get(executionId: string): Promise<PaidCallRecord | undefined>
   put(record: PaidCallRecord): Promise<void>
+  putIfStatus(
+    record: PaidCallRecord,
+    expectedStatus: PaidCallStatus,
+  ): Promise<boolean>
   list(): Promise<PaidCallRecord[]>
   remove(executionId: string): Promise<void>
 }
@@ -85,27 +140,40 @@ function getPaidCallFilePath(executionId: string, baseDir?: string): string {
   return join(getPaidCallsDir(baseDir), `${executionId}.json`)
 }
 
-async function readJsonFile<T>(path: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(path, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
 
-    throw error
+async function acquirePaidCallFileLock(lockDir: string): Promise<void> {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir)
+      return
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'EEXIST' &&
+        Date.now() - startedAt < 5_000
+      ) {
+        await wait(25)
+        continue
+      }
+      throw error
+    }
   }
 }
 
 export class InMemoryPaidCallRegistry implements PaidCallRegistry {
   private readonly records = new Map<string, PaidCallRecord>()
+  private readonly actionRequests: ActionRequestRegistry
 
-  constructor(seedRecords: PaidCallRecord[] = []) {
+  constructor(
+    seedRecords: PaidCallRecord[] = [],
+    actionRequests: ActionRequestRegistry = new InMemoryActionRequestRegistry(),
+  ) {
+    this.actionRequests = actionRequests
     for (const record of seedRecords) {
       this.records.set(record.executionId, record)
     }
@@ -117,6 +185,20 @@ export class InMemoryPaidCallRegistry implements PaidCallRegistry {
 
   async put(record: PaidCallRecord): Promise<void> {
     this.records.set(record.executionId, record)
+    await mirrorPaidCallRecord(this.actionRequests, record)
+  }
+
+  async putIfStatus(
+    record: PaidCallRecord,
+    expectedStatus: PaidCallStatus,
+  ): Promise<boolean> {
+    const current = this.records.get(record.executionId)
+    if (current?.status !== expectedStatus) {
+      return false
+    }
+    this.records.set(record.executionId, record)
+    await mirrorPaidCallRecord(this.actionRequests, record)
+    return true
   }
 
   async list(): Promise<PaidCallRecord[]> {
@@ -125,14 +207,21 @@ export class InMemoryPaidCallRegistry implements PaidCallRegistry {
 
   async remove(executionId: string): Promise<void> {
     this.records.delete(executionId)
+    await removeMirroredActionRequest(this.actionRequests, executionId)
   }
 }
 
 export class FilePaidCallRegistry implements PaidCallRegistry {
   private readonly baseDir: string
+  private readonly actionRequests: ActionRequestRegistry
 
-  constructor(baseDir?: string) {
+  constructor(
+    baseDir?: string,
+    actionRequests?: ActionRequestRegistry,
+  ) {
     this.baseDir = resolveBaseDir(baseDir)
+    this.actionRequests =
+      actionRequests ?? new FileActionRequestRegistry(this.baseDir)
   }
 
   async get(executionId: string): Promise<PaidCallRecord | undefined> {
@@ -143,11 +232,28 @@ export class FilePaidCallRegistry implements PaidCallRegistry {
 
   async put(record: PaidCallRecord): Promise<void> {
     await mkdir(getPaidCallsDir(this.baseDir), { recursive: true })
-    await writeFile(
-      getPaidCallFilePath(record.executionId, this.baseDir),
-      JSON.stringify(record, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getPaidCallFilePath(record.executionId, this.baseDir), record)
+    await this.tryMirror(record)
+  }
+
+  async putIfStatus(
+    record: PaidCallRecord,
+    expectedStatus: PaidCallStatus,
+  ): Promise<boolean> {
+    await mkdir(getPaidCallsDir(this.baseDir), { recursive: true })
+    const lockDir = `${getPaidCallFilePath(record.executionId, this.baseDir)}.lock`
+    await acquirePaidCallFileLock(lockDir)
+    try {
+      const current = await this.get(record.executionId)
+      if (current?.status !== expectedStatus) {
+        return false
+      }
+      await writeJsonFile(getPaidCallFilePath(record.executionId, this.baseDir), record)
+      await this.tryMirror(record)
+      return true
+    } finally {
+      await rmdir(lockDir).catch(() => undefined)
+    }
   }
 
   async list(): Promise<PaidCallRecord[]> {
@@ -181,5 +287,18 @@ export class FilePaidCallRegistry implements PaidCallRegistry {
 
   async remove(executionId: string): Promise<void> {
     await rm(getPaidCallFilePath(executionId, this.baseDir), { force: true })
+    try {
+      await removeMirroredActionRequest(this.actionRequests, executionId)
+    } catch {
+      // File-backed ActionRequest data is shadow state. Drift is repaired by reconciliation.
+    }
+  }
+
+  private async tryMirror(record: PaidCallRecord): Promise<void> {
+    try {
+      await mirrorPaidCallRecord(this.actionRequests, record)
+    } catch {
+      // File-backed ActionRequest data is shadow state. Drift is repaired by reconciliation.
+    }
   }
 }

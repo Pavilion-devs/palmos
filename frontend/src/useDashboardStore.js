@@ -30,7 +30,7 @@ const EMPTY_SESSION = {
   },
 }
 
-function buildApiUrl(path) {
+export function buildApiUrl(path) {
   if (!API_BASE_URL) {
     return path
   }
@@ -38,7 +38,7 @@ function buildApiUrl(path) {
   return `${API_BASE_URL}${path}`
 }
 
-function fetchDashboardApi(path, options = {}) {
+export function fetchDashboardApi(path, options = {}) {
   return fetch(buildApiUrl(path), {
     ...options,
     credentials: 'include',

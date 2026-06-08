@@ -5,7 +5,7 @@ import type {
 } from '../contracts/ledger.js'
 import type { TranscriptEntry } from '../contracts/runtime.js'
 import { createHash } from 'crypto'
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { appendFile, mkdir, readFile } from 'fs/promises'
 import { dirname } from 'path'
 import {
   getArtifactAbsolutePath,
@@ -18,6 +18,7 @@ import {
   getSessionTranscriptPath,
   resolveStorageBaseDir,
 } from './fileLayout.js'
+import { atomicWriteTextFile } from './jsonFile.js'
 
 export interface TranscriptStore {
   append(entry: TranscriptEntry): Promise<void>
@@ -106,17 +107,8 @@ function isNodeError(error: unknown): error is Error & { code?: string } {
 
 async function appendJsonLine(filePath: string, value: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
-  let current = ''
-  try {
-    current = await readFile(filePath, 'utf8')
-  } catch (error) {
-    if (!isNodeError(error) || error.code !== 'ENOENT') {
-      throw error
-    }
-  }
-
   const line = `${JSON.stringify(value)}\n`
-  await writeFile(filePath, `${current}${line}`, 'utf8')
+  await appendFile(filePath, line, 'utf8')
 }
 
 async function readJsonLines<T>(filePath: string): Promise<T[]> {
@@ -235,7 +227,7 @@ export class FileArtifactStore implements ArtifactStore {
     const hash = artifact.hash ?? createContentHash(serialized)
 
     await mkdir(dirname(outputPath), { recursive: true })
-    await writeFile(outputPath, serialized, 'utf8')
+    await atomicWriteTextFile(outputPath, serialized)
 
     return {
       artifactId,

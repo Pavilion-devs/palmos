@@ -3,11 +3,13 @@ import {
   ArrowLeft,
   ExternalLink,
   PauseCircle,
+  RefreshCw,
   Save,
   ShieldCheck,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { navigate } from '../../../hooks/useHashRoute'
+import { fetchDashboardApi } from '../../../useDashboardStore'
 import CredentialsManager from '../CredentialsManager'
 
 const STATUS_TONE = {
@@ -17,6 +19,20 @@ const STATUS_TONE = {
   revoked: 'text-red-400',
   denied: 'text-red-400',
   idle: 'text-neutral-500',
+}
+
+const ACTION_REQUEST_PREVIEW_LIMIT = 5
+const ACTION_REQUEST_POLL_INTERVAL_MS = 10_000
+const ACTION_REQUEST_STATUS_TONE = {
+  approval_pending: 'border-yellow-500/30 bg-yellow-500/5 text-yellow-300',
+  approved: 'border-yellow-500/30 bg-yellow-500/5 text-yellow-300',
+  blocked: 'border-red-500/30 bg-red-500/5 text-red-300',
+  cancelled: 'border-red-500/30 bg-red-500/5 text-red-300',
+  executed: 'border-green-500/30 bg-green-500/5 text-green-300',
+  executing: 'border-neutral-700 bg-neutral-900 text-neutral-300',
+  expired: 'border-red-500/30 bg-red-500/5 text-red-300',
+  failed: 'border-red-500/30 bg-red-500/5 text-red-300',
+  waiting_for_execution: 'border-neutral-700 bg-neutral-900 text-neutral-300',
 }
 
 function formatPusd(value, digits = 3) {
@@ -40,6 +56,135 @@ function formatUmbraPath(value) {
   if (value === 'umbra_mixer_utxo') return 'Umbra mixer/UTXO'
   if (value === 'umbra_direct_deposit') return 'Umbra direct deposit'
   return value ?? 'not attached'
+}
+
+function formatActionRequestStatus(value) {
+  return (value ?? 'unknown').replaceAll('_', ' ')
+}
+
+function formatActionRequestSource(value) {
+  return (value ?? 'system').replaceAll('_', ' ')
+}
+
+function formatActionRequestProjectionMode(value) {
+  if (value === 'transactional_mirror') return 'Transactional mirror'
+  if (value === 'shadow') return 'Shadow projection'
+  return 'Shadow data'
+}
+
+function formatActionRequestTimestamp(value) {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) {
+    return value ?? 'unknown'
+  }
+
+  return new Date(parsed).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatUsd(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return '$0.00'
+  }
+  return `$${parsed.toFixed(2)}`
+}
+
+function formatWalletContextSync(sync) {
+  if (!sync) return 'Unavailable'
+  if (sync.kind === 'synced') return 'Synced'
+  if (sync.kind === 'empty') return 'No portfolio data'
+  if (sync.kind === 'unsupported_chain') return `Unsupported on ${sync.chainId || 'selected chain'}`
+  if (sync.kind === 'missing_wallet_address') return 'Wallet address unavailable'
+  if (sync.kind === 'request_failed') return 'Sync failed'
+  if (sync.kind === 'disabled') return 'Disabled'
+  return sync.message || 'Unavailable'
+}
+
+function formatPrivacyMode(value) {
+  if (value === 'required') return 'Required'
+  if (value === 'optional') return 'Optional'
+  return 'Off'
+}
+
+function formatWalletAddress(value) {
+  return shortHash(value) || 'unassigned'
+}
+
+function formatRecentTxLabel(tx) {
+  const parts = [tx.operationType, tx.direction].filter(Boolean)
+  return parts.length > 0 ? parts.join(' / ') : 'wallet activity'
+}
+
+function formatActionRequestHeadline(request) {
+  if (request?.value?.amount && request?.value?.assetSymbol) {
+    return `${request.value.amount} ${request.value.assetSymbol}`
+  }
+
+  return request?.kind ?? 'action request'
+}
+
+function formatActionRequestTarget(target) {
+  if (!target) return 'unknown target'
+  if (target.kind === 'service') {
+    return target.serviceId || target.vendorId || 'service target'
+  }
+  if (target.kind === 'address') {
+    return [formatWalletAddress(target.address), target.chainId]
+      .filter(Boolean)
+      .join(' / ')
+  }
+  if (target.kind === 'wallet') {
+    return target.address || target.walletId || 'wallet target'
+  }
+  if (target.kind === 'portfolio') {
+    return target.portfolioId || 'portfolio target'
+  }
+  return target.kind || 'target'
+}
+
+function formatWalletCycleStage(value) {
+  if (!value) return 'unknown'
+  return value.replaceAll('_', ' ')
+}
+
+function formatWalletCycleNextStep(value) {
+  if (!value) return 'n/a'
+  return value.replaceAll('_', ' ')
+}
+
+function formatWalletCycleValue(value) {
+  if (!value) return 'wallet action'
+  return [value.amount, value.assetSymbol].filter(Boolean).join(' ') || 'wallet action'
+}
+
+async function fetchDashboardSurface(path, fallbackMessage) {
+  const response = await fetchDashboardApi(path, { cache: 'no-store' })
+  const payload = await response.json().catch(() => null)
+
+  if (response.status === 401 || response.status === 403) {
+    return {
+      hidden: true,
+      payload: null,
+    }
+  }
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(
+      payload?.message ||
+        payload?.error ||
+        `${fallbackMessage} (${response.status})`,
+    )
+  }
+
+  return {
+    hidden: false,
+    payload,
+  }
 }
 
 function Section({ title, action, children }) {
@@ -408,6 +553,670 @@ function PrivateSettlementSummary({ agent }) {
   )
 }
 
+function ActionRequestShadowSection({ agentId }) {
+  const [historyState, setHistoryState] = useState({
+    loading: true,
+    refreshing: false,
+    hidden: false,
+    history: null,
+    error: '',
+  })
+
+  useEffect(() => {
+    let active = true
+    let intervalId = 0
+
+    async function loadHistory({ background = false } = {}) {
+      if (!active) return
+
+      setHistoryState((current) => ({
+        ...current,
+        loading: current.history ? false : !background,
+        refreshing: background || Boolean(current.history),
+        error: background ? current.error : '',
+      }))
+
+      try {
+        const params = new URLSearchParams({
+          agentId,
+          limit: String(ACTION_REQUEST_PREVIEW_LIMIT),
+        })
+        const response = await fetchDashboardApi(
+          `/api/dashboard/action-requests?${params.toString()}`,
+          { cache: 'no-store' },
+        )
+        const payload = await response.json().catch(() => null)
+
+        if (!active) {
+          return
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          active = false
+          window.clearInterval(intervalId)
+          setHistoryState({
+            loading: false,
+            refreshing: false,
+            hidden: true,
+            history: null,
+            error: '',
+          })
+          return
+        }
+
+        if (!response.ok || !payload?.ok) {
+          throw new Error(
+            payload?.message ||
+              payload?.error ||
+              `Unable to load ActionRequest history (${response.status})`,
+          )
+        }
+
+        setHistoryState({
+          loading: false,
+          refreshing: false,
+          hidden: false,
+          history: payload,
+          error: '',
+        })
+      } catch (error) {
+        if (!active) {
+          return
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Unable to load ActionRequest history.'
+
+        setHistoryState((current) => ({
+          loading: false,
+          refreshing: false,
+          hidden: false,
+          history: current.history,
+          error: message,
+        }))
+      }
+    }
+
+    void loadHistory()
+    intervalId = window.setInterval(() => {
+      void loadHistory({ background: true })
+    }, ACTION_REQUEST_POLL_INTERVAL_MS)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [agentId])
+
+  if (historyState.hidden) {
+    return null
+  }
+
+  const history = historyState.history
+  const projectionMode = history?.projectionMode
+  const actionRequests = history?.actionRequests ?? []
+  const totalMatching = history?.summary?.totalMatching ?? 0
+  const sectionAction =
+    projectionMode || historyState.refreshing ? (
+      <div className="flex items-center gap-2">
+        {projectionMode && (
+          <span className="rounded-full border border-neutral-800 bg-black px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-400">
+            {formatActionRequestProjectionMode(projectionMode)}
+          </span>
+        )}
+        {historyState.refreshing && (
+          <span className="text-[10px] uppercase tracking-widest text-neutral-600">
+            Refreshing
+          </span>
+        )}
+      </div>
+    ) : null
+
+  return (
+    <Section
+      title="ActionRequest history"
+      action={sectionAction}
+    >
+      <p className="text-xs leading-5 text-neutral-500">
+        Read-only Phase 1 mirror. Live approvals, execution, and audit still read from
+        PaidCall.
+      </p>
+
+      {historyState.error && (
+        <div className="mt-4 border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-300">
+          {historyState.error}
+        </div>
+      )}
+
+      {historyState.loading && !history ? (
+        <p className="mt-4 text-xs text-neutral-500">Loading mirrored ActionRequest history...</p>
+      ) : history ? (
+        actionRequests.length === 0 ? (
+          <p className="mt-4 text-xs text-neutral-500">
+            No ActionRequest mirror records are available for this agent yet.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-neutral-600">
+              <span>{totalMatching} mirrored</span>
+              <span>
+                {projectionMode === 'transactional_mirror'
+                  ? 'postgres-safe'
+                  : 'derived from PaidCall'}
+              </span>
+            </div>
+
+            <ul className="mt-4 space-y-3">
+              {actionRequests.map((request) => {
+                const statusTone =
+                  ACTION_REQUEST_STATUS_TONE[request.status] ||
+                  'border-neutral-700 bg-neutral-900 text-neutral-300'
+
+                return (
+                  <li
+                    key={request.actionRequestId}
+                    className="border border-neutral-900 bg-black p-3"
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest ${statusTone}`}
+                      >
+                        {formatActionRequestStatus(request.status)}
+                      </span>
+                      <span className="font-mono text-xs text-white">
+                        {formatActionRequestHeadline(request)}
+                      </span>
+                    </div>
+                    <div className="line-clamp-1 text-sm text-neutral-300">{request.title}</div>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-neutral-500">
+                      {request.summary}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-neutral-600">
+                      <span>{request.kind}</span>
+                      <span>{formatActionRequestSource(request.source)}</span>
+                      <span>{formatActionRequestTarget(request.target)}</span>
+                      {request.policy?.approvalRequired && (
+                        <span className="text-yellow-300">approval required</span>
+                      )}
+                      <span className="font-mono">
+                        {formatActionRequestTimestamp(request.updatedAt)}
+                      </span>
+                    </div>
+                    {(request.errorMessage || request.errorCode) && (
+                      <p className="mt-2 text-[11px] text-red-300">
+                        {request.errorCode ? `${request.errorCode}: ` : ''}
+                        {request.errorMessage || 'Execution failed.'}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+
+            {totalMatching > actionRequests.length && (
+              <p className="mt-3 text-[11px] text-neutral-600">
+                Showing the latest {actionRequests.length} mirrored requests.
+              </p>
+            )}
+          </>
+        )
+      ) : null}
+    </Section>
+  )
+}
+
+function WalletContextSection({ agentId }) {
+  const [walletState, setWalletState] = useState({
+    loading: true,
+    refreshing: false,
+    hidden: false,
+    walletContext: null,
+    walletCycle: null,
+    error: '',
+  })
+
+  useEffect(() => {
+    let active = true
+
+    async function loadWalletSurfaces({ background = false } = {}) {
+      if (!active) return
+
+      setWalletState((current) => ({
+        ...current,
+        loading: current.walletContext || current.walletCycle ? false : !background,
+        refreshing: background || Boolean(current.walletContext || current.walletCycle),
+        error: background ? current.error : '',
+      }))
+
+      try {
+        const encodedAgentId = encodeURIComponent(agentId)
+        const [contextResult, cycleResult] = await Promise.all([
+          fetchDashboardSurface(
+            `/api/dashboard/agents/${encodedAgentId}/wallet-context`,
+            'Unable to load wallet context',
+          ),
+          fetchDashboardSurface(
+            `/api/dashboard/agents/${encodedAgentId}/wallet-cycle`,
+            'Unable to load wallet cycle',
+          ),
+        ])
+
+        if (!active) return
+
+        if (contextResult.hidden && cycleResult.hidden) {
+          setWalletState({
+            loading: false,
+            refreshing: false,
+            hidden: true,
+            walletContext: null,
+            walletCycle: null,
+            error: '',
+          })
+          return
+        }
+
+        setWalletState({
+          loading: false,
+          refreshing: false,
+          hidden: false,
+          walletContext: contextResult.payload?.walletContext ?? null,
+          walletCycle: cycleResult.payload?.walletCycle ?? null,
+          error: '',
+        })
+      } catch (error) {
+        if (!active) return
+
+        setWalletState((current) => ({
+          loading: false,
+          refreshing: false,
+          hidden: false,
+          walletContext: current.walletContext,
+          walletCycle: current.walletCycle,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unable to load wallet surfaces.',
+        }))
+      }
+    }
+
+    void loadWalletSurfaces()
+
+    return () => {
+      active = false
+    }
+  }, [agentId])
+
+  if (walletState.hidden) {
+    return null
+  }
+
+  const walletContext = walletState.walletContext
+  const walletCycle = walletState.walletCycle
+  const sectionAction = (
+    <button
+      type="button"
+      onClick={() => {
+        void (async () => {
+          setWalletState((current) => ({
+            ...current,
+            refreshing: true,
+            error: '',
+          }))
+          try {
+            const encodedAgentId = encodeURIComponent(agentId)
+            const [contextResult, cycleResult] = await Promise.all([
+              fetchDashboardSurface(
+                `/api/dashboard/agents/${encodedAgentId}/wallet-context`,
+                'Unable to load wallet context',
+              ),
+              fetchDashboardSurface(
+                `/api/dashboard/agents/${encodedAgentId}/wallet-cycle`,
+                'Unable to load wallet cycle',
+              ),
+            ])
+            if (contextResult.hidden && cycleResult.hidden) {
+              setWalletState({
+                loading: false,
+                refreshing: false,
+                hidden: true,
+                walletContext: null,
+                walletCycle: null,
+                error: '',
+              })
+              return
+            }
+            setWalletState({
+              loading: false,
+              refreshing: false,
+              hidden: false,
+              walletContext: contextResult.payload?.walletContext ?? null,
+              walletCycle: cycleResult.payload?.walletCycle ?? null,
+              error: '',
+            })
+          } catch (error) {
+            setWalletState((current) => ({
+              ...current,
+              refreshing: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Unable to load wallet surfaces.',
+            }))
+          }
+        })()
+      }}
+      className="inline-flex min-h-9 items-center gap-1 border border-neutral-800 bg-black px-3 text-[10px] uppercase tracking-widest text-neutral-400 transition-colors hover:border-neutral-600 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+    >
+      <RefreshCw
+        className={`h-3 w-3 ${walletState.refreshing ? 'animate-spin' : ''}`}
+        aria-hidden="true"
+      />
+      Refresh
+    </button>
+  )
+
+  return (
+    <Section title="Wallet cycle" action={sectionAction}>
+      {walletState.error && (
+        <div className="border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-300">
+          {walletState.error}
+        </div>
+      )}
+
+      {walletState.loading && !walletContext && !walletCycle ? (
+        <p className="text-xs text-neutral-500">Loading wallet surfaces...</p>
+      ) : walletContext || walletCycle ? (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatTile
+              label="Portfolio value"
+              value={formatUsd(walletContext?.portfolio?.totalValueUsd)}
+            />
+            <StatTile
+              label="Wallet actions"
+              value={String(walletCycle?.actions?.total ?? 0)}
+            />
+            <StatTile
+              label="Control events"
+              value={String(walletCycle?.controls?.total ?? 0)}
+              tone={walletCycle?.controls?.applied ? 'yellow' : 'neutral'}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-0">
+              <DetailRow
+                label="Wallet address"
+                value={formatWalletAddress(
+                  walletContext?.wallet?.address ?? walletCycle?.wallet?.address,
+                )}
+                mono
+              />
+              <DetailRow
+                label="Wallet state"
+                value={walletCycle?.wallet?.state ?? walletContext?.wallet?.state}
+              />
+              <DetailRow
+                label="Provider wallet"
+                value={
+                  walletContext?.wallet?.providerWalletName ||
+                  walletContext?.owsAccess?.owsWalletName ||
+                  'unassigned'
+                }
+              />
+              <DetailRow
+                label="Supported chains"
+                value={
+                  walletCycle?.wallet?.supportedChains?.length
+                    ? walletCycle.wallet.supportedChains.join(', ')
+                    : walletContext?.wallet?.supportedChains?.length
+                    ? walletContext.wallet.supportedChains.join(', ')
+                    : 'n/a'
+                }
+              />
+            </div>
+
+            <div className="space-y-0">
+              <DetailRow
+                label="Lifecycle stage"
+                value={formatWalletCycleStage(walletCycle?.readiness?.lifecycleStage)}
+              />
+              <DetailRow
+                label="Outbound ready"
+                value={walletCycle?.readiness?.outboundReady ? 'yes' : 'no'}
+              />
+              <DetailRow
+                label="Next step"
+                value={formatWalletCycleNextStep(walletCycle?.readiness?.nextStep)}
+              />
+              <DetailRow
+                label="Blockers"
+                value={
+                  walletCycle?.readiness?.blockers?.length
+                    ? walletCycle.readiness.blockers.join(', ')
+                    : 'none'
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-0">
+              <DetailRow
+                label="Allowed actions"
+                value={
+                  walletCycle?.policyScope?.allowedActionKinds?.length
+                    ? walletCycle.policyScope.allowedActionKinds.join(', ')
+                    : 'n/a'
+                }
+              />
+              <DetailRow
+                label="Allowed assets"
+                value={
+                  walletCycle?.policyScope?.allowedAssets?.length
+                    ? walletCycle.policyScope.allowedAssets.join(', ')
+                    : walletContext?.controls?.allowedAssets?.length
+                    ? walletContext.controls.allowedAssets.join(', ')
+                    : 'n/a'
+                }
+              />
+              <DetailRow
+                label="Allowed chains"
+                value={
+                  walletCycle?.policyScope?.allowedChains?.length
+                    ? walletCycle.policyScope.allowedChains.join(', ')
+                    : walletContext?.controls?.allowedChains?.length
+                    ? walletContext.controls.allowedChains.join(', ')
+                    : 'n/a'
+                }
+              />
+            </div>
+
+            <div className="space-y-0">
+              <DetailRow
+                label="Privacy mode"
+                value={formatPrivacyMode(
+                  walletCycle?.policyScope?.privacyMode ??
+                    walletContext?.controls?.privacyMode,
+                )}
+              />
+              <DetailRow
+                label="Approval threshold"
+                value={walletCycle?.policyScope?.approvalThreshold ?? 'n/a'}
+                mono
+              />
+              <DetailRow
+                label="Max transfer"
+                value={walletCycle?.policyScope?.maxTransferAmount ?? 'n/a'}
+                mono
+              />
+              <DetailRow
+                label="Portfolio sync"
+                value={formatWalletContextSync(walletContext?.portfolio?.sync)}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
+                Native wallet actions
+              </div>
+              {walletCycle?.actions?.recent?.length ? (
+                <ul className="space-y-2">
+                  {walletCycle.actions.recent.slice(0, 3).map((request) => (
+                    <li
+                      key={request.actionRequestId}
+                      className="border border-neutral-900 bg-black p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <a
+                          href={`#dashboard/transactions/${request.actionRequestId}`}
+                          className="min-w-0 truncate text-sm text-neutral-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+                        >
+                          {request.title || formatWalletCycleValue(request.value)}
+                        </a>
+                        <span
+                          className={`shrink-0 border px-2 py-0.5 text-[10px] uppercase tracking-widest ${
+                            ACTION_REQUEST_STATUS_TONE[request.status] ??
+                            'border-neutral-800 bg-neutral-900 text-neutral-400'
+                          }`}
+                        >
+                          {formatActionRequestStatus(request.status)}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-neutral-600">
+                        <span>{request.kind}</span>
+                        <span>{formatActionRequestTarget(request.target)}</span>
+                        <span>{formatActionRequestTimestamp(request.updatedAt)}</span>
+                      </div>
+                      {request.errorCode && (
+                        <p className="mt-2 text-[11px] text-red-300">
+                          {request.errorCode}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  No native wallet actions are recorded for this agent yet.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
+                Control events
+              </div>
+              {walletCycle?.controls?.recent?.length ? (
+                <ul className="space-y-2">
+                  {walletCycle.controls.recent.slice(0, 3).map((event) => (
+                    <li
+                      key={event.controlEventId}
+                      className="border border-neutral-900 bg-black p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-neutral-300">
+                          {event.type.replaceAll('_', ' ')}
+                        </span>
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                          {event.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[11px] text-neutral-500">
+                        {event.summary}
+                      </p>
+                      <div className="mt-2 font-mono text-[10px] text-neutral-600">
+                        {formatActionRequestTimestamp(event.at)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  No wallet control events are recorded for this agent yet.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
+                Top positions
+              </div>
+              {walletContext?.portfolio?.topPositions?.length ? (
+                <ul className="space-y-2">
+                  {walletContext.portfolio.topPositions.slice(0, 3).map((position) => (
+                    <li
+                      key={position.id || `${position.symbol || 'asset'}_${position.chainId || 'chain'}`}
+                      className="border border-neutral-900 bg-black p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-neutral-300">
+                          {position.symbol || 'Unknown asset'}
+                        </span>
+                        <span className="font-mono text-xs text-white">
+                          {formatUsd(position.value)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-600">
+                        <span>{position.chainId || 'unknown chain'}</span>
+                        <span>{position.quantity ?? 'n/a'}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  No portfolio positions are available for this wallet yet.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-widest text-neutral-700">
+                Recent wallet activity
+              </div>
+              {walletContext?.activity?.recentTransactions?.length ? (
+                <ul className="space-y-2">
+                  {walletContext.activity.recentTransactions.slice(0, 3).map((tx) => (
+                    <li
+                      key={tx.id || tx.hash || `${tx.chainId || 'chain'}_${tx.minedAt || 'time'}`}
+                      className="border border-neutral-900 bg-black p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-neutral-300">
+                          {formatRecentTxLabel(tx)}
+                        </span>
+                        <span className="font-mono text-xs text-white">
+                          {formatWalletAddress(tx.hash)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-600">
+                        <span>{tx.chainId || 'unknown chain'}</span>
+                        <span>{tx.minedAt || 'unknown time'}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  No recent wallet activity is available for this wallet yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </Section>
+  )
+}
+
 function NotFound({ agentId }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
@@ -444,6 +1253,8 @@ export default function AgentDetailPage({
   updateAgentCredential,
   rotateAgentCredential,
   unallowServiceForAgent,
+  canReadActionRequestHistory = false,
+  canReadWalletContext = false,
 }) {
   const [showAllAuditEvents, setShowAllAuditEvents] = useState(false)
   const agent = agents.find((a) => a.id === agentId)
@@ -522,6 +1333,8 @@ export default function AgentDetailPage({
         <Section title="Private settlement">
           <PrivateSettlementSummary agent={agent} />
         </Section>
+
+        {canReadWalletContext && <WalletContextSection agentId={agent.id} />}
 
         <Section title="Policy">
           <AgentPolicyEditor
@@ -658,6 +1471,8 @@ export default function AgentDetailPage({
             </a>
           )}
         </Section>
+
+        {canReadActionRequestHistory && <ActionRequestShadowSection agentId={agent.id} />}
 
         <Section title="Recent audit events">
           {agentAudit.length === 0 ? (

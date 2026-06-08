@@ -1,14 +1,13 @@
 import {
   buildShowcaseSnapshot,
   createDefaultPalmosServiceCatalog,
-  DEMO_AGENT_IDS,
   executePaidServiceCall,
   loadAgentSpendWorkspace,
   loadProcessEnv,
   PalmosClient,
   resetAgentSpendWorkspace,
-  seedDemo,
 } from '../index.js'
+import { DEMO_AGENT_IDS, seedDemo } from '../demo/seedDemo.js'
 
 const env = loadProcessEnv()
 const baseDir = env.AGENT_SPEND_OS_BASE_DIR?.trim() || '/tmp/palmos-live'
@@ -28,8 +27,8 @@ await resetAgentSpendWorkspace({
 
 const seeded = await seedDemo({
   baseDir,
-  organizationId: env.PALMOS_ORG_ID?.trim() || 'org_demo',
-  treasuryId: env.PALMOS_TREASURY_ID?.trim() || 'treasury_demo',
+  organizationId: env.PALMOS_ORG_ID?.trim() || 'palmos_judge_workspace',
+  treasuryId: env.PALMOS_TREASURY_ID?.trim() || 'palmos_judge_treasury',
 })
 const workspace = loadAgentSpendWorkspace({ baseDir })
 const serviceCatalog = createDefaultPalmosServiceCatalog({
@@ -40,14 +39,17 @@ const serviceCatalog = createDefaultPalmosServiceCatalog({
 const sharedDeps = {
   kernel: workspace.kernel,
   agentRegistry: workspace.agentRegistry,
+  actionRequests: workspace.actionRequestRegistry,
   paidCalls: workspace.paidCallRegistry,
   palmosClient: PalmosClient.fromEnv(env),
   serviceCatalog,
+  env,
 }
 
 const marketMonitor = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.marketMonitor,
   serviceId: 'palmos.intel.onchain_flow',
+  source: 'system',
   request: {
     base: 'BTC',
     quote: 'USD',
@@ -57,6 +59,7 @@ const marketMonitor = await executePaidServiceCall(sharedDeps, {
 const vendorProcurement = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.vendorProcurement,
   serviceId: 'palmos.research.defi_risk',
+  source: 'system',
   request: {
     symbols: ['BTC', 'ETH', 'SOL'],
     focus: 'ops market pulse',
@@ -66,6 +69,7 @@ const vendorProcurement = await executePaidServiceCall(sharedDeps, {
 const growthCampaign = await executePaidServiceCall(sharedDeps, {
   agentId: DEMO_AGENT_IDS.growthCampaign,
   serviceId: 'palmos.research.defi_risk',
+  source: 'system',
   request: {
     symbols: ['BTC', 'ETH'],
     focus: 'growth budget check',

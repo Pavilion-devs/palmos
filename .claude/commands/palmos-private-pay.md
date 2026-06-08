@@ -1,37 +1,61 @@
-Execute an explicit PalmOS Umbra private settlement proof for a registered external agent.
+Legacy fallback: execute an explicit PalmOS Umbra private settlement proof for a registered external agent.
+
+Prefer enabling first-class private mode for the agent instead of treating private payment as a separate product path:
+
+```bash
+curl -s -X PATCH http://127.0.0.1:4030/api/dashboard/agents/<agentId>/privacy \
+  -H 'content-type: application/json' \
+  -d '{"privacyMode":"allowed"}'
+```
+
+Use `{"privacyMode":"required"}` when public settlement should fail closed unless a private route is available.
+
+This command is conversational. If arguments are missing, ask for them one step at a time before running anything.
 
 Arguments: $ARGUMENTS
 
-## What to do
+## Step-by-step flow
 
-1. Check that `UMBRA_SECRET_KEY_BASE64` is available in the environment. If it is not set, tell the user to add it to `.env` before running a private settlement proof.
+### Step 1 — Check Umbra env
+Check that `UMBRA_SECRET_KEY_BASE64` is available in the environment (either exported or in `.env`). If it is not set, stop and tell the user to add it to `.env` before continuing.
 
-2. Identify the registered PalmOS agent:
-   - Prefer an explicit `--agent <agentId>` argument.
-   - If no agent is provided, use `PALMOS_UMBRA_AGENT_ID`.
-   - If neither exists, ask the user to register an agent in PalmOS first and copy its agent ID from the dashboard.
+### Step 2 — Identify the agent
+- If `--agent <agentId>` was provided in the arguments, use it directly.
+- If no agent argument was given, fetch the registered agents from the backend:
+  ```bash
+  curl -s http://127.0.0.1:4030/api/dashboard/agents
+  ```
+  Present them as a numbered list showing name, ID, settlement mode, and status:
+  ```
+  I found these agents registered in PalmOS:
 
-3. Parse optional arguments:
-   - `--recipient <solanaAddress>` for the private payout recipient.
-   - `--amount <decimal>` for the Umbra proof amount.
-   - `--token <symbol>` for the proof asset, usually `wSOL` on devnet.
-   - `--base-dir <path>` when testing against a non-default local workspace.
+  [1] Claude Code Agent — OWS — active
+  [2] Research Agent — real-solana — active
 
-4. Run the private proof command with the existing-agent guard:
-   ```bash
-   npm run palmos:private -- --agent <agentId> --require-existing-agent [--recipient <address>] [--amount <amount>] [--token <symbol>] [--base-dir <path>]
-   ```
+  Which agent should execute the private settlement? (name, number, or ID)
+  ```
+  Accept the user's reply as a name, a number, or a full agent ID. Resolve it to the agent ID before continuing. If the name matches partially (e.g. "Claude Code" matches "Claude Code Agent"), accept it.
 
-5. Parse the JSON output and report:
-   - `ok === true` and `execution.status === "executed"` -> Private settlement executed. Show the amount, token, privacy path, report ID, final transaction link, and dashboard link `#dashboard/transactions/<executionId>`.
-   - `ok === true` and `execution.status === "approval_pending"` -> Private settlement is waiting for operator approval. Show the execution ID and tell the user to approve it from `#dashboard/approvals` or with `npm run approval:pending -- approve <executionId> --base-dir <path>`.
-   - `ok === true` but not executed -> Show the execution status and reconciliation status.
-   - `ok === false` or command failure -> Show the error and confirm the agent exists, Umbra env vars are loaded, and the devnet wallet has SOL.
+### Step 3 — Confirm amount and token
+- If `--amount` and `--token` were provided in the arguments, use them.
+- If not, ask:
+  ```
+  Amount and token for the private settlement? (default: 0.001 wSOL)
+  ```
+  Accept the user's reply. If they press enter or say "default", use `0.001` and `wSOL`.
+
+### Step 4 — Run the command
+```bash
+npm run palmos:private -- --agent <agentId> --require-existing-agent --amount <amount> --token <token>
+```
+
+### Step 5 — Report the result
+- `execution.status === "executed"` → Settlement executed. Show: amount, token, privacy path (`umbra_mixer_utxo`), report ID, dashboard link `#dashboard/transactions/<executionId>`, and if `execution.explorer` exists, render it as a Markdown link: `[Open Umbra transaction](<url>)`.
+- `execution.status === "approval_pending"` → Paused for operator approval. Show the execution ID and tell the user to approve from `#dashboard/approvals`.
+- `ok === false` or failure → Show the error. Check that the agent exists, Umbra env vars are loaded, and the devnet wallet has SOL for fees.
 
 ## Notes
 
-- This is an explicit private settlement workflow. It does not replace the normal PUSD payment command.
-- `--require-existing-agent` prevents the command from silently creating a synthetic proof agent during dashboard demos.
-- The first successful run attaches the minimum Umbra proof policy to the existing PalmOS agent identity and records the result in the dashboard.
-- If policy requires approval, no Umbra settlement executes until the PalmOS approval is accepted.
-- Current MVP proofs use the Umbra devnet mixer/UTXO path and write audit metadata for reconciliation, report ID, privacy path, and final transaction.
+- `--require-existing-agent` prevents the command from silently creating a synthetic proof agent.
+- The Umbra path runs through PalmOS policy and approval first — funds do not move until the operator approves.
+- Current proofs use the Umbra devnet mixer/UTXO path.

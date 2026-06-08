@@ -22,6 +22,7 @@ import {
   createAgentPolicyCandidateResolver,
   evaluateSpendRequest,
 } from '../../policies/compileAgentPolicy.js'
+import type { ActionRequestSource } from '../../store/ActionRequestRegistry.js'
 import type { AgentRecord, AgentRegistry } from '../../store/AgentRegistry.js'
 import { FileAgentRegistry } from '../../store/AgentRegistry.js'
 import type {
@@ -53,6 +54,7 @@ export type UmbraPrivateSettlementInput = {
   assetSymbol: UmbraAssetSymbol
   config: UmbraRuntimeConfig
   note?: string
+  source?: ActionRequestSource
   vendorId?: string
   prefundWrappedSol?: boolean
   requireExistingAgent?: boolean
@@ -161,6 +163,7 @@ export async function executeUmbraPrivateSettlement(
       destinationAddress: input.destinationAddress,
       chainId: toSolanaChainId(input.config.network),
       note: input.note ?? 'umbra:private-settlement',
+      eligibleAgentStatuses: ['ready', 'restricted', 'stale'],
     },
   )
 
@@ -401,9 +404,9 @@ async function ensureUmbraProofAgent(input: {
 }> {
   const existing = await input.agentRegistry.get(input.input.agentId)
   if (existing) {
-    if (existing.status !== 'ready') {
+    if (!isUmbraEligibleExistingAgent(existing.status)) {
       throw new Error(
-        `Umbra proof requires agent ${existing.agentId} to be ready; current status is ${existing.status}.`,
+        `Umbra proof requires agent ${existing.agentId} to be active; current status is ${existing.status}.`,
       )
     }
     const agent = await attachUmbraPolicyToExistingAgent(input)
@@ -481,6 +484,7 @@ async function ensureUmbraProofAgent(input: {
       sessionBudget: process.env.UMBRA_SESSION_BUDGET ?? '1',
       heartbeatTimeoutSeconds: 900,
       requireSanctionsScreening: false,
+      privacyMode: 'required',
       umbra: {
         defaultPath: 'anonymous',
         mixerRequired: true,
@@ -500,6 +504,10 @@ async function ensureUmbraProofAgent(input: {
     source: 'auto_created',
     umbraPolicyAttached: true,
   }
+}
+
+function isUmbraEligibleExistingAgent(status: AgentRecord['status']): boolean {
+  return status === 'ready' || status === 'restricted' || status === 'stale'
 }
 
 async function attachUmbraPolicyToExistingAgent(input: {
@@ -572,6 +580,7 @@ async function attachUmbraPolicyToExistingAgent(input: {
         ...(agent.policyConfig.allowedSignerClasses ?? []),
       ]),
       allowedVendors,
+      privacyMode: agent.policyConfig.privacyMode ?? 'allowed',
       umbra: agent.policyConfig.umbra ?? {
         defaultPath: 'anonymous',
         mixerRequired: true,
@@ -732,6 +741,7 @@ async function persistUmbraExecution(input: {
     walletId: input.agent.walletId,
     runtimeStatus: input.run?.status,
     runtimePhase: input.run?.currentPhase,
+    requestSource: input.input.source,
     requestPayload: {
       destinationAddress: input.input.destinationAddress,
       privacyPath: UMBRA_DEFAULT_PRIVACY_PATH,

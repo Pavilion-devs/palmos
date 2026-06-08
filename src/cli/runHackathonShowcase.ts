@@ -2,7 +2,6 @@ import {
   buildAgentAuditSnapshot,
   buildShowcaseSnapshot,
   createDefaultPalmosServiceCatalog,
-  DEMO_AGENT_IDS,
   executePaidServiceCall,
   loadAgentSpendWorkspace,
   OwsClient,
@@ -11,11 +10,11 @@ import {
   readLocalPusdServerConfigFromEnv,
   resolvePendingPaidCallApproval,
   runDeadMansSwitchSweep,
-  seedDemo,
   startLocalPusdDemoServer,
   XmtpNotifier,
   ZerionClient,
 } from '../index.js'
+import { DEMO_AGENT_IDS, seedDemo } from '../demo/seedDemo.js'
 import { writeShowcaseSnapshot } from '../projections/buildShowcaseSnapshot.js'
 import { renderDashboardHtml } from '../ui/renderDashboardHtml.js'
 import { mkdir, writeFile } from 'fs/promises'
@@ -52,8 +51,8 @@ const localDemoBaseUrl = shouldStartLocalServer
 
 const seedResult = await seedDemo({
   baseDir,
-  organizationId: 'org_demo',
-  treasuryId: 'treasury_demo',
+  organizationId: env.PALMOS_ORG_ID?.trim() || 'palmos_showcase_workspace',
+  treasuryId: env.PALMOS_TREASURY_ID?.trim() || 'palmos_showcase_treasury',
 })
 const workspace = loadAgentSpendWorkspace({
   baseDir,
@@ -105,16 +104,19 @@ const marketExecution =
         {
           kernel: workspace.kernel,
           agentRegistry: workspace.agentRegistry,
+          actionRequests: workspace.actionRequestRegistry,
           paidCalls: workspace.paidCallRegistry,
           palmosClient,
           owsClient,
           serviceCatalog,
           xmtpNotifier,
+          env,
         },
         {
           agentId: marketMonitorAgent.agentId,
           serviceId: marketPlan.serviceId,
           request: marketPlan.request,
+          source: 'system',
         },
       )
     : undefined
@@ -123,15 +125,18 @@ const procurementSubmitted = await executePaidServiceCall(
   {
     kernel: workspace.kernel,
     agentRegistry: workspace.agentRegistry,
+    actionRequests: workspace.actionRequestRegistry,
     paidCalls: workspace.paidCallRegistry,
     palmosClient,
     owsClient,
     serviceCatalog,
     xmtpNotifier,
+    env,
   },
   {
     agentId: vendorProcurementAgent.agentId,
     serviceId: 'palmos.research.defi_risk',
+    source: 'system',
     request: {
       symbols: ['BTC', 'ETH', 'SOL'],
       focus: 'ops market pulse',
@@ -154,7 +159,7 @@ const procurementApproved =
         {
           executionId: procurementSubmitted.execution.executionId,
           decision: 'approved',
-          approverActorId: 'manager_demo',
+          approverActorId: 'manager_dashboard',
           approverRole: 'manager',
           comment: 'Approved during packaged showcase run.',
         },
@@ -165,15 +170,18 @@ const growthCampaignBlocked = await executePaidServiceCall(
   {
     kernel: workspace.kernel,
     agentRegistry: workspace.agentRegistry,
+    actionRequests: workspace.actionRequestRegistry,
     paidCalls: workspace.paidCallRegistry,
     palmosClient,
     owsClient,
     serviceCatalog,
     xmtpNotifier,
+    env,
   },
   {
     agentId: growthCampaignAgent.agentId,
     serviceId: 'palmos.research.defi_risk',
+    source: 'system',
     request: {
       symbols: ['BTC', 'ETH'],
       focus: 'growth budget check',
@@ -203,7 +211,7 @@ const deadMansSwitch = await runDeadMansSwitchSweep(
     xmtpNotifier,
   },
   {
-    organizationId: 'org_demo',
+    organizationId: env.PALMOS_ORG_ID?.trim() || 'palmos_showcase_workspace',
   },
 )
 

@@ -65,13 +65,11 @@ function SummaryTile({ icon, label, value, tone = 'neutral' }) {
   )
 }
 
-export default function SettingsPage({ agents, services, events }) {
+export default function SettingsPage({ agents, services, events, pendingApprovals = [] }) {
   const activeAgents = agents.filter((agent) => agent.status === 'active').length
   const owsAgents = agents.filter((agent) => agent.policy?.walletBackend === 'ows').length
   const registeredServices = services.filter((service) => service.source === 'registered')
-  const pendingApprovals = events.filter(
-    (event) => event.settlementMode === 'approval_pending',
-  ).length
+  const pendingApprovalCount = pendingApprovals.length
   const realSettlements = events.filter((event) => event.settlementMode === 'real').length
   const firstAgent = agents[0]
   const defaultPolicy = firstAgent?.policy
@@ -100,8 +98,8 @@ export default function SettingsPage({ agents, services, events }) {
         <SummaryTile
           icon={AlertTriangle}
           label="Pending approvals"
-          value={String(pendingApprovals)}
-          tone={pendingApprovals > 0 ? 'yellow' : 'neutral'}
+          value={String(pendingApprovalCount)}
+          tone={pendingApprovalCount > 0 ? 'yellow' : 'neutral'}
         />
       </div>
 

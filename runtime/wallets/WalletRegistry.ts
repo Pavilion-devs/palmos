@@ -1,35 +1,20 @@
 import type { WalletRecord } from '../contracts/wallet.js'
-import { mkdir, readFile, readdir, writeFile } from 'fs/promises'
+import { mkdir, readdir } from 'fs/promises'
 import {
   getWalletDir,
   getWalletStatePath,
   getWalletsDir,
   resolveStorageBaseDir,
 } from '../runtime/fileLayout.js'
+import { readJsonFile, writeJsonFile } from '../runtime/jsonFile.js'
 
 export interface WalletRegistry {
   get(walletId: string): Promise<WalletRecord | undefined>
   put(wallet: WalletRecord): Promise<void>
+  putIfUpdatedAt(wallet: WalletRecord, expectedUpdatedAt: string): Promise<boolean>
   list(): Promise<WalletRecord[]>
   listByOrganization(organizationId: string): Promise<WalletRecord[]>
   listByTreasury(treasuryId: string): Promise<WalletRecord[]>
-}
-
-async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-  try {
-    const contents = await readFile(filePath, 'utf8')
-    return JSON.parse(contents) as T
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return undefined
-    }
-
-    throw error
-  }
 }
 
 export class InMemoryWalletRegistry implements WalletRegistry {
@@ -47,6 +32,18 @@ export class InMemoryWalletRegistry implements WalletRegistry {
 
   async put(wallet: WalletRecord): Promise<void> {
     this.wallets.set(wallet.walletId, wallet)
+  }
+
+  async putIfUpdatedAt(
+    wallet: WalletRecord,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    const current = this.wallets.get(wallet.walletId)
+    if (current?.updatedAt !== expectedUpdatedAt) {
+      return false
+    }
+    this.wallets.set(wallet.walletId, wallet)
+    return true
   }
 
   async list(): Promise<WalletRecord[]> {
@@ -77,11 +74,20 @@ export class FileWalletRegistry implements WalletRegistry {
 
   async put(wallet: WalletRecord): Promise<void> {
     await mkdir(getWalletDir(wallet.walletId, this.baseDir), { recursive: true })
-    await writeFile(
-      getWalletStatePath(wallet.walletId, this.baseDir),
-      JSON.stringify(wallet, null, 2),
-      'utf8',
-    )
+    await writeJsonFile(getWalletStatePath(wallet.walletId, this.baseDir), wallet)
+  }
+
+  async putIfUpdatedAt(
+    wallet: WalletRecord,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    await mkdir(getWalletDir(wallet.walletId, this.baseDir), { recursive: true })
+    const current = await this.get(wallet.walletId)
+    if (current?.updatedAt !== expectedUpdatedAt) {
+      return false
+    }
+    await writeJsonFile(getWalletStatePath(wallet.walletId, this.baseDir), wallet)
+    return true
   }
 
   async list(): Promise<WalletRecord[]> {

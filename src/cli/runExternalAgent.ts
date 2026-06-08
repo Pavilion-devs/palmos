@@ -75,8 +75,9 @@ function hasFlag(args: string[], name: string): boolean {
 function parseRequestJson(value: string | undefined): Record<string, unknown> {
   if (!value?.trim()) {
     return {
-      base: 'BTC',
-      quote: 'USD',
+      target: 'https://www.getpalmos.xyz',
+      checks: ['security', 'performance', 'seo', 'api-health'],
+      context: 'judge submission readiness',
     }
   }
 
@@ -86,6 +87,47 @@ function parseRequestJson(value: string | undefined): Record<string, unknown> {
   }
 
   return parsed as Record<string, unknown>
+}
+
+function formatServiceData(value: unknown): string | undefined {
+  const record = readRecord(value)
+  if (!record) {
+    return undefined
+  }
+
+  const launchAudit = readRecord(record.data)?.decision
+    ? readRecord(record.data)
+    : record.decision
+      ? record
+      : undefined
+  if (launchAudit) {
+    const findings = Array.isArray(launchAudit.findings)
+      ? launchAudit.findings
+          .map((item) => readRecord(item))
+          .filter((item): item is Record<string, unknown> => Boolean(item))
+      : []
+    return [
+      `Launch Audit: ${String(launchAudit.decision ?? 'completed').replace(/_/g, ' ').toUpperCase()}`,
+      launchAudit.target ? `Target: ${launchAudit.target}` : undefined,
+      launchAudit.score != null ? `Score: ${launchAudit.score}/100` : undefined,
+      launchAudit.summary ? `Summary: ${launchAudit.summary}` : undefined,
+      findings.length
+        ? [
+            'Findings:',
+            ...findings.map((finding) =>
+              `- ${String(finding.status ?? 'info').toUpperCase()}: ${finding.detail ?? finding.check}`,
+            ),
+          ].join('\n')
+        : undefined,
+      launchAudit.recommendation
+        ? `Recommendation: ${launchAudit.recommendation}`
+        : undefined,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n')
+  }
+
+  return JSON.stringify(value, null, 2)
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {
@@ -225,14 +267,14 @@ function printHuman(summary: ExternalAgentRunSummary): void {
       ? `Reason: ${summary.outcome.reason}`
       : undefined,
     summary.outcome?.transactionExplorerUrl
-      ? `Explorer: ${summary.outcome.transactionExplorerUrl}`
+      ? `Explorer: [Open transaction](${summary.outcome.transactionExplorerUrl})`
       : undefined,
     summary.outcome?.dashboardPath
       ? `Dashboard: ${summary.outcome.dashboardPath}`
       : undefined,
     summary.serviceData
-      ? `\nService response:\n${JSON.stringify(summary.serviceData, null, 2)
-          .split('\n')
+      ? `\nService response:\n${formatServiceData(summary.serviceData)
+          ?.split('\n')
           .map((l) => `  ${l}`)
           .join('\n')}`
       : undefined,
@@ -251,8 +293,8 @@ Usage:
 Options:
   --api-url <url>          PalmOS backend URL. Defaults to PALMOS_API_URL or http://127.0.0.1:4030
   --token <palmos_...>     Agent SDK token. Defaults to PALMOS_AGENT_TOKEN
-  --service <serviceId>    Service to request. Defaults to PALMOS_SERVICE_ID or palmos.intel.onchain_flow
-  --request-json <json>    JSON request payload. Defaults to PALMOS_AGENT_REQUEST_JSON or {"base":"BTC","quote":"USD"}
+  --service <serviceId>    Service to request. Defaults to PALMOS_SERVICE_ID or palmos.launch.audit
+  --request-json <json>    JSON request payload. Defaults to PALMOS_AGENT_REQUEST_JSON or a getpalmos.xyz launch audit
   --amount <amount>        Optional PUSD amount override
   --note <text>            Optional audit note
   --json                   Print machine-readable JSON
@@ -275,7 +317,7 @@ const apiUrl =
 const serviceId =
   readFlag(args, 'service') ??
   env.PALMOS_SERVICE_ID ??
-  'palmos.intel.onchain_flow'
+  'palmos.launch.audit'
 const amount = readFlag(args, 'amount') ?? env.PALMOS_AGENT_AMOUNT
 const note =
   readFlag(args, 'note') ??

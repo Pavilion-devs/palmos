@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim
+FROM node:24-trixie-slim
 
 ENV DASHBOARD_API_PORT=4030
 ENV NODE_ENV=production
