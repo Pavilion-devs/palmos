@@ -20,6 +20,7 @@ import {
   sendDashboardInternalError,
 } from '../apiErrors.js'
 import type { DashboardRouteContext } from '../context.js'
+import { buildDashboardAgentWalletContext } from '../agentWalletContext.js'
 import { stripAgentSecrets } from '../sanitizers.js'
 import {
   createSdkIdempotentExecutionId,
@@ -36,6 +37,7 @@ import {
   buildSdkAgentStatus,
   buildSdkPolicyCheck,
   buildSdkServiceSummaries,
+  buildSdkWalletContext,
   isSdkToolName,
   readSdkPolicyCheckInput,
   readSdkToolInput,
@@ -70,6 +72,27 @@ function sendSdkAuthError(
     code: 'dashboard_access_required',
     message: 'Missing or invalid PalmOS agent credential.',
   })
+}
+
+async function buildSdkWalletContextResponse(input: {
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}) {
+  const { context, auth } = input
+  const agent = auth.agent
+  const [wallet, owsAccess] = await Promise.all([
+    agent.walletId
+      ? context.workspace.walletRegistry.get(agent.walletId)
+      : Promise.resolve(undefined),
+    context.workspace.owsAccessRegistry.get(agent.agentId),
+  ])
+  const walletContext = await buildDashboardAgentWalletContext({
+    agent,
+    wallet,
+    owsAccess,
+    portfolioReader: context.portfolioReader,
+  })
+  return buildSdkWalletContext({ agent, walletContext })
 }
 
 function asUmbraAssetSymbol(value: string | undefined): UmbraAssetSymbol {
@@ -580,6 +603,26 @@ export function registerSdkRoutes(
     res.json(buildSdkAgentStatus(auth))
   })
 
+  app.get('/api/sdk/v1/wallet', async (req, res) => {
+    context.operationalMetrics.increment('sdk.calls')
+    try {
+      const auth = await authenticateSdkRequest({ req, context })
+      if (!auth) {
+        sendSdkAuthError(context, res)
+        return
+      }
+
+      res.json(await buildSdkWalletContextResponse({ context, auth }))
+    } catch (error) {
+      context.operationalMetrics.increment('sdk.internal_failures')
+      console.error('[DashboardApi] SDK wallet context request failed', error)
+      sendDashboardInternalError(
+        res,
+        'Unable to build PalmOS agent wallet context.',
+      )
+    }
+  })
+
   app.get('/api/sdk/v1/services', async (req, res) => {
     context.operationalMetrics.increment('sdk.calls')
     const auth = await authenticateSdkRequest({ req, context })
@@ -631,6 +674,11 @@ export function registerSdkRoutes(
 
       if (toolName === 'get_agent_status') {
         res.json(buildSdkAgentStatus(auth))
+        return
+      }
+
+      if (toolName === 'get_wallet_context') {
+        res.json(await buildSdkWalletContextResponse({ context, auth }))
         return
       }
 

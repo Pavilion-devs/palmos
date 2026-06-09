@@ -89,28 +89,28 @@ export default function PolicyInspector({ agents, selectedAgentId, onSelectAgent
 
         <PolicyBlock label="Onchain Context">
           <PolicyRow
-            label="Zerion wallet"
-            value={shortenAddress(policy.zerionWalletAddress)}
+            label="Wallet"
+            value={shortenAddress(policy.portfolioWalletAddress)}
           />
           <PolicyRow
             label="Sync status"
-            value={policy.zerionSyncMessage ?? 'Unavailable'}
+            value={policy.portfolioSyncMessage ?? 'Unavailable'}
           />
           <PolicyRow
             label="Portfolio value"
-            value={policy.zerionPortfolioDisplay ?? 'Unavailable'}
+            value={policy.portfolioValueDisplay ?? 'Unavailable'}
           />
           <PolicyRow
             label="Positions"
-            value={String(policy.zerionPositionsCount ?? 0)}
+            value={String(policy.portfolioPositionsCount ?? 0)}
           />
           <PolicyRow
             label="Recent transactions"
-            value={String(policy.zerionTransactionsCount ?? 0)}
+            value={String(policy.portfolioTransactionsCount ?? 0)}
           />
           <PolicyRow
             label="Latest tx"
-            value={policy.zerionLatestDisplay ?? 'Unavailable'}
+            value={policy.portfolioLatestDisplay ?? 'Unavailable'}
           />
         </PolicyBlock>
 

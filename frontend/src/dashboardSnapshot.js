@@ -513,12 +513,12 @@ function buildXmtpEvent(agentSnapshot, alertRecord) {
   }
 }
 
-function buildZerionSummary(zerionSnapshot) {
-  const positions = zerionSnapshot?.positions ?? []
-  const transactions = zerionSnapshot?.transactions ?? []
-  const sync = zerionSnapshot?.sync ?? {
+function buildPortfolioSummary(portfolioSnapshot) {
+  const positions = portfolioSnapshot?.positions ?? []
+  const transactions = portfolioSnapshot?.transactions ?? []
+  const sync = portfolioSnapshot?.sync ?? {
     kind: 'disabled',
-    message: 'Zerion enrichment is not configured on the backend.',
+    message: 'Portfolio enrichment is not configured on the backend.',
     chainId: null,
   }
   const portfolioValue = positions.reduce(
@@ -533,7 +533,7 @@ function buildZerionSummary(zerionSnapshot) {
     )[0]
 
   return {
-    walletAddress: zerionSnapshot?.address ?? null,
+    walletAddress: portfolioSnapshot?.address ?? null,
     positionsCount: positions.length,
     transactionsCount: transactions.length,
     portfolioValue,
@@ -545,56 +545,56 @@ function buildZerionSummary(zerionSnapshot) {
   }
 }
 
-function formatZerionPortfolioDisplay(zerion) {
-  if (zerion.syncKind === 'synced') {
-    return `$${(zerion.portfolioValue ?? 0).toFixed(2)}`
+function formatPortfolioValueDisplay(portfolio) {
+  if (portfolio.syncKind === 'synced') {
+    return `$${(portfolio.portfolioValue ?? 0).toFixed(2)}`
   }
 
-  if (zerion.syncKind === 'empty') {
+  if (portfolio.syncKind === 'empty') {
     return 'no data'
   }
 
-  if (zerion.syncKind === 'unsupported_chain' && zerion.syncChainId) {
-    return `unsupported on ${zerion.syncChainId}`
+  if (portfolio.syncKind === 'unsupported_chain' && portfolio.syncChainId) {
+    return `unsupported on ${portfolio.syncChainId}`
   }
 
-  if (zerion.syncKind === 'request_failed') {
+  if (portfolio.syncKind === 'request_failed') {
     return 'sync failed'
   }
 
-  if (zerion.syncKind === 'missing_wallet_address') {
+  if (portfolio.syncKind === 'missing_wallet_address') {
     return 'wallet unavailable'
   }
 
-  if (zerion.syncKind === 'disabled') {
+  if (portfolio.syncKind === 'disabled') {
     return 'disabled'
   }
 
   return 'unavailable'
 }
 
-function formatZerionLatestDisplay(zerion) {
-  if (zerion.latestTransactionAt) {
-    return `${zerion.latestTransactionAt}${zerion.latestTransactionChain ? ` · ${String(zerion.latestTransactionChain).toUpperCase()}` : ''}`
+function formatPortfolioLatestDisplay(portfolio) {
+  if (portfolio.latestTransactionAt) {
+    return `${portfolio.latestTransactionAt}${portfolio.latestTransactionChain ? ` · ${String(portfolio.latestTransactionChain).toUpperCase()}` : ''}`
   }
 
-  if (zerion.syncKind === 'unsupported_chain' && zerion.syncChainId) {
-    return `unsupported on ${zerion.syncChainId}`
+  if (portfolio.syncKind === 'unsupported_chain' && portfolio.syncChainId) {
+    return `unsupported on ${portfolio.syncChainId}`
   }
 
-  if (zerion.syncKind === 'empty') {
+  if (portfolio.syncKind === 'empty') {
     return 'no data'
   }
 
-  if (zerion.syncKind === 'request_failed') {
+  if (portfolio.syncKind === 'request_failed') {
     return 'sync failed'
   }
 
-  if (zerion.syncKind === 'missing_wallet_address') {
+  if (portfolio.syncKind === 'missing_wallet_address') {
     return 'wallet unavailable'
   }
 
-  if (zerion.syncKind === 'disabled') {
+  if (portfolio.syncKind === 'disabled') {
     return 'disabled'
   }
 
@@ -634,7 +634,7 @@ function deriveAgent(agentSnapshot) {
   const paidCalls = agentSnapshot.paidCalls ?? []
   const actionRequests = agentSnapshot.actionRequests ?? []
   const umbraPolicy = agent.policyConfig?.umbra
-  const zerion = buildZerionSummary(agentSnapshot.zerion)
+  const portfolio = buildPortfolioSummary(agentSnapshot.portfolio)
   const executedAmount = paidCalls
     .filter((record) => record.status === 'executed')
     .reduce((sum, record) => sum + parseAmount(record.amount), 0)
@@ -715,17 +715,17 @@ function deriveAgent(agentSnapshot) {
       executedSpend: executedAmount + executedActionRequestAmount,
       committedSpend: committedAmount,
       blockedCount,
-      zerionWalletAddress: zerion.walletAddress,
-      zerionPositionsCount: zerion.positionsCount,
-      zerionTransactionsCount: zerion.transactionsCount,
-      zerionPortfolioValue: zerion.portfolioValue,
-      zerionLatestTransactionAt: zerion.latestTransactionAt,
-      zerionLatestTransactionChain: zerion.latestTransactionChain,
-      zerionSyncKind: zerion.syncKind,
-      zerionSyncMessage: zerion.syncMessage,
-      zerionSyncChainId: zerion.syncChainId,
-      zerionPortfolioDisplay: formatZerionPortfolioDisplay(zerion),
-      zerionLatestDisplay: formatZerionLatestDisplay(zerion),
+      portfolioWalletAddress: portfolio.walletAddress,
+      portfolioPositionsCount: portfolio.positionsCount,
+      portfolioTransactionsCount: portfolio.transactionsCount,
+      portfolioValue: portfolio.portfolioValue,
+      portfolioLatestTransactionAt: portfolio.latestTransactionAt,
+      portfolioLatestTransactionChain: portfolio.latestTransactionChain,
+      portfolioSyncKind: portfolio.syncKind,
+      portfolioSyncMessage: portfolio.syncMessage,
+      portfolioSyncChainId: portfolio.syncChainId,
+      portfolioValueDisplay: formatPortfolioValueDisplay(portfolio),
+      portfolioLatestDisplay: formatPortfolioLatestDisplay(portfolio),
       umbraEnabled: Boolean(umbraPolicy?.mixerRequired),
       umbraDefaultPath: umbraPolicy?.defaultPath ?? 'not attached',
       umbraViewingKeyRetention: umbraPolicy?.viewingKeyRetention ?? 'not attached',

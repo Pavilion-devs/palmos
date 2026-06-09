@@ -66,7 +66,8 @@ export {
   mergeRegisteredPalmosServices,
 } from './integrations/pusd/serviceCatalog.js'
 export * from './integrations/xmtp/client.js'
-export * from './integrations/zerion/client.js'
+export * from './integrations/portfolio/types.js'
+export * from './integrations/portfolio/solanaPortfolioReader.js'
 export * from './env/loadProcessEnv.js'
 export * from './workspace/loadWorkspace.js'
 export * from './workspace/resetWorkspace.js'

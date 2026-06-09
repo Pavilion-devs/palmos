@@ -131,7 +131,7 @@ export default function AgentSidebar({
 
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-widest text-neutral-700">
-                  Zerion portfolio
+                  Portfolio
                 </span>
                 <span className="font-mono text-[10px] text-neutral-400">
                   PUSD ready
@@ -140,7 +140,7 @@ export default function AgentSidebar({
 
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-widest text-neutral-700">
-                  Zerion activity
+                  Activity
                 </span>
                 <span className="font-mono text-[10px] text-neutral-500">
                   {agent.policy?.walletState ?? 'unknown'}

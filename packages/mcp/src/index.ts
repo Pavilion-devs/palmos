@@ -83,6 +83,23 @@ server.registerTool(
 )
 
 server.registerTool(
+  'palmos_get_wallet_context',
+  {
+    title: 'Get PalmOS wallet context',
+    description:
+      "Return this agent's own wallet view: on-chain balances and portfolio (positions, total stablecoin USD value), recent activity, and the policy controls the agent must act within (allowed assets/chains, spend limits, privacy mode). Call this to understand what the wallet holds and what the agent is allowed to do before proposing an action.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return ok(await getClient().getWalletContext())
+    } catch (error) {
+      return fail(error)
+    }
+  },
+)
+
+server.registerTool(
   'palmos_check_policy',
   {
     title: 'Check PalmOS payment policy',

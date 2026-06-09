@@ -63,6 +63,7 @@ export type PalmosSdkToolName =
   | 'request_paid_service'
   | 'check_policy'
   | 'get_agent_status'
+  | 'get_wallet_context'
 
 export type PalmosSdkToolDefinition = {
   name: PalmosSdkToolName
@@ -185,6 +186,65 @@ export type PalmosSdkAgentStatus = {
 
 export type PalmosSdkAgentStatusResponse = PalmosSdkMeResponse & {
   status: PalmosSdkAgentStatus
+}
+
+export type PalmosSdkWalletPosition = {
+  id?: string
+  symbol?: string
+  chainId?: string
+  value?: number
+  quantity?: number
+}
+
+export type PalmosSdkPortfolioSync = {
+  kind: string
+  chainId?: string
+  message: string
+}
+
+export type PalmosSdkWalletTransaction = {
+  id?: string
+  hash?: string
+  chainId?: string
+  operationType?: string
+  minedAt?: string
+  direction?: string
+  value?: number
+}
+
+export type PalmosSdkWalletContextResponse = {
+  ok: true
+  agentId: string
+  wallet: {
+    walletId?: string
+    address?: string
+    state?: string
+    walletType?: string
+    settlementMode?: string
+    supportedChains: string[]
+  }
+  portfolio: {
+    sync: PalmosSdkPortfolioSync
+    totalValueUsd: number
+    positionsCount: number
+    topPositions: PalmosSdkWalletPosition[]
+  }
+  activity: {
+    transactionsCount: number
+    latestTransactionAt?: string
+    latestTransactionChain?: string
+    recentTransactions: PalmosSdkWalletTransaction[]
+  }
+  controls: {
+    allowedAssets: string[]
+    allowedChains: string[]
+    allowedSignerClasses?: string[]
+    allowedVendors?: string[]
+    privacyMode: string
+    maxPerTransaction?: string
+    autoApproveUnder?: string
+    sessionBudget?: string
+  }
 }
 
 export type PalmosSdkPayResponse = {
@@ -320,6 +380,10 @@ export class PalmosAgentClient {
 
   async getAgentStatus(): Promise<PalmosSdkAgentStatusResponse> {
     return this.callTool<PalmosSdkAgentStatusResponse>('get_agent_status')
+  }
+
+  async getWalletContext(): Promise<PalmosSdkWalletContextResponse> {
+    return this.request<PalmosSdkWalletContextResponse>('/api/sdk/v1/wallet')
   }
 
   async checkPolicy(

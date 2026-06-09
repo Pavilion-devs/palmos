@@ -59,11 +59,11 @@ export function renderDashboardHtml(snapshot: ShowcaseSnapshot): string {
   const agentCards = snapshot.agents
     .map((agentSnapshot) => {
       const latestPaidCall = agentSnapshot.paidCalls.at(-1)
-      const zerionNote = agentSnapshot.zerion
-        ? agentSnapshot.zerion.sync.kind === 'synced'
-          ? `<p class="agent-note">Zerion positions: ${agentSnapshot.zerion.positions.length}; transactions: ${agentSnapshot.zerion.transactions.length}</p>`
-          : `<p class="agent-note">Zerion sync: ${escapeHtml(agentSnapshot.zerion.sync.message)}</p>`
-        : '<p class="agent-note">Zerion enrichment not configured for this export.</p>'
+      const portfolioNote = agentSnapshot.portfolio
+        ? agentSnapshot.portfolio.sync.kind === 'synced'
+          ? `<p class="agent-note">Portfolio positions: ${agentSnapshot.portfolio.positions.length}; transactions: ${agentSnapshot.portfolio.transactions.length}</p>`
+          : `<p class="agent-note">Portfolio sync: ${escapeHtml(agentSnapshot.portfolio.sync.message)}</p>`
+        : '<p class="agent-note">Portfolio enrichment not configured for this export.</p>'
       const owsNote = agentSnapshot.owsAccess
         ? `<p class="agent-note">OWS wallet: ${escapeHtml(agentSnapshot.owsAccess.owsWalletName)} · API key: ${escapeHtml(agentSnapshot.owsAccess.apiKeyId ?? 'n/a')}</p>`
         : '<p class="agent-note">OWS access not attached for this agent.</p>'
@@ -88,7 +88,7 @@ export function renderDashboardHtml(snapshot: ShowcaseSnapshot): string {
             <div><dt>OWS Wallet</dt><dd>${escapeHtml(agentSnapshot.agent.owsWalletName ?? 'none')}</dd></div>
           </dl>
           ${owsNote}
-          ${zerionNote}
+          ${portfolioNote}
         </section>
       `
     })
@@ -334,7 +334,7 @@ export function renderDashboardHtml(snapshot: ShowcaseSnapshot): string {
 
       <div class="section-header">
         <h2>Agent States</h2>
-        <p>Wallet posture, spend outcome, and optional Zerion enrichment.</p>
+        <p>Wallet posture, spend outcome, and optional portfolio enrichment.</p>
       </div>
       <section class="agent-list">
         ${agentCards}

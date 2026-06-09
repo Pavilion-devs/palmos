@@ -1,9 +1,9 @@
 import type {
   OwsClient,
   PalmosClient,
+  PortfolioReader,
   ShowcaseSnapshot,
   XmtpNotifier,
-  ZerionClient,
 } from '../../index.js'
 import type { PalmosServiceCatalog } from '../../integrations/pusd/serviceCatalog.js'
 import type { PusdReadinessReportRegistry } from '../../store/PusdReadinessReportRegistry.js'
@@ -25,7 +25,7 @@ export type DashboardRouteContext = {
   workspace: AgentSpendWorkspace
   palmosClient: PalmosClient
   owsClient?: OwsClient
-  zerionClient?: ZerionClient
+  portfolioReader?: PortfolioReader
   xmtpNotifier?: XmtpNotifier
   pusdReadinessReports: PusdReadinessReportRegistry
   operationalMetrics: DashboardOperationalMetricsStore

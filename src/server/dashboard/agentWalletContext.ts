@@ -2,10 +2,10 @@ import type { WalletRecord } from '../../../runtime/contracts/wallet.js'
 import type { AgentRecord } from '../../store/AgentRegistry.js'
 import type { OwsAccessRecord } from '../../store/OwsAccessRegistry.js'
 import type {
-  ZerionClient,
-  ZerionWalletSnapshot,
-  ZerionWalletSyncStatus,
-} from '../../integrations/zerion/client.js'
+  PortfolioReader,
+  PortfolioSyncStatus,
+  WalletPortfolioSnapshot,
+} from '../../integrations/portfolio/types.js'
 
 export type DashboardAgentWalletContext = {
   agentId: string
@@ -34,7 +34,7 @@ export type DashboardAgentWalletContext = {
     privacyMode: 'required' | 'optional' | 'off'
   }
   portfolio: {
-    sync: ZerionWalletSyncStatus
+    sync: PortfolioSyncStatus
     totalValueUsd: number
     positionsCount: number
     topPositions: Array<{
@@ -99,7 +99,7 @@ function parseMinedAt(value: string | undefined): number {
 function buildDisabledSnapshot(input: {
   address: string
   chainId?: string
-}): ZerionWalletSnapshot {
+}): WalletPortfolioSnapshot {
   return {
     address: input.address,
     positions: [],
@@ -112,19 +112,19 @@ function buildDisabledSnapshot(input: {
   }
 }
 
-async function loadZerionSnapshot(input: {
-  zerionClient?: ZerionClient
+async function loadPortfolioSnapshot(input: {
+  portfolioReader?: PortfolioReader
   address: string
   chainId?: string
-}): Promise<ZerionWalletSnapshot> {
-  if (!input.zerionClient) {
+}): Promise<WalletPortfolioSnapshot> {
+  if (!input.portfolioReader) {
     return buildDisabledSnapshot({
       address: input.address,
       chainId: input.chainId,
     })
   }
 
-  return input.zerionClient.getWalletSnapshot(input.address, {
+  return input.portfolioReader.getWalletSnapshot(input.address, {
     chainId: input.chainId,
   })
 }
@@ -133,27 +133,27 @@ export async function buildDashboardAgentWalletContext(input: {
   agent: AgentRecord
   wallet?: WalletRecord
   owsAccess?: OwsAccessRecord
-  zerionClient?: ZerionClient
+  portfolioReader?: PortfolioReader
 }): Promise<DashboardAgentWalletContext> {
   const preferredChainId = input.agent.policyConfig.allowedChains?.[0]
   const walletAddress = readWalletAddress({
     wallet: input.wallet,
     agent: input.agent,
   })
-  const zerion = await loadZerionSnapshot({
-    zerionClient: input.zerionClient,
+  const snapshot = await loadPortfolioSnapshot({
+    portfolioReader: input.portfolioReader,
     address: walletAddress,
     chainId: preferredChainId,
   })
-  const recentTransactions = [...zerion.transactions]
+  const recentTransactions = [...snapshot.transactions]
     .sort((left, right) => parseMinedAt(right.minedAt) - parseMinedAt(left.minedAt))
     .slice(0, 5)
   const latestTransaction = recentTransactions[0]
-  const totalValueUsd = zerion.positions.reduce(
+  const totalValueUsd = snapshot.positions.reduce(
     (sum, position) => sum + (Number.isFinite(position.value) ? (position.value ?? 0) : 0),
     0,
   )
-  const topPositions = [...zerion.positions]
+  const topPositions = [...snapshot.positions]
     .sort((left, right) => (right.value ?? 0) - (left.value ?? 0))
     .slice(0, 5)
 
@@ -185,13 +185,13 @@ export async function buildDashboardAgentWalletContext(input: {
       privacyMode: readPrivacyMode(input.agent),
     },
     portfolio: {
-      sync: zerion.sync,
+      sync: snapshot.sync,
       totalValueUsd,
-      positionsCount: zerion.positions.length,
+      positionsCount: snapshot.positions.length,
       topPositions,
     },
     activity: {
-      transactionsCount: zerion.transactions.length,
+      transactionsCount: snapshot.transactions.length,
       latestTransactionAt: latestTransaction?.minedAt,
       latestTransactionChain: latestTransaction?.chainId,
       recentTransactions,

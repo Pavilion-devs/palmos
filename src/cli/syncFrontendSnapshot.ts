@@ -3,7 +3,7 @@ import { join } from 'path'
 import {
   buildShowcaseSnapshot,
   type ShowcaseSnapshot,
-  ZerionClient,
+  SolanaPortfolioReader,
 } from '../index.js'
 
 function readProcessEnv(): Record<string, string | undefined> {
@@ -117,7 +117,7 @@ const outputPath = join(frontendPublicDir, 'showcase-snapshot.json')
 const snapshot = sanitizeSnapshot(
   await buildShowcaseSnapshot({
     baseDir,
-    zerionClient: ZerionClient.fromEnv(env),
+    portfolioReader: SolanaPortfolioReader.fromEnv(env),
   }),
 )
 

@@ -57,7 +57,7 @@ export function registerAgentWalletContextRoutes(
         agent,
         wallet,
         owsAccess,
-        zerionClient: context.zerionClient,
+        portfolioReader: context.portfolioReader,
       })
 
       res.json({

@@ -11,7 +11,7 @@ import {
   runDeadMansSwitchSweep,
   startLocalPusdDemoServer,
   XmtpNotifier,
-  ZerionClient,
+  SolanaPortfolioReader,
   type ShowcaseSnapshot,
 } from '../index.js'
 import { FilePusdReadinessReportRegistry } from '../store/PusdReadinessReportRegistry.js'
@@ -77,7 +77,7 @@ async function main() {
   const workspace = loadAgentSpendWorkspace({ baseDir, env })
   const palmosClient = PalmosClient.fromEnv(env)
   const owsClient = workspace.owsClient ?? OwsClient.fromEnv(baseDir, env)
-  const zerionClient = ZerionClient.fromEnv(env)
+  const portfolioReader = SolanaPortfolioReader.fromEnv(env)
   const pusdReadinessReports =
     workspace.postgresPool != null
       ? new PostgresPusdReadinessReportRegistry(workspace.postgresPool)
@@ -157,7 +157,7 @@ async function main() {
     return sanitizeSnapshot(
       await buildShowcaseSnapshot({
         baseDir,
-        zerionClient,
+        portfolioReader,
         agentRegistry: workspace.agentRegistry,
         walletRegistry: workspace.walletRegistry,
         actionRequestRegistry: workspace.actionRequestRegistry,
@@ -177,7 +177,7 @@ async function main() {
     workspace,
     palmosClient,
     owsClient,
-    zerionClient,
+    portfolioReader,
     xmtpNotifier,
     pusdReadinessReports,
     operationalMetrics,

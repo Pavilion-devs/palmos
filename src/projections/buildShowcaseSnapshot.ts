@@ -38,7 +38,10 @@ import {
   type OwsAccessRegistry,
 } from '../store/OwsAccessRegistry.js'
 import { buildAgentAuditSnapshot } from '../audit/buildAgentAuditSnapshot.js'
-import type { ZerionClient, ZerionWalletSnapshot } from '../integrations/zerion/client.js'
+import type {
+  PortfolioReader,
+  WalletPortfolioSnapshot,
+} from '../integrations/portfolio/types.js'
 
 export type SafeOwsAccessRecord = Omit<OwsAccessRecord, 'apiKeyToken'>
 
@@ -66,13 +69,13 @@ export type ShowcaseSnapshot = {
     xmtpAlerts: XMTPAlertRecord[]
     owsAccess?: SafeOwsAccessRecord
     audit: Awaited<ReturnType<typeof buildAgentAuditSnapshot>>
-    zerion?: ZerionWalletSnapshot
+    portfolio?: WalletPortfolioSnapshot
   }>
 }
 
 export async function buildShowcaseSnapshot(input: {
   baseDir: string
-  zerionClient?: ZerionClient
+  portfolioReader?: PortfolioReader
   agentRegistry?: AgentRegistry
   walletRegistry?: WalletRegistry
   actionRequestRegistry?: ActionRequestRegistry
@@ -128,8 +131,8 @@ export async function buildShowcaseSnapshot(input: {
       const walletAddress = agent.walletId
         ? walletsById.get(agent.walletId)?.address?.trim()
         : undefined
-      const zerion: ZerionWalletSnapshot | undefined = input.zerionClient
-        ? await input.zerionClient.getWalletSnapshot(walletAddress ?? '', {
+      const portfolio: WalletPortfolioSnapshot | undefined = input.portfolioReader
+        ? await input.portfolioReader.getWalletSnapshot(walletAddress ?? '', {
             chainId: preferredChainId,
           })
         : {
@@ -139,7 +142,7 @@ export async function buildShowcaseSnapshot(input: {
             sync: {
               kind: 'disabled',
               chainId: preferredChainId,
-              message: 'Zerion enrichment is not configured on the backend.',
+              message: 'Portfolio enrichment is not configured on the backend.',
             },
           }
       const owsAccessRecord = owsAccess.find((record) => record.agentId === agent.agentId)
@@ -164,7 +167,7 @@ export async function buildShowcaseSnapshot(input: {
             }
           : undefined,
         audit,
-        zerion,
+        portfolio,
       }
     }),
   )

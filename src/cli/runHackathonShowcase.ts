@@ -12,7 +12,7 @@ import {
   runDeadMansSwitchSweep,
   startLocalPusdDemoServer,
   XmtpNotifier,
-  ZerionClient,
+  SolanaPortfolioReader,
 } from '../index.js'
 import { DEMO_AGENT_IDS, seedDemo } from '../demo/seedDemo.js'
 import { writeShowcaseSnapshot } from '../projections/buildShowcaseSnapshot.js'
@@ -217,7 +217,7 @@ const deadMansSwitch = await runDeadMansSwitchSweep(
 
 const snapshot = await buildShowcaseSnapshot({
   baseDir,
-  zerionClient: ZerionClient.fromEnv(env),
+  portfolioReader: SolanaPortfolioReader.fromEnv(env),
 })
 const dashboardDir = join(baseDir, 'dashboard')
 await mkdir(dashboardDir, { recursive: true })

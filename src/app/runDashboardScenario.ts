@@ -4,7 +4,7 @@ import { DEMO_AGENT_IDS, seedDemo } from '../demo/seedDemo.js'
 import type { PalmosClient } from '../integrations/pusd/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import type { XmtpNotifier } from '../integrations/xmtp/client.js'
-import type { ZerionClient } from '../integrations/zerion/client.js'
+import type { PortfolioReader } from '../integrations/portfolio/types.js'
 import type { PalmosServiceCatalog } from '../integrations/pusd/serviceCatalog.js'
 import type { AgentSpendWorkspace } from '../workspace/loadWorkspace.js'
 import { resetAgentSpendWorkspace } from '../workspace/resetWorkspace.js'
@@ -16,7 +16,7 @@ export type RunDashboardScenarioDependencies = {
   palmosClient?: PalmosClient
   owsClient?: OwsClient
   xmtpNotifier?: XmtpNotifier
-  zerionClient?: ZerionClient
+  portfolioReader?: PortfolioReader
   serviceCatalog: PalmosServiceCatalog
 }
 
@@ -105,7 +105,7 @@ export async function runDashboardScenario(
 
   const snapshot = await buildShowcaseSnapshot({
     baseDir: deps.baseDir,
-    zerionClient: deps.zerionClient,
+    portfolioReader: deps.portfolioReader,
   })
 
   return {

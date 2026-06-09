@@ -2,6 +2,7 @@ import type { AgentRecord } from '../../store/AgentRegistry.js'
 import type { AgentCredentialRecord } from '../../store/AgentCredentialRegistry.js'
 import type { PalmosServiceCatalog } from '../../integrations/pusd/serviceCatalog.js'
 import { evaluateSpendRequest } from '../../policies/compileAgentPolicy.js'
+import type { DashboardAgentWalletContext } from './agentWalletContext.js'
 import { sanitizeCredential, stripAgentSecrets } from './sanitizers.js'
 import { readMaybeString, readRecord } from './shared.js'
 
@@ -11,6 +12,7 @@ export const SDK_TOOL_NAMES = [
   'request_asset_transfer',
   'check_policy',
   'get_agent_status',
+  'get_wallet_context',
 ] as const
 
 export type SdkToolName = (typeof SDK_TOOL_NAMES)[number]
@@ -115,6 +117,16 @@ export const SDK_TOOL_DEFINITIONS = [
       properties: {},
     },
   },
+  {
+    name: 'get_wallet_context',
+    description:
+      'Return the authenticated agent wallet, on-chain balances and portfolio, recent activity, and the policy controls the agent must act within.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    },
+  },
 ] satisfies Array<{
   name: SdkToolName
   description: string
@@ -211,5 +223,43 @@ export function buildSdkPolicyCheck(input: {
     requiresApproval: decision.requiresApproval,
     reasonCode: decision.reasonCode,
     effectiveMaxPerTransaction: decision.effectiveMaxPerTransaction,
+  }
+}
+
+// Agent-facing wallet context. Unlike the dashboard projection (built for the
+// operator), this is what the agent sees about its OWN wallet: balances and
+// activity plus the policy controls it must act within. It reuses the dashboard
+// projection for wallet/portfolio/activity and adds the spend limits an agent
+// needs to reason about what it is allowed to do.
+export type SdkWalletContext = {
+  ok: true
+  agentId: string
+  wallet: DashboardAgentWalletContext['wallet']
+  portfolio: DashboardAgentWalletContext['portfolio']
+  activity: DashboardAgentWalletContext['activity']
+  controls: DashboardAgentWalletContext['controls'] & {
+    maxPerTransaction?: AgentRecord['policyConfig']['maxPerTransaction']
+    autoApproveUnder?: AgentRecord['policyConfig']['autoApproveUnder']
+    sessionBudget?: AgentRecord['policyConfig']['sessionBudget']
+  }
+}
+
+export function buildSdkWalletContext(input: {
+  agent: AgentRecord
+  walletContext: DashboardAgentWalletContext
+}): SdkWalletContext {
+  const { agent, walletContext } = input
+  return {
+    ok: true,
+    agentId: agent.agentId,
+    wallet: walletContext.wallet,
+    portfolio: walletContext.portfolio,
+    activity: walletContext.activity,
+    controls: {
+      ...walletContext.controls,
+      maxPerTransaction: agent.policyConfig.maxPerTransaction,
+      autoApproveUnder: agent.policyConfig.autoApproveUnder,
+      sessionBudget: agent.policyConfig.sessionBudget,
+    },
   }
 }

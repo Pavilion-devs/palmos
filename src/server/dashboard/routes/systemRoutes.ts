@@ -965,7 +965,7 @@ export function registerSystemRoutes(
         palmosClient: context.palmosClient,
         owsClient: context.owsClient,
         xmtpNotifier: context.xmtpNotifier,
-        zerionClient: context.zerionClient,
+        portfolioReader: context.portfolioReader,
         serviceCatalog: await context.buildPalmosServiceCatalog(),
       })
       await recordDashboardAudit({

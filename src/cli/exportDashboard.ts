@@ -4,7 +4,7 @@ import {
   buildShowcaseSnapshot,
   renderDashboardHtml,
   writeShowcaseSnapshot,
-  ZerionClient,
+  SolanaPortfolioReader,
 } from '../index.js'
 
 function readProcessEnv(): Record<string, string | undefined> {
@@ -26,7 +26,7 @@ const baseDir =
 
 const snapshot = await buildShowcaseSnapshot({
   baseDir,
-  zerionClient: ZerionClient.fromEnv(env),
+  portfolioReader: SolanaPortfolioReader.fromEnv(env),
 })
 const html = renderDashboardHtml(snapshot)
 const outputDir = join(baseDir, 'dashboard')
@@ -45,7 +45,7 @@ console.log(
       baseDir,
       htmlPath,
       jsonPath,
-      zerionEnabled: Boolean(ZerionClient.fromEnv(env)),
+      portfolioEnabled: Boolean(SolanaPortfolioReader.fromEnv(env)),
     },
     null,
     2,

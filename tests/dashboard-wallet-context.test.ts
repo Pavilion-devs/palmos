@@ -19,6 +19,10 @@ import {
 import { InMemoryAgentRegistry, type AgentRecord } from '../src/store/AgentRegistry.js'
 import { InMemoryDashboardAuditLogRegistry } from '../src/store/DashboardAuditLogRegistry.js'
 import { registerAgentPolicyRoutes } from '../src/server/dashboard/routes/agentPolicyRoutes.js'
+import { registerSdkRoutes } from '../src/server/dashboard/routes/sdkRoutes.js'
+import { createAgentCredential } from '../src/app/createAgentCredential.js'
+import { InMemoryAgentCredentialRegistry } from '../src/store/AgentCredentialRegistry.js'
+import { createDashboardOperationalMetricsStore } from '../src/server/dashboard/operationalMetrics.js'
 
 function createAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {
@@ -197,7 +201,7 @@ test('buildDashboardAgentWalletContext summarizes wallet, portfolio, and activit
       apiKeyId: 'ows_key_alpha',
       apiKeyName: 'alpha-key',
     },
-    zerionClient: {
+    portfolioReader: {
       async getWalletSnapshot() {
         return {
           address: wallet.address ?? '',
@@ -813,7 +817,7 @@ test('dashboard agent wallet context route requires access and returns context',
           },
         },
       },
-      zerionClient: {
+      portfolioReader: {
         async getWalletSnapshot() {
           return {
             address: wallet.address ?? '',
@@ -881,4 +885,113 @@ test('dashboard agent wallet context route requires access and returns context',
   assert.equal(body.walletContext.wallet.address, 'AlphaWallet111')
   assert.equal(body.walletContext.controls.privacyMode, 'required')
   assert.equal(body.walletContext.portfolio.sync.kind, 'disabled')
+})
+
+test('SDK wallet route returns agent-facing wallet context and requires a credential', async () => {
+  const agent = createAgent()
+  const wallet = createWallet()
+  const agentCredentialRegistry = new InMemoryAgentCredentialRegistry()
+  const credential = await createAgentCredential(
+    {
+      credentials: agentCredentialRegistry,
+      now: () => '2026-06-08T00:00:00.000Z',
+      createId: (prefix) => `${prefix}_wallet_ctx_test`,
+    },
+    { agentId: agent.agentId },
+  )
+
+  const app = express()
+  registerSdkRoutes(
+    app,
+    {
+      env: {},
+      operationalMetrics: createDashboardOperationalMetricsStore(),
+      workspace: {
+        agentRegistry: new InMemoryAgentRegistry([agent]),
+        agentCredentialRegistry,
+        walletRegistry: new InMemoryWalletRegistry([wallet]),
+        owsAccessRegistry: {
+          async get() {
+            return undefined
+          },
+        },
+      },
+      portfolioReader: {
+        async getWalletSnapshot() {
+          return {
+            address: wallet.address ?? '',
+            positions: [
+              {
+                id: 'p1',
+                symbol: 'PUSD',
+                chainId: 'solana-mainnet',
+                quantity: 12.5,
+                value: 12.5,
+              },
+              { id: 'p2', symbol: 'SOL', chainId: 'solana-mainnet', quantity: 1.2 },
+            ],
+            transactions: [
+              {
+                id: 't1',
+                hash: 't1',
+                chainId: 'solana-mainnet',
+                minedAt: '2026-06-08T00:00:00.000Z',
+              },
+            ],
+            sync: { kind: 'synced', chainId: 'solana-mainnet', message: 'Synced.' },
+          }
+        },
+      },
+    } as never,
+  )
+
+  const layer = app.router.stack.find(
+    (entry) => entry.route?.path === '/api/sdk/v1/wallet',
+  )
+  const handler = layer?.route?.stack?.[0]?.handle
+  assert.equal(typeof handler, 'function')
+
+  const deniedResponse = createMockResponse()
+  await handler(
+    { headers: {}, method: 'GET', path: '/api/sdk/v1/wallet' } as never,
+    deniedResponse.res as never,
+  )
+  assert.equal(deniedResponse.read().statusCode, 401)
+
+  const allowedResponse = createMockResponse()
+  await handler(
+    {
+      headers: { authorization: `Bearer ${credential.token}` },
+      method: 'GET',
+      path: '/api/sdk/v1/wallet',
+    } as never,
+    allowedResponse.res as never,
+  )
+
+  const result = allowedResponse.read()
+  assert.equal(result.statusCode, 200)
+  const body = result.body as {
+    ok: boolean
+    agentId: string
+    wallet: { address?: string }
+    portfolio: { positionsCount: number; totalValueUsd: number; sync: { kind: string } }
+    controls: {
+      privacyMode: string
+      allowedChains: string[]
+      maxPerTransaction?: string
+      autoApproveUnder?: string
+      sessionBudget?: string
+    }
+  }
+  assert.equal(body.ok, true)
+  assert.equal(body.agentId, agent.agentId)
+  assert.equal(body.wallet.address, 'AlphaWallet111')
+  assert.equal(body.portfolio.positionsCount, 2)
+  assert.equal(body.portfolio.totalValueUsd, 12.5)
+  assert.equal(body.portfolio.sync.kind, 'synced')
+  assert.equal(body.controls.privacyMode, 'required')
+  assert.deepEqual(body.controls.allowedChains, ['solana-mainnet'])
+  assert.equal(body.controls.maxPerTransaction, '2')
+  assert.equal(body.controls.autoApproveUnder, '0.05')
+  assert.equal(body.controls.sessionBudget, '5')
 })
