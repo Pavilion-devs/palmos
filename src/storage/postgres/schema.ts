@@ -1,4 +1,4 @@
-export const PALMOS_POSTGRES_MIGRATION_VERSION = '2026-06-05-001'
+export const PALMOS_POSTGRES_MIGRATION_VERSION = '2026-06-09-001'
 
 export const PALMOS_POSTGRES_SCHEMA_SQL = `
 begin;
@@ -94,6 +94,18 @@ set record = jsonb_set(record, '{source}', to_jsonb(source), true)
 where record->>'source' is distinct from source;
 alter table action_requests alter column source set default 'system';
 alter table action_requests alter column source set not null;
+
+create table if not exists portfolio_snapshots (
+  snapshot_id text primary key,
+  agent_id text not null references agents(agent_id) on delete cascade,
+  wallet_id text,
+  address text,
+  chain_id text,
+  captured_at timestamptz not null,
+  total_value_usd double precision not null default 0,
+  positions_count integer not null default 0,
+  record jsonb not null
+);
 
 create table if not exists dashboard_audit_logs (
   audit_log_id text primary key,
@@ -222,6 +234,7 @@ create index if not exists action_requests_status_idx on action_requests(status)
 create index if not exists action_requests_kind_idx on action_requests(kind);
 create index if not exists action_requests_source_idx on action_requests(source);
 drop index if exists action_requests_effective_source_idx;
+create index if not exists portfolio_snapshots_agent_captured_idx on portfolio_snapshots(agent_id, captured_at desc);
 create index if not exists audit_workspace_at_idx on dashboard_audit_logs(workspace_id, at desc);
 create index if not exists audit_action_idx on dashboard_audit_logs(action);
 create index if not exists control_events_agent_at_idx on agent_control_events(agent_id, at desc);
@@ -234,7 +247,7 @@ create index if not exists private_settlement_agent_idx on private_settlement_re
 create index if not exists private_settlement_status_idx on private_settlement_requests(status);
 
 insert into palmos_schema_migrations (version, description)
-values ('${PALMOS_POSTGRES_MIGRATION_VERSION}', 'Materialize ActionRequest source fully and simplify source-filtered query reads in the PalmOS Postgres schema')
+values ('${PALMOS_POSTGRES_MIGRATION_VERSION}', 'Add persisted portfolio_snapshots history/audit table to the PalmOS Postgres schema')
 on conflict (version) do nothing;
 
 commit;

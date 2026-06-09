@@ -46,6 +46,10 @@ import {
   type PalmosServiceRegistry,
 } from '../store/PalmosServiceRegistry.js'
 import { FilePaidCallRegistry, type PaidCallRegistry } from '../store/PaidCallRegistry.js'
+import {
+  FilePortfolioSnapshotRegistry,
+  type PortfolioSnapshotRegistry,
+} from '../store/PortfolioSnapshotRegistry.js'
 import { FileXMTPAlertRegistry, type XMTPAlertRegistry } from '../store/XMTPAlertRegistry.js'
 import {
   createPostgresPool,
@@ -65,6 +69,7 @@ import {
   PostgresOwsAccessRegistry,
   PostgresPaidCallRegistry,
   PostgresPalmosServiceRegistry,
+  PostgresPortfolioSnapshotRegistry,
   PostgresRunRegistry,
   PostgresSessionRegistry,
   PostgresWalletRegistry,
@@ -79,6 +84,7 @@ export type AgentSpendWorkspace = {
   agentRegistry: AgentRegistry
   walletRegistry: WalletRegistry
   actionRequestRegistry?: ActionRequestRegistry
+  portfolioSnapshotRegistry?: PortfolioSnapshotRegistry
   paidCallRegistry: PaidCallRegistry
   runRegistry: RunRegistry
   controlEventRegistry: AgentControlEventRegistry
@@ -116,6 +122,10 @@ export function loadAgentSpendWorkspace(input: {
     postgresPool != null
       ? new PostgresActionRequestRegistry(postgresPool)
       : new FileActionRequestRegistry(input.baseDir)
+  const portfolioSnapshotRegistry =
+    postgresPool != null
+      ? new PostgresPortfolioSnapshotRegistry(postgresPool)
+      : new FilePortfolioSnapshotRegistry(input.baseDir)
   const paidCallRegistry =
     postgresPool != null
       ? new PostgresPaidCallRegistry(postgresPool, actionRequestRegistry)
@@ -192,6 +202,7 @@ export function loadAgentSpendWorkspace(input: {
     agentRegistry,
     walletRegistry,
     actionRequestRegistry,
+    portfolioSnapshotRegistry,
     paidCallRegistry,
     runRegistry,
     controlEventRegistry,

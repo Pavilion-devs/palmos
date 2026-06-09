@@ -50,6 +50,10 @@ import type {
   PaidCallRegistry,
 } from '../../store/PaidCallRegistry.js'
 import type {
+  PortfolioSnapshotRecord,
+  PortfolioSnapshotRegistry,
+} from '../../store/PortfolioSnapshotRegistry.js'
+import type {
   RegisteredPalmosServiceRecord,
   PalmosServiceRegistry,
 } from '../../store/PalmosServiceRegistry.js'
@@ -838,6 +842,78 @@ export class PostgresPaidCallRegistry implements PaidCallRegistry {
     } finally {
       client.release()
     }
+  }
+}
+
+export class PostgresPortfolioSnapshotRegistry
+  implements PortfolioSnapshotRegistry
+{
+  constructor(private readonly pool: PostgresPool) {}
+
+  async get(snapshotId: string): Promise<PortfolioSnapshotRecord | undefined> {
+    return getRecord<PortfolioSnapshotRecord>(
+      this.pool,
+      'select record from portfolio_snapshots where snapshot_id = $1',
+      [snapshotId],
+    )
+  }
+
+  async put(record: PortfolioSnapshotRecord): Promise<void> {
+    await this.pool.query(
+      `insert into portfolio_snapshots (
+        snapshot_id, agent_id, wallet_id, address, chain_id, captured_at, total_value_usd, positions_count, record
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+      on conflict (snapshot_id) do update set
+        agent_id = excluded.agent_id,
+        wallet_id = excluded.wallet_id,
+        address = excluded.address,
+        chain_id = excluded.chain_id,
+        captured_at = excluded.captured_at,
+        total_value_usd = excluded.total_value_usd,
+        positions_count = excluded.positions_count,
+        record = excluded.record`,
+      [
+        record.snapshotId,
+        record.agentId,
+        record.walletId ?? null,
+        record.address ?? null,
+        record.chainId ?? null,
+        record.capturedAt,
+        record.totalValueUsd,
+        record.positionsCount,
+        toJson(record),
+      ],
+    )
+  }
+
+  async listByAgent(
+    agentId: string,
+    options?: { limit?: number },
+  ): Promise<PortfolioSnapshotRecord[]> {
+    const limit =
+      options?.limit == null ? undefined : Math.max(0, Math.trunc(options.limit))
+    const params: unknown[] = [agentId]
+    let limitSql = ''
+    if (limit != null) {
+      params.push(limit)
+      limitSql = ` limit $${params.length}`
+    }
+
+    return listRecords<PortfolioSnapshotRecord>(
+      this.pool,
+      `select record from portfolio_snapshots where agent_id = $1 order by captured_at desc, snapshot_id desc${limitSql}`,
+      params,
+    )
+  }
+
+  async latestForAgent(
+    agentId: string,
+  ): Promise<PortfolioSnapshotRecord | undefined> {
+    return getRecord<PortfolioSnapshotRecord>(
+      this.pool,
+      'select record from portfolio_snapshots where agent_id = $1 order by captured_at desc, snapshot_id desc limit 1',
+      [agentId],
+    )
   }
 }
 

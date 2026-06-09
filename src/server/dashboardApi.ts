@@ -37,6 +37,7 @@ import { installDashboardRequestTelemetry } from './dashboard/requestTelemetry.j
 import { registerAgentRoutes } from './dashboard/routes/agentRoutes.js'
 import { registerActionRequestRoutes } from './dashboard/routes/actionRequestRoutes.js'
 import { registerApprovalReadRoutes } from './dashboard/routes/approvalRoutes.js'
+import { registerPortfolioHistoryRoutes } from './dashboard/routes/portfolioHistoryRoutes.js'
 import { registerPublicRoutes } from './dashboard/routes/publicRoutes.js'
 import { registerSdkRoutes } from './dashboard/routes/sdkRoutes.js'
 import { registerServiceRoutes } from './dashboard/routes/serviceRoutes.js'
@@ -178,6 +179,7 @@ async function main() {
     palmosClient,
     owsClient,
     portfolioReader,
+    portfolioSnapshotRegistry: workspace.portfolioSnapshotRegistry,
     xmtpNotifier,
     pusdReadinessReports,
     operationalMetrics,
@@ -200,6 +202,7 @@ async function main() {
   registerSystemRoutes(app, context)
   registerActionRequestRoutes(app, context)
   registerWalletActionRoutes(app, context)
+  registerPortfolioHistoryRoutes(app, context)
   registerTransactionRoutes(app, context)
   registerApprovalReadRoutes(app, context)
   registerServiceRoutes(app, context)

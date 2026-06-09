@@ -277,6 +277,46 @@ async function executePrivateSdkPayRequest(input: {
   })
 }
 
+const DEFAULT_SDK_WALLET_HISTORY_LIMIT = 20
+
+function readSdkWalletHistoryLimit(value: unknown): number {
+  const raw = readMaybeString(Array.isArray(value) ? value[0] : value)
+  const parsed = raw ? Number(raw) : Number.NaN
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SDK_WALLET_HISTORY_LIMIT
+  }
+  return Math.min(Math.trunc(parsed), 200)
+}
+
+async function buildSdkWalletHistoryResponse(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<boolean> {
+  const { req, res, context, auth } = input
+  if (!context.portfolioSnapshotRegistry) {
+    sendDashboardApiError(res, 409, {
+      code: 'conflict',
+      message: 'PortfolioSnapshot registry is not available in this workspace.',
+    })
+    return false
+  }
+
+  const limit = readSdkWalletHistoryLimit(req.query.limit)
+  const snapshots = await context.portfolioSnapshotRegistry.listByAgent(
+    auth.agent.agentId,
+    { limit },
+  )
+  res.json({
+    ok: true,
+    agentId: auth.agent.agentId,
+    limit,
+    snapshots,
+  })
+  return true
+}
+
 async function buildSdkServicesResponse(input: {
   auth: SdkAuthenticatedAgent
   context: DashboardRouteContext
@@ -619,6 +659,26 @@ export function registerSdkRoutes(
       sendDashboardInternalError(
         res,
         'Unable to build PalmOS agent wallet context.',
+      )
+    }
+  })
+
+  app.get('/api/sdk/v1/wallet/history', async (req, res) => {
+    context.operationalMetrics.increment('sdk.calls')
+    try {
+      const auth = await authenticateSdkRequest({ req, context })
+      if (!auth) {
+        sendSdkAuthError(context, res)
+        return
+      }
+
+      await buildSdkWalletHistoryResponse({ req, res, context, auth })
+    } catch (error) {
+      context.operationalMetrics.increment('sdk.internal_failures')
+      console.error('[DashboardApi] SDK wallet history request failed', error)
+      sendDashboardInternalError(
+        res,
+        'Unable to read PalmOS agent portfolio history.',
       )
     }
   })

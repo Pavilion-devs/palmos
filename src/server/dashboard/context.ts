@@ -6,6 +6,7 @@ import type {
   XmtpNotifier,
 } from '../../index.js'
 import type { PalmosServiceCatalog } from '../../integrations/pusd/serviceCatalog.js'
+import type { PortfolioSnapshotRegistry } from '../../store/PortfolioSnapshotRegistry.js'
 import type { PusdReadinessReportRegistry } from '../../store/PusdReadinessReportRegistry.js'
 import type { DashboardOperationalMetricsStore } from './operationalMetrics.js'
 import type { DashboardOperationalAlertDispatcher } from './operationalAlerts.js'
@@ -26,6 +27,7 @@ export type DashboardRouteContext = {
   palmosClient: PalmosClient
   owsClient?: OwsClient
   portfolioReader?: PortfolioReader
+  portfolioSnapshotRegistry?: PortfolioSnapshotRegistry
   xmtpNotifier?: XmtpNotifier
   pusdReadinessReports: PusdReadinessReportRegistry
   operationalMetrics: DashboardOperationalMetricsStore
