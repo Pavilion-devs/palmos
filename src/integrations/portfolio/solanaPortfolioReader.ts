@@ -4,6 +4,8 @@ import {
   PublicKey,
   type ParsedAccountData,
 } from '@solana/web3.js'
+import { NATIVE_MINT } from '@solana/spl-token'
+import { JupiterPriceOracle } from './jupiterPriceOracle.js'
 import {
   PUSD_SYMBOL,
   PUSD_TOKEN_PROGRAM_ID,
@@ -15,6 +17,7 @@ import {
 import type {
   PortfolioReader,
   PortfolioSyncStatus,
+  PriceOracle,
   WalletPortfolioPosition,
   WalletPortfolioSnapshot,
   WalletPortfolioTransaction,
@@ -91,6 +94,7 @@ export class SolanaPortfolioReader implements PortfolioReader {
       config.rpcUrl,
       'confirmed',
     ),
+    private readonly priceOracle?: PriceOracle,
   ) {
     this.knownTokens = buildKnownTokens(config.pusdMint)
   }
@@ -98,7 +102,11 @@ export class SolanaPortfolioReader implements PortfolioReader {
   static fromEnv(
     env: Record<string, string | undefined> = process.env,
   ): SolanaPortfolioReader {
-    return new SolanaPortfolioReader(readSolanaPortfolioConfigFromEnv(env))
+    return new SolanaPortfolioReader(
+      readSolanaPortfolioConfigFromEnv(env),
+      undefined,
+      JupiterPriceOracle.fromEnv(env),
+    )
   }
 
   async getWalletSnapshot(
@@ -148,16 +156,24 @@ export class SolanaPortfolioReader implements PortfolioReader {
       ])
 
       const positions: WalletPortfolioPosition[] = []
+      // Positions whose USD value is resolved live from the price oracle, paired
+      // with the mint to price (SOL is priced via the wrapped-SOL mint).
+      const priceable: Array<{
+        position: WalletPortfolioPosition
+        mint: string
+      }> = []
 
       const solQuantity = lamports / LAMPORTS_PER_SOL
       if (solQuantity > 0) {
-        positions.push({
+        const solPosition: WalletPortfolioPosition = {
           id: `${walletAddress}:SOL`,
           symbol: 'SOL',
           chainId,
           quantity: solQuantity,
-          value: undefined, // no price oracle in v1
-        })
+          value: undefined, // filled live below when a price oracle is configured
+        }
+        positions.push(solPosition)
+        priceable.push({ position: solPosition, mint: NATIVE_MINT.toBase58() })
       }
 
       for (const { account } of tokenAccounts.value) {
@@ -166,14 +182,22 @@ export class SolanaPortfolioReader implements PortfolioReader {
           continue
         }
         const known = this.knownTokens.get(info.mint)
-        positions.push({
+        const position: WalletPortfolioPosition = {
           id: `${walletAddress}:${info.mint}`,
           symbol: known?.symbol ?? shortMint(info.mint),
           chainId,
           quantity: info.uiAmount,
+          // Known stablecoins keep the ~$1 peg shortcut (no network call);
+          // everything else is priced live by the oracle below.
           value: known?.stableUsd ? info.uiAmount : undefined,
-        })
+        }
+        positions.push(position)
+        if (!known?.stableUsd) {
+          priceable.push({ position, mint: info.mint })
+        }
       }
+
+      await this.applyLivePrices(priceable)
 
       const transactions: WalletPortfolioTransaction[] = signatures.map(
         (sig) => ({
@@ -206,6 +230,34 @@ export class SolanaPortfolioReader implements PortfolioReader {
         message:
           error instanceof Error ? error.message : 'Solana RPC request failed.',
       })
+    }
+  }
+
+  // Best-effort live USD enrichment. Failures never propagate: positions simply
+  // keep an undefined value, exactly as if no oracle were configured. This keeps
+  // pricing strictly additive over the RPC balance read.
+  private async applyLivePrices(
+    priceable: Array<{ position: WalletPortfolioPosition; mint: string }>,
+  ): Promise<void> {
+    if (!this.priceOracle || priceable.length === 0) {
+      return
+    }
+    try {
+      const prices = await this.priceOracle.getUsdPrices(
+        priceable.map((entry) => entry.mint),
+      )
+      for (const { position, mint } of priceable) {
+        const price = prices.get(mint)
+        if (
+          typeof price === 'number' &&
+          Number.isFinite(price) &&
+          typeof position.quantity === 'number'
+        ) {
+          position.value = position.quantity * price
+        }
+      }
+    } catch {
+      // Pricing is enrichment only — never fail a snapshot over it.
     }
   }
 }

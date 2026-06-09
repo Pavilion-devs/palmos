@@ -43,3 +43,12 @@ export interface PortfolioReader {
     options?: { chainId?: string },
   ): Promise<WalletPortfolioSnapshot>
 }
+
+// Provider-agnostic USD price source, mirroring PortfolioReader so the product is
+// never locked to one price vendor. Implementations resolve live USD prices keyed
+// by on-chain mint address. Pricing is best-effort enrichment: a PriceOracle must
+// never throw and should simply omit any mint it cannot price (the caller leaves
+// that position's USD value undefined rather than fabricating a number).
+export interface PriceOracle {
+  getUsdPrices(mints: string[]): Promise<Map<string, number>>
+}
