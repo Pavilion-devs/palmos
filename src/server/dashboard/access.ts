@@ -4,15 +4,13 @@ import type {
   DashboardOperatorRecord,
   DashboardOperatorRole,
 } from '../../store/DashboardOperatorRegistry.js'
-import { isPublicAccessMode, shouldUseCrossSiteJudgeCookie } from './config.js'
+import { isPublicAccessMode } from './config.js'
 import type { DashboardRouteContext } from './context.js'
 import { sendDashboardApiError } from './apiErrors.js'
 import type { Env } from './shared.js'
-import { readMaybeString } from './shared.js'
 
-const JUDGE_ACCESS_COOKIE = 'palmos_judge_access'
-const OPERATOR_ACCESS_COOKIE = 'palmos_operator_access'
-const DASHBOARD_SESSION_TTL_MS = 1000 * 60 * 60 * 8
+export const OPERATOR_SESSION_COOKIE = 'palmos_operator_session'
+const DEV_SESSION_SECRET = 'palmos-local-dev-session-secret'
 
 export type DashboardAccessIdentity = {
   operatorId: string
@@ -126,31 +124,94 @@ export function verifyDashboardAccessExpiry(
   return timingSafeEqual(supplied, expected) ? expiresAt : 0
 }
 
-function readJudgeAccessExpiry(req: express.Request, env: Env): number {
-  const sessionValue = readCookie(req, JUDGE_ACCESS_COOKIE)
-  return verifyDashboardAccessExpiry(sessionValue, env.PALMOS_JUDGE_ACCESS_CODE?.trim())
+// --- SIWS operator session cookie (palmos_operator_session) ---------------
+// The signed-in operator's identity is carried in an HMAC-signed cookie payload
+// (operatorId | workspaceId | role | expiresAt), signed with PALMOS_SESSION_SECRET.
+// In non-public local dev a fixed dev secret is used so the bypass keeps working
+// without configuration; in public mode the secret is required.
+export type OperatorSessionPayload = {
+  operatorId: string
+  workspaceId: string
+  role: DashboardOperatorRole
+  expiresAt: number
 }
 
-function readOperatorAccessSecret(env: Env): string | undefined {
-  return (
-    env.PALMOS_OPERATOR_SESSION_SECRET?.trim() ||
-    env.PALMOS_OPERATOR_PASSWORD?.trim() ||
-    env.PALMOS_OPERATOR_ACCESS_CODE?.trim() ||
-    undefined
-  )
+export function readOperatorSessionSecret(env: Env): string | undefined {
+  const configured = env.PALMOS_SESSION_SECRET?.trim()
+  if (configured) {
+    return configured
+  }
+  return isPublicAccessMode(env) ? undefined : DEV_SESSION_SECRET
 }
 
-function readOperatorPassword(env: Env): string | undefined {
-  return (
-    env.PALMOS_OPERATOR_PASSWORD?.trim() ||
-    env.PALMOS_OPERATOR_ACCESS_CODE?.trim() ||
-    undefined
-  )
+export function signOperatorSession(
+  payload: OperatorSessionPayload,
+  secret: string,
+): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = createHmac('sha256', secret).update(body).digest('base64url')
+  return `${body}.${signature}`
 }
 
-function readOperatorAccessExpiry(req: express.Request, env: Env): number {
-  const sessionValue = readCookie(req, OPERATOR_ACCESS_COOKIE)
-  return verifyDashboardAccessExpiry(sessionValue, readOperatorAccessSecret(env))
+export function verifyOperatorSession(
+  cookieValue: string | undefined,
+  secret: string | undefined,
+  now: number,
+): OperatorSessionPayload | undefined {
+  if (!cookieValue || !secret) {
+    return undefined
+  }
+
+  const separatorIndex = cookieValue.lastIndexOf('.')
+  if (separatorIndex <= 0) {
+    return undefined
+  }
+
+  const body = cookieValue.slice(0, separatorIndex)
+  const signature = cookieValue.slice(separatorIndex + 1)
+  const expectedSignature = createHmac('sha256', secret)
+    .update(body)
+    .digest('base64url')
+  const supplied = Buffer.from(signature)
+  const expected = Buffer.from(expectedSignature)
+  if (
+    supplied.length !== expected.length ||
+    !timingSafeEqual(supplied, expected)
+  ) {
+    return undefined
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+  } catch {
+    return undefined
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined
+  }
+  const candidate = parsed as Record<string, unknown>
+  if (
+    typeof candidate.operatorId !== 'string' ||
+    typeof candidate.workspaceId !== 'string' ||
+    typeof candidate.expiresAt !== 'number' ||
+    !isDashboardOperatorRole(
+      typeof candidate.role === 'string' ? candidate.role : undefined,
+    )
+  ) {
+    return undefined
+  }
+  if (candidate.expiresAt <= now) {
+    return undefined
+  }
+
+  return {
+    operatorId: candidate.operatorId,
+    workspaceId: candidate.workspaceId,
+    role: candidate.role as DashboardOperatorRole,
+    expiresAt: candidate.expiresAt,
+  }
 }
 
 export function readDashboardWorkspaceId(env: Env): string {
@@ -162,32 +223,16 @@ export function readDashboardWorkspaceId(env: Env): string {
 }
 
 function isDashboardOperatorRole(value: string | undefined): value is DashboardOperatorRole {
-  return (
-    value === 'owner' ||
-    value === 'operator' ||
-    value === 'viewer' ||
-    value === 'judge'
-  )
+  return value === 'owner' || value === 'operator' || value === 'viewer'
 }
 
 function readEnvOperatorRole(env: Env): DashboardOperatorRole {
   const configuredRole = env.PALMOS_OPERATOR_ROLE?.trim()
-  return isDashboardOperatorRole(configuredRole) && configuredRole !== 'judge'
-    ? configuredRole
-    : 'operator'
+  return isDashboardOperatorRole(configuredRole) ? configuredRole : 'operator'
 }
 
 function readEnvOperatorId(env: Env): string {
   return env.PALMOS_OPERATOR_ID?.trim() || 'operator_primary'
-}
-
-function readEnvOperatorDisplayName(env: Env): string {
-  return env.PALMOS_OPERATOR_DISPLAY_NAME?.trim() || 'Workspace Operator'
-}
-
-function isJudgeMutationAccessEnabled(env: Env): boolean {
-  const configured = env.PALMOS_ALLOW_JUDGE_MUTATIONS?.trim().toLowerCase()
-  return configured === '1' || configured === 'true'
 }
 
 export function buildDashboardAccessCapabilities(input: {
@@ -196,19 +241,11 @@ export function buildDashboardAccessCapabilities(input: {
 }): {
   canMutateDashboard: boolean
   canManageOperators: boolean
-  canUseJudgeMutationMode: boolean
 } {
   const role = input.identity?.role
-  const judgeMutationMode = isJudgeMutationAccessEnabled(input.env)
-  const canMutateDashboard =
-    role === 'owner' ||
-    role === 'operator' ||
-    (role === 'judge' && judgeMutationMode)
-
   return {
-    canMutateDashboard,
+    canMutateDashboard: role === 'owner' || role === 'operator',
     canManageOperators: role === 'owner',
-    canUseJudgeMutationMode: role === 'judge' && judgeMutationMode,
   }
 }
 
@@ -224,56 +261,32 @@ function readLocalDevelopmentIdentity(env: Env): DashboardAccessIdentity {
   }
 }
 
-function buildEnvOperatorRecord(
-  env: Env,
-  at: string,
-  existing?: DashboardOperatorRecord,
-): DashboardOperatorRecord {
-  return {
-    operatorId: readEnvOperatorId(env),
-    workspaceId: readDashboardWorkspaceId(env),
-    createdAt: existing?.createdAt ?? at,
-    updatedAt: at,
-    displayName: readEnvOperatorDisplayName(env),
-    role: readEnvOperatorRole(env),
-    status: 'active',
-    source: 'env',
-    lastLoginAt: at,
-  }
-}
-
+// Reads the SIWS operator session cookie (palmos_operator_session) and returns
+// the signed-in operator's identity, or undefined when no valid session is
+// present. Callers fall back to the local-dev identity in non-public mode.
 export function readDashboardAccessIdentity(input: {
   req: express.Request
   env: Env
   now?: number
 }): DashboardAccessIdentity | undefined {
   const now = input.now ?? Date.now()
-  const operatorExpiresAt = readOperatorAccessExpiry(input.req, input.env)
-  if (operatorExpiresAt > now) {
-    const operatorId = readEnvOperatorId(input.env)
-    return {
-      operatorId,
-      workspaceId: readDashboardWorkspaceId(input.env),
-      actorId: `operator:${operatorId}`,
-      role: readEnvOperatorRole(input.env),
-      source: 'env',
-      expiresAt: operatorExpiresAt,
-    }
+  const payload = verifyOperatorSession(
+    readCookie(input.req, OPERATOR_SESSION_COOKIE),
+    readOperatorSessionSecret(input.env),
+    now,
+  )
+  if (!payload) {
+    return undefined
   }
 
-  const judgeExpiresAt = readJudgeAccessExpiry(input.req, input.env)
-  if (judgeExpiresAt > now) {
-    return {
-      operatorId: 'judge_session',
-      workspaceId: readDashboardWorkspaceId(input.env),
-      actorId: 'judge:dashboard',
-      role: 'judge',
-      source: 'judge',
-      expiresAt: judgeExpiresAt,
-    }
+  return {
+    operatorId: payload.operatorId,
+    workspaceId: payload.workspaceId,
+    actorId: `operator:${payload.operatorId}`,
+    role: payload.role,
+    source: 'siws',
+    expiresAt: payload.expiresAt,
   }
-
-  return undefined
 }
 
 export function readDashboardSessionIdentity(input: {
@@ -322,15 +335,7 @@ export function requireDashboardRole(input: {
     return undefined
   }
 
-  const judgeAllowed =
-    identity.role === 'judge' &&
-    buildDashboardAccessCapabilities({
-      identity,
-      env: input.context.env,
-    }).canUseJudgeMutationMode &&
-    roles.includes('operator')
-
-  if (!roles.includes(identity.role) && !judgeAllowed) {
+  if (!roles.includes(identity.role)) {
     sendDashboardApiError(input.res, 403, {
       code: 'dashboard_role_required',
       message: 'Dashboard role does not allow this operation.',
@@ -346,7 +351,8 @@ export function requireDashboardRole(input: {
   return identity
 }
 
-function buildDashboardAccessCookie(input: {
+// Cookie builder retained for reuse by the SIWS session cookie in P1.
+export function buildDashboardAccessCookie(input: {
   name: string
   token: string
   maxAge: number
@@ -390,140 +396,10 @@ export function installCors(app: express.Express, env: Env): void {
   })
 }
 
-export function registerJudgeAccessRoutes(
-  app: express.Express,
-  context: DashboardRouteContext,
-): void {
-  const env = context.env
-
-  app.post('/api/dashboard/operator-login', async (req, res) => {
-    const configuredPassword = readOperatorPassword(env)
-    const submittedPassword =
-      readMaybeString(req.body?.password) ?? readMaybeString(req.body?.passcode)
-
-    if (!configuredPassword || submittedPassword !== configuredPassword) {
-      sendDashboardApiError(res, 401, {
-        code: 'invalid_operator_login',
-        message: 'Invalid operator login.',
-      })
-      return
-    }
-
-    const secret = readOperatorAccessSecret(env)
-    if (!secret) {
-      sendDashboardApiError(res, 500, {
-        code: 'operator_session_secret_not_configured',
-        message: 'Operator session secret is not configured.',
-      })
-      return
-    }
-
-    const at = new Date().toISOString()
-    const operatorId = readEnvOperatorId(env)
-    const existing =
-      await context.workspace.dashboardOperatorRegistry.get(operatorId)
-    if (existing?.status === 'disabled') {
-      sendDashboardApiError(res, 403, {
-        code: 'operator_disabled',
-        message: 'Operator account is disabled.',
-      })
-      return
-    }
-
-    const operator = buildEnvOperatorRecord(env, at, existing)
-    const saved = existing
-      ? await context.workspace.dashboardOperatorRegistry.putIfUpdatedAt(
-          operator,
-          existing.updatedAt,
-        )
-      : (await context.workspace.dashboardOperatorRegistry.put(operator), true)
-    if (!saved) {
-      const current =
-        await context.workspace.dashboardOperatorRegistry.get(operatorId)
-      if (current?.status === 'disabled') {
-        sendDashboardApiError(res, 403, {
-          code: 'operator_disabled',
-          message: 'Operator account is disabled.',
-        })
-        return
-      }
-      sendDashboardApiError(res, 409, {
-        code: 'operator_conflict',
-        message: 'Operator account changed while login was in progress.',
-        details: {
-          operatorId,
-          currentUpdatedAt: current?.updatedAt,
-          currentStatus: current?.status,
-        },
-      })
-      return
-    }
-
-    const expiresAt = Date.now() + DASHBOARD_SESSION_TTL_MS
-    const maxAge = Math.floor((expiresAt - Date.now()) / 1000)
-    const crossSiteCookie = shouldUseCrossSiteJudgeCookie(env)
-    const sessionToken = signDashboardAccessExpiry(expiresAt, secret)
-    res.setHeader(
-      'Set-Cookie',
-      buildDashboardAccessCookie({
-        name: OPERATOR_ACCESS_COOKIE,
-        token: sessionToken,
-        maxAge,
-        crossSiteCookie,
-      }),
-    )
-    res.json({
-      ok: true,
-      operator: {
-        operatorId: operator.operatorId,
-        workspaceId: operator.workspaceId,
-        displayName: operator.displayName,
-        role: operator.role,
-      },
-      role: operator.role,
-      expiresAt,
-    })
-  })
-
-  app.post('/api/dashboard/judge-access', async (req, res) => {
-    const configuredCode = env.PALMOS_JUDGE_ACCESS_CODE?.trim()
-    const submittedCode = readMaybeString(req.body?.passcode)
-
-    if (!configuredCode || submittedCode !== configuredCode) {
-      sendDashboardApiError(res, 401, {
-        code: 'invalid_judge_code',
-        message: 'Invalid judge access code.',
-      })
-      return
-    }
-
-    const expiresAt = Date.now() + DASHBOARD_SESSION_TTL_MS
-    const maxAge = Math.floor((expiresAt - Date.now()) / 1000)
-    const crossSiteCookie = shouldUseCrossSiteJudgeCookie(env)
-    const sessionToken = signDashboardAccessExpiry(expiresAt, configuredCode)
-    res.setHeader(
-      'Set-Cookie',
-      buildDashboardAccessCookie({
-        name: JUDGE_ACCESS_COOKIE,
-        token: sessionToken,
-        maxAge,
-        crossSiteCookie,
-      }),
-    )
-    res.json({
-      ok: true,
-      role: 'judge',
-      operator: {
-        operatorId: 'judge_session',
-        workspaceId: readDashboardWorkspaceId(env),
-        displayName: 'Judge Session',
-        role: 'judge',
-      },
-      expiresAt,
-    })
-  })
-}
-
+// P0: the shared-passcode login routes (operator-login / judge-access) have been
+// removed. The global guard stays (per-route requireDashboardRole still applies);
+// P1 replaces it with a SIWS session guard that allows /api/auth/* and otherwise
+// requires a valid operator session (docs/operator-auth-plan.md §4).
 export function installDashboardAccessGuard(
   app: express.Express,
   env: Env,
@@ -534,11 +410,7 @@ export function installDashboardAccessGuard(
       return
     }
 
-    if (
-      req.path === '/judge-access' ||
-      req.path === '/operator-login' ||
-      req.path === '/health'
-    ) {
+    if (req.path === '/health') {
       next()
       return
     }

@@ -16,7 +16,7 @@ import {
   type PaidCallRecord,
 } from '../src/store/PaidCallRegistry.js'
 import { InMemoryXMTPAlertRegistry } from '../src/store/XMTPAlertRegistry.js'
-import { signDashboardAccessExpiry } from '../src/server/dashboard/access.js'
+import { operatorSessionToken, TEST_SESSION_SECRET } from './helpers/siwsAuth.js'
 import { buildDashboardActionRequestDetail } from '../src/server/dashboard/actionRequestDetail.js'
 import { buildDashboardActionRequestHistory } from '../src/server/dashboard/actionRequestHistory.js'
 import { buildDashboardWalletActionHistory } from '../src/server/dashboard/walletActions.js'
@@ -491,8 +491,7 @@ test('buildDashboardWalletActionHistory normalizes native wallet actions', async
 })
 
 test('dashboard action request route requires access and returns filtered history', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   const actionRequests = new InMemoryActionRequestRegistry([
     createActionRequest({
       actionRequestId: 'action_request_dashboard_1',
@@ -521,8 +520,7 @@ test('dashboard action request route requires access and returns filtered histor
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'postgres',
@@ -552,7 +550,7 @@ test('dashboard action request route requires access and returns filtered histor
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       query: {
         source: 'worker',
@@ -591,8 +589,7 @@ test('dashboard action request route requires access and returns filtered histor
 })
 
 test('dashboard wallet action route requires access and returns native wallet actions', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   const actionRequests = new InMemoryActionRequestRegistry([
     createActionRequest({
       actionRequestId: 'action_request_wallet_action_1',
@@ -628,8 +625,7 @@ test('dashboard wallet action route requires access and returns native wallet ac
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'file',
@@ -659,7 +655,7 @@ test('dashboard wallet action route requires access and returns native wallet ac
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       query: {
         agentId: 'agent_alpha',
@@ -688,8 +684,7 @@ test('dashboard wallet action route requires access and returns native wallet ac
 })
 
 test('dashboard action request detail route requires access and returns detail', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   const actionRequests = new InMemoryActionRequestRegistry([
     createActionRequest({
       actionRequestId: 'action_request_dashboard_detail',
@@ -737,8 +732,7 @@ test('dashboard action request detail route requires access and returns detail',
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'file',
@@ -772,7 +766,7 @@ test('dashboard action request detail route requires access and returns detail',
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       params: {
         actionRequestId: 'action_request_dashboard_detail',
@@ -810,7 +804,7 @@ test('dashboard action request detail route requires access and returns detail',
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       params: {
         actionRequestId: 'missing_action_request',
@@ -1002,8 +996,7 @@ test('buildDashboardWalletActionDetail returns undefined for legacy service.pay 
 })
 
 test('dashboard wallet action detail route requires access and returns native detail with 404s', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   const actionRequests = new InMemoryActionRequestRegistry([
     createActionRequest({
       actionRequestId: 'wallet_action_route_native',
@@ -1046,8 +1039,7 @@ test('dashboard wallet action detail route requires access and returns native de
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'postgres',
@@ -1083,7 +1075,7 @@ test('dashboard wallet action detail route requires access and returns native de
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       params: { walletActionId: 'wallet_action_route_native' },
       method: 'GET',
@@ -1107,7 +1099,7 @@ test('dashboard wallet action detail route requires access and returns native de
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       params: { walletActionId: 'wallet_action_route_service' },
       method: 'GET',
@@ -1121,7 +1113,7 @@ test('dashboard wallet action detail route requires access and returns native de
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       params: { walletActionId: 'wallet_action_route_missing' },
       method: 'GET',
@@ -1277,8 +1269,7 @@ async function createTransactionsRouteHandler(): Promise<{
   token: string
   handler: TransactionRouteHandler
 }> {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   // Two agents / two wallets, mixed native + legacy, distinct updatedAt values
   // so ordering is unambiguous.
   const actionRequests = new InMemoryActionRequestRegistry([
@@ -1350,8 +1341,7 @@ async function createTransactionsRouteHandler(): Promise<{
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'postgres',
@@ -1374,7 +1364,7 @@ function transactionsRequest(input: {
 }) {
   return {
     headers: input.token
-      ? { cookie: `palmos_operator_access=${encodeURIComponent(input.token)}` }
+      ? { cookie: `palmos_operator_session=${encodeURIComponent(input.token)}` }
       : {},
     query: input.query ?? {},
     method: 'GET',
@@ -1719,8 +1709,7 @@ test('buildDashboardApprovals includes waiting_for_execution paid calls and filt
 })
 
 test('dashboard approvals route requires access and returns combined queue', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
+  const token = operatorSessionToken({ role: 'operator' })
   const { actionRequests, paidCallRegistry, xmtpAlertRegistry } =
     createApprovalsWorkspace()
   await paidCallRegistry.put(
@@ -1738,8 +1727,7 @@ test('dashboard approvals route requires access and returns combined queue', asy
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'postgres',
@@ -1766,7 +1754,7 @@ test('dashboard approvals route requires access and returns combined queue', asy
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: `palmos_operator_session=${encodeURIComponent(token)}`,
       },
       query: {},
       method: 'GET',

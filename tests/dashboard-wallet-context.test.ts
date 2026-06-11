@@ -3,7 +3,7 @@ import test from 'node:test'
 import express from 'express'
 import type { WalletRecord } from '../runtime/contracts/wallet.js'
 import { InMemoryWalletRegistry } from '../runtime/wallets/WalletRegistry.js'
-import { signDashboardAccessExpiry } from '../src/server/dashboard/access.js'
+import { operatorSessionCookie, TEST_SESSION_SECRET } from './helpers/siwsAuth.js'
 import { buildDashboardAgentWalletContext } from '../src/server/dashboard/agentWalletContext.js'
 import { buildDashboardAgentWalletCycle } from '../src/server/dashboard/agentWalletCycle.js'
 import { createDashboardMutationIdempotencyStore } from '../src/server/dashboard/mutationIdempotency.js'
@@ -382,8 +382,6 @@ test('buildDashboardAgentWalletCycle reports wallet blockers before outbound act
 })
 
 test('dashboard agent wallet cycle route requires access and returns cycle', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const wallet = createWallet({
     state: 'active_full',
@@ -395,8 +393,7 @@ test('dashboard agent wallet cycle route requires access and returns cycle', asy
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         storageDriver: 'file',
@@ -434,7 +431,7 @@ test('dashboard agent wallet cycle route requires access and returns cycle', asy
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: {
         agentId: agent.agentId,
@@ -462,8 +459,6 @@ test('dashboard agent wallet cycle route requires access and returns cycle', asy
 })
 
 test('dashboard agent policy update writes native wallet.policy_update ActionRequest', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const wallet = createWallet()
   const agentRegistry = new InMemoryAgentRegistry([agent])
@@ -476,8 +471,7 @@ test('dashboard agent policy update writes native wallet.policy_update ActionReq
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry,
@@ -498,7 +492,7 @@ test('dashboard agent policy update writes native wallet.policy_update ActionReq
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: {
         agentId: agent.agentId,
@@ -550,8 +544,6 @@ test('dashboard agent policy update writes native wallet.policy_update ActionReq
 })
 
 test('dashboard agent policy validation blocks native wallet.policy_update ActionRequest', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const agentRegistry = new InMemoryAgentRegistry([agent])
   const actionRequests = new InMemoryActionRequestRegistry()
@@ -562,8 +554,7 @@ test('dashboard agent policy validation blocks native wallet.policy_update Actio
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry,
@@ -584,7 +575,7 @@ test('dashboard agent policy validation blocks native wallet.policy_update Actio
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: {
         agentId: agent.agentId,
@@ -614,8 +605,6 @@ test('dashboard agent policy validation blocks native wallet.policy_update Actio
 })
 
 test('dashboard agent policy conflict creates failed native wallet.policy_update ActionRequest', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const initialAgent = createAgent()
   const currentAgent = createAgent({
     updatedAt: '2026-06-05T10:05:00.000Z',
@@ -647,8 +636,7 @@ test('dashboard agent policy conflict creates failed native wallet.policy_update
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry,
@@ -669,7 +657,7 @@ test('dashboard agent policy conflict creates failed native wallet.policy_update
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: {
         agentId: initialAgent.agentId,
@@ -710,8 +698,6 @@ test('dashboard agent policy conflict creates failed native wallet.policy_update
 })
 
 test('dashboard agent policy update replays idempotent retries without duplicating wallet.policy_update records', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const wallet = createWallet()
   const agentRegistry = new InMemoryAgentRegistry([agent])
@@ -724,8 +710,7 @@ test('dashboard agent policy update replays idempotent retries without duplicati
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry,
@@ -745,7 +730,7 @@ test('dashboard agent policy update replays idempotent retries without duplicati
 
   const request = {
     headers: {
-      cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+      cookie: operatorSessionCookie({ role: 'operator' }),
       'idempotency-key': 'policy-update-1',
     },
     params: {
@@ -784,8 +769,6 @@ test('dashboard agent policy update replays idempotent retries without duplicati
 })
 
 test('dashboard agent wallet context route requires access and returns context', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const wallet = createWallet()
 
@@ -795,8 +778,7 @@ test('dashboard agent wallet context route requires access and returns context',
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry: new InMemoryAgentRegistry([agent]),
@@ -858,7 +840,7 @@ test('dashboard agent wallet context route requires access and returns context',
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: {
         agentId: agent.agentId,

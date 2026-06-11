@@ -20,7 +20,6 @@ import type { PalmosServiceCatalog } from '../integrations/pusd/serviceCatalog.j
 import {
   installCors,
   installDashboardAccessGuard,
-  registerJudgeAccessRoutes,
 } from './dashboard/access.js'
 import { installDashboardCsrfProtection } from './dashboard/csrfProtection.js'
 import {
@@ -39,6 +38,7 @@ import { registerActionRequestRoutes } from './dashboard/routes/actionRequestRou
 import { registerApprovalReadRoutes } from './dashboard/routes/approvalRoutes.js'
 import { registerPortfolioHistoryRoutes } from './dashboard/routes/portfolioHistoryRoutes.js'
 import { registerPublicRoutes } from './dashboard/routes/publicRoutes.js'
+import { registerAuthRoutes } from './dashboard/auth/siws.js'
 import { registerSdkRoutes } from './dashboard/routes/sdkRoutes.js'
 import { registerServiceRoutes } from './dashboard/routes/serviceRoutes.js'
 import { registerSystemRoutes } from './dashboard/routes/systemRoutes.js'
@@ -196,7 +196,12 @@ async function main() {
   installDashboardAbuseProtection(app, env)
   installCors(app, env)
   registerPublicRoutes(app, context)
-  registerJudgeAccessRoutes(app, context)
+  // SIWS sign-in routes (/api/auth/*) — the way IN. Registered before the
+  // dashboard guard; they live outside /api/dashboard so the guard never blocks
+  // them (docs/operator-auth-plan.md §4).
+  registerAuthRoutes(app, context)
+  // Dashboard guard: in public access mode, /api/dashboard/* requires a valid
+  // SIWS operator session (read from the palmos_operator_session cookie).
   installDashboardAccessGuard(app, env)
   installDashboardCsrfProtection(app, env, operationalMetrics)
   registerSystemRoutes(app, context)

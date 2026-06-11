@@ -6,14 +6,12 @@ import { readDashboardWorkspaceId } from './access.js'
 import type { Env } from './shared.js'
 import { readMaybeString, readRecord } from './shared.js'
 
-export type DashboardManagedOperatorRole = Exclude<
-  DashboardOperatorRole,
-  'judge'
->
+export type DashboardManagedOperatorRole = DashboardOperatorRole
 
 export type DashboardOperatorPatch = {
   operatorId?: string
   displayName?: string
+  email?: string
   role?: DashboardManagedOperatorRole
 }
 
@@ -36,11 +34,20 @@ function readManagedRole(value: string | undefined): DashboardManagedOperatorRol
     : undefined
 }
 
+function readEmail(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase()
+  if (!normalized) {
+    return undefined
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : undefined
+}
+
 export function readDashboardOperatorPatch(value: unknown): DashboardOperatorPatch {
   const candidate = readRecord(value)
   return {
     operatorId: normalizeOperatorId(readMaybeString(candidate.operatorId)),
     displayName: readMaybeString(candidate.displayName),
+    email: readEmail(readMaybeString(candidate.email)),
     role: readManagedRole(readMaybeString(candidate.role)),
   }
 }
@@ -70,6 +77,10 @@ export function createDashboardOperatorRecord(input: {
     role: input.patch.role ?? input.existing?.role ?? 'operator',
     status: input.existing?.status ?? 'active',
     source: input.existing?.source ?? 'env',
+    // Preserve the SIWS login identity + email across edits (the patch only
+    // covers displayName/email/role).
+    walletAddress: input.existing?.walletAddress,
+    email: input.patch.email ?? input.existing?.email,
     lastLoginAt: input.existing?.lastLoginAt,
   }
 }
@@ -94,6 +105,8 @@ export function sanitizeDashboardOperator(record: DashboardOperatorRecord) {
     role: record.role,
     status: record.status,
     source: record.source,
+    walletAddress: record.walletAddress,
+    email: record.email,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     lastLoginAt: record.lastLoginAt,

@@ -1006,6 +1006,16 @@ export class PostgresDashboardOperatorRegistry
     )
   }
 
+  async getByWalletAddress(
+    walletAddress: string,
+  ): Promise<DashboardOperatorRecord | undefined> {
+    return getRecord<DashboardOperatorRecord>(
+      this.pool,
+      "select record from dashboard_operators where record->>'walletAddress' = $1 limit 1",
+      [walletAddress],
+    )
+  }
+
   async put(record: DashboardOperatorRecord): Promise<void> {
     await this.pool.query(
       `insert into dashboard_operators (

@@ -5,8 +5,10 @@ import { readJsonFile, writeJsonFile } from '../../runtime/runtime/jsonFile.js'
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 
-export type DashboardOperatorRole = 'owner' | 'operator' | 'viewer' | 'judge'
+export type DashboardOperatorRole = 'owner' | 'operator' | 'viewer'
 
+// `source` records how the operator was created: 'env' (local-dev bypass) or
+// 'siws' (Sign-In With Solana).
 export type DashboardOperatorRecord = {
   operatorId: string
   workspaceId: string
@@ -15,12 +17,19 @@ export type DashboardOperatorRecord = {
   displayName: string
   role: DashboardOperatorRole
   status: 'active' | 'disabled'
-  source: 'env' | 'judge'
+  source: 'env' | 'siws'
+  // SIWS login identity (base58 Solana pubkey); unique per operator. Absent for
+  // env operators.
+  walletAddress?: string
+  email?: string
   lastLoginAt?: string
 }
 
 export interface DashboardOperatorRegistry {
   get(operatorId: string): Promise<DashboardOperatorRecord | undefined>
+  getByWalletAddress(
+    walletAddress: string,
+  ): Promise<DashboardOperatorRecord | undefined>
   put(record: DashboardOperatorRecord): Promise<void>
   putIfUpdatedAt(
     record: DashboardOperatorRecord,
@@ -82,6 +91,17 @@ export class InMemoryDashboardOperatorRegistry
     return this.records.get(operatorId)
   }
 
+  async getByWalletAddress(
+    walletAddress: string,
+  ): Promise<DashboardOperatorRecord | undefined> {
+    for (const record of this.records.values()) {
+      if (record.walletAddress === walletAddress) {
+        return record
+      }
+    }
+    return undefined
+  }
+
   async put(record: DashboardOperatorRecord): Promise<void> {
     this.records.set(record.operatorId, record)
   }
@@ -120,6 +140,13 @@ export class FileDashboardOperatorRegistry
     return readJsonFile<DashboardOperatorRecord>(
       getOperatorFilePath(operatorId, this.baseDir),
     )
+  }
+
+  async getByWalletAddress(
+    walletAddress: string,
+  ): Promise<DashboardOperatorRecord | undefined> {
+    const records = await this.list()
+    return records.find((record) => record.walletAddress === walletAddress)
   }
 
   async put(record: DashboardOperatorRecord): Promise<void> {

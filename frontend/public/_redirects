@@ -1,0 +1,4 @@
+# SPA history fallback — serve index.html for any path so deep-link/refresh of a
+# client route (e.g. /dashboard/wallets) doesn't 404. Respected by Netlify,
+# Cloudflare Pages, and Render static sites. (Vercel: use vercel.json rewrites.)
+/*    /index.html   200

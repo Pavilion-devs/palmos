@@ -58,7 +58,7 @@ export function registerTransactionRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'transaction.history.read',
     })
     if (!identity) {

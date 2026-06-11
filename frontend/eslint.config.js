@@ -23,7 +23,13 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Ignore capitalized unused vars/args — they are JSX components (e.g. a
+      // destructured `icon: Icon` rendered as <Icon/>), which this config's
+      // parser doesn't track as "used" through JSX.
+      'no-unused-vars': [
+        'error',
+        { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' },
+      ],
     },
   },
 ])

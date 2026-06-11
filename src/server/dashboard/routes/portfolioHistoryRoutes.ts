@@ -29,7 +29,7 @@ export function registerPortfolioHistoryRoutes(
         req,
         res,
         context,
-        roles: ['owner', 'operator', 'judge'],
+        roles: ['owner', 'operator'],
         operation: 'agent.portfolio_history.read',
       })
       if (!identity) {
@@ -89,4 +89,59 @@ export function registerPortfolioHistoryRoutes(
       }
     },
   )
+
+  // Cross-agent assets-under-control over time. Aggregates the per-agent portfolio
+  // snapshots by capture timestamp (the snapshot cron captures agents in batches,
+  // so timestamps align) and sums totalValueUsd into a single workspace series.
+  app.get('/api/dashboard/assets-under-control/history', async (req, res) => {
+    const identity = requireDashboardRole({
+      req,
+      res,
+      context,
+      roles: ['owner', 'operator'],
+      operation: 'assets_under_control.history.read',
+    })
+    if (!identity) {
+      return
+    }
+
+    if (!context.portfolioSnapshotRegistry) {
+      res.json({ ok: true, series: [] })
+      return
+    }
+
+    try {
+      const limit = readLimit(req.query.limit)
+      const agents = await context.workspace.agentRegistry.list()
+      const totalByCapturedAt = new Map<string, number>()
+      for (const agent of agents) {
+        const snapshots = await context.portfolioSnapshotRegistry.listByAgent(
+          agent.agentId,
+          { limit },
+        )
+        for (const snapshot of snapshots) {
+          const value = Number.isFinite(snapshot.totalValueUsd)
+            ? snapshot.totalValueUsd
+            : 0
+          totalByCapturedAt.set(
+            snapshot.capturedAt,
+            (totalByCapturedAt.get(snapshot.capturedAt) ?? 0) + value,
+          )
+        }
+      }
+
+      const series = [...totalByCapturedAt.entries()]
+        .map(([at, valueUsd]) => ({ at, valueUsd }))
+        .sort((left, right) => left.at.localeCompare(right.at))
+
+      res.json({ ok: true, series })
+    } catch (error) {
+      sendDashboardInternalError(
+        res,
+        error instanceof Error
+          ? error.message
+          : 'Unable to build assets-under-control history.',
+      )
+    }
+  })
 }

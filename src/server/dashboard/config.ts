@@ -46,7 +46,7 @@ export function isShowcaseRunEnabled(env: Env): boolean {
   )
 }
 
-export function shouldUseCrossSiteJudgeCookie(env: Env): boolean {
+export function shouldUseCrossSiteCookie(env: Env): boolean {
   return (
     env.PALMOS_CROSS_SITE_COOKIES?.trim() === '1' ||
     env.PALMOS_CROSS_SITE_COOKIES?.trim()?.toLowerCase() === 'true' ||

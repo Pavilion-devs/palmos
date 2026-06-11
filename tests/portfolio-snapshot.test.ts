@@ -17,7 +17,7 @@ import type {
   PortfolioReader,
   WalletPortfolioSnapshot,
 } from '../src/integrations/portfolio/types.js'
-import { signDashboardAccessExpiry } from '../src/server/dashboard/access.js'
+import { operatorSessionCookie, TEST_SESSION_SECRET } from './helpers/siwsAuth.js'
 import { registerPortfolioHistoryRoutes } from '../src/server/dashboard/routes/portfolioHistoryRoutes.js'
 
 function createSnapshot(
@@ -290,8 +290,6 @@ test('PostgresPortfolioSnapshotRegistry put denormalizes columns alongside the j
 })
 
 test('dashboard portfolio history route requires access and returns snapshots newest-first', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
   const agent = createAgent()
   const portfolioSnapshotRegistry = new InMemoryPortfolioSnapshotRegistry([
     createSnapshot({
@@ -310,8 +308,7 @@ test('dashboard portfolio history route requires access and returns snapshots ne
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry: {
@@ -349,7 +346,7 @@ test('dashboard portfolio history route requires access and returns snapshots ne
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: { agentId: agent.agentId },
       query: {},
@@ -375,8 +372,6 @@ test('dashboard portfolio history route requires access and returns snapshots ne
 })
 
 test('dashboard portfolio history route returns 404 for an unknown agent', async () => {
-  const operatorSecret = 'operator-session-secret'
-  const token = signDashboardAccessExpiry(Date.now() + 60_000, operatorSecret)
 
   const app = express()
   registerPortfolioHistoryRoutes(
@@ -384,8 +379,7 @@ test('dashboard portfolio history route returns 404 for an unknown agent', async
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       workspace: {
         agentRegistry: {
@@ -409,7 +403,7 @@ test('dashboard portfolio history route returns 404 for an unknown agent', async
   await handler(
     {
       headers: {
-        cookie: `palmos_operator_access=${encodeURIComponent(token)}`,
+        cookie: operatorSessionCookie({ role: 'operator' }),
       },
       params: { agentId: 'agent_missing' },
       query: {},

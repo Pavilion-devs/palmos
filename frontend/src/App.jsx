@@ -3,7 +3,6 @@ import AgentCapabilitiesSection from './components/AgentCapabilitiesSection'
 import CrewSection from './components/CrewSection'
 // import DocsPage from './components/DocsPage'
 import Hero from './components/Hero'
-import JudgeAccessPage from './components/JudgeAccessPage'
 import Navbar from './components/Navbar'
 import Newsletter from './components/Newsletter'
 import OperatorControlsSection from './components/OperatorControlsSection'
@@ -12,8 +11,8 @@ import SectionDivider from './components/SectionDivider'
 import SiteFooter from './components/SiteFooter'
 import Testimonials from './components/Testimonials'
 import WorkflowsSection from './components/WorkflowsSection'
-import Dashboard from './components/dashboard/Dashboard'
-import useHashRoute from './hooks/useHashRoute'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import RedesignDashboard from './components/redesign/RedesignDashboard'
 
 const WAITLIST_URL = 'https://tally.so/r/aQva1q'
 
@@ -30,19 +29,6 @@ const WAITLIST_URL = 'https://tally.so/r/aQva1q'
  * scroll   each section fades, blurs out, and rises into place
  * scroll   repeated cards/steps/logos cascade by index
  * -------------------------------------------------------------------------- */
-
-const PUBLIC_ACCESS_MODE =
-  import.meta.env.VITE_PALMOS_PUBLIC_ACCESS_MODE === '1' ||
-  import.meta.env.PROD
-
-function isJudgeSessionActive() {
-  if (!PUBLIC_ACCESS_MODE) return true
-  const expiresAt = Number(
-    window.sessionStorage.getItem('palmos_dashboard_access') ??
-      window.sessionStorage.getItem('palmos_judge_access'),
-  )
-  return Number.isFinite(expiresAt) && expiresAt > Date.now()
-}
 
 function LandingPage() {
   return (
@@ -71,23 +57,14 @@ function LandingPage() {
 }
 
 export default function App() {
-  const hash = useHashRoute()
-
-  if (hash === 'judge-access' || hash === 'demo-access') {
-    return <JudgeAccessPage />
-  }
-
-  // if (hash === 'docs') {
-  //   return <DocsPage />
-  // }
-
-  if (hash.startsWith('dashboard')) {
-    if (!isJudgeSessionActive()) {
-      return <JudgeAccessPage />
-    }
-
-    return <Dashboard />
-  }
-
-  return <LandingPage />
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        {/* The SIWS-gated operator dashboard. RedesignDashboard owns the nested
+            /dashboard/* routes (Overview, Wallets, Activity, …, Connect). */}
+        <Route path="/dashboard/*" element={<RedesignDashboard />} />
+      </Routes>
+    </BrowserRouter>
+  )
 }

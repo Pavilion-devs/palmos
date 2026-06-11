@@ -63,7 +63,7 @@ export function registerActionRequestRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'action_request.detail.read',
     })
     if (!identity) {
@@ -127,7 +127,7 @@ export function registerActionRequestRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'action_request.history.read',
     })
     if (!identity) {

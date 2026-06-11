@@ -173,11 +173,9 @@ function readRateLimitKey(req: express.Request, profileName: string): string {
 function matchesDashboardRateLimitProfile(
   req: express.Request,
 ): DashboardRateLimitProfileKey | undefined {
-  if (
-    req.method === 'POST' &&
-    (req.path === '/api/dashboard/operator-login' ||
-      req.path === '/api/dashboard/judge-access')
-  ) {
+  // SIWS sign-in verify endpoint (added in P1 — docs/operator-auth-plan.md §4).
+  // Rate-limited as 'auth' to throttle signature-guessing against the nonce.
+  if (req.method === 'POST' && req.path === '/api/auth/verify') {
     return 'auth'
   }
 

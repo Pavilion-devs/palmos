@@ -17,7 +17,7 @@ export function registerAgentWalletContextRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'agent.wallet_context.read',
     })
     if (!identity) {

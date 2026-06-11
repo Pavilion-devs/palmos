@@ -112,8 +112,13 @@ import {
   readDashboardAccessIdentity,
   readDashboardSessionIdentity,
   requireDashboardRole,
-  signDashboardAccessExpiry,
+  signOperatorSession,
 } from '../src/server/dashboard/access.js'
+import {
+  operatorSessionCookie,
+  operatorSessionToken,
+  TEST_SESSION_SECRET,
+} from './helpers/siwsAuth.js'
 import { registerSystemRoutes } from '../src/server/dashboard/routes/systemRoutes.js'
 import { registerAgentRoutes } from '../src/server/dashboard/routes/agentRoutes.js'
 import { registerServiceRoutes } from '../src/server/dashboard/routes/serviceRoutes.js'
@@ -253,63 +258,58 @@ test('parses and formats PUSD amounts at six decimals', () => {
   )
 })
 
-test('dashboard access accepts signed operator and judge sessions only while active', () => {
+test('dashboard access reads a signed SIWS operator session only while active', () => {
   const now = Date.parse('2026-05-09T12:00:00.000Z')
   const env = {
-    PALMOS_OPERATOR_PASSWORD: 'operator-password',
-    PALMOS_OPERATOR_SESSION_SECRET: 'operator-session-secret',
-    PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
+    PALMOS_PUBLIC_ACCESS_MODE: '1',
+    PALMOS_SESSION_SECRET: 'session-secret',
   }
 
+  // No cookie → no access.
   assert.equal(
-    hasDashboardAccess({
-      req: createCookieRequest(''),
-      env,
-      now,
-    }),
+    hasDashboardAccess({ req: createCookieRequest(''), env, now }),
     false,
   )
 
-  const operatorToken = signDashboardAccessExpiry(
-    now + 60_000,
-    'operator-session-secret',
-  )
-  assert.equal(
-    hasDashboardAccess({
-      req: createCookieRequest(
-        `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
-      ),
-      env,
-      now,
-    }),
-    true,
-  )
-  assert.deepEqual(
-    readDashboardAccessIdentity({
-      req: createCookieRequest(
-        `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
-      ),
-      env,
-      now,
-    }),
+  const token = signOperatorSession(
     {
-      operatorId: 'operator_primary',
+      operatorId: 'op_demo',
       workspaceId: 'palmos_workspace_default',
-      actorId: 'operator:operator_primary',
-      role: 'operator',
-      source: 'env',
+      role: 'owner',
+      expiresAt: now + 60_000,
+    },
+    'session-secret',
+  )
+  const sessionReq = () =>
+    createCookieRequest(`palmos_operator_session=${encodeURIComponent(token)}`)
+
+  assert.equal(hasDashboardAccess({ req: sessionReq(), env, now }), true)
+  assert.deepEqual(
+    readDashboardAccessIdentity({ req: sessionReq(), env, now }),
+    {
+      operatorId: 'op_demo',
+      workspaceId: 'palmos_workspace_default',
+      actorId: 'operator:op_demo',
+      role: 'owner',
+      source: 'siws',
       expiresAt: now + 60_000,
     },
   )
 
-  const expiredOperatorToken = signDashboardAccessExpiry(
-    now - 1,
-    'operator-session-secret',
+  // Expired session → no access.
+  const expired = signOperatorSession(
+    {
+      operatorId: 'op_demo',
+      workspaceId: 'palmos_workspace_default',
+      role: 'owner',
+      expiresAt: now - 1,
+    },
+    'session-secret',
   )
   assert.equal(
     hasDashboardAccess({
       req: createCookieRequest(
-        `palmos_operator_access=${encodeURIComponent(expiredOperatorToken)}`,
+        `palmos_operator_session=${encodeURIComponent(expired)}`,
       ),
       env,
       now,
@@ -317,73 +317,56 @@ test('dashboard access accepts signed operator and judge sessions only while act
     false,
   )
 
-  const judgeToken = signDashboardAccessExpiry(now + 60_000, 'judge-passcode')
+  // Wrong signing secret → no access.
+  const forged = signOperatorSession(
+    {
+      operatorId: 'op_demo',
+      workspaceId: 'palmos_workspace_default',
+      role: 'owner',
+      expiresAt: now + 60_000,
+    },
+    'different-secret',
+  )
   assert.equal(
     hasDashboardAccess({
       req: createCookieRequest(
-        `palmos_judge_access=${encodeURIComponent(judgeToken)}`,
+        `palmos_operator_session=${encodeURIComponent(forged)}`,
       ),
       env,
       now,
     }),
-    true,
-  )
-  assert.equal(
-    readDashboardAccessIdentity({
-      req: createCookieRequest(
-        `palmos_judge_access=${encodeURIComponent(judgeToken)}`,
-      ),
-      env,
-      now,
-    })?.role,
-    'judge',
+    false,
   )
 })
 
 test('dashboard session capabilities expose mutation access explicitly', () => {
   const now = Date.parse('2026-05-09T12:00:00.000Z')
-  const judgeToken = signDashboardAccessExpiry(now + 60_000, 'judge-passcode')
-  const judgeIdentity = readDashboardSessionIdentity({
-    req: createCookieRequest(
-      `palmos_judge_access=${encodeURIComponent(judgeToken)}`,
-    ),
-    env: {
-      PALMOS_PUBLIC_ACCESS_MODE: '1',
-      PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
-    },
-    now,
-  })
 
-  assert.equal(judgeIdentity?.role, 'judge')
-  assert.deepEqual(
+  const capabilitiesFor = (role: 'owner' | 'operator' | 'viewer') =>
     buildDashboardAccessCapabilities({
-      identity: judgeIdentity,
-      env: {
-        PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
+      identity: {
+        operatorId: 'op_test',
+        workspaceId: 'palmos_workspace_default',
+        actorId: 'operator:op_test',
+        role,
+        source: 'siws',
+        expiresAt: Number.MAX_SAFE_INTEGER,
       },
-    }),
-    {
-      canMutateDashboard: false,
-      canManageOperators: false,
-      canUseJudgeMutationMode: false,
-    },
-  )
-  assert.deepEqual(
-    buildDashboardAccessCapabilities({
-      identity: judgeIdentity,
-      env: {
-        PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
-        PALMOS_ALLOW_JUDGE_MUTATIONS: '1',
-      },
-    }),
-    {
-      canMutateDashboard: true,
-      canManageOperators: false,
-      canUseJudgeMutationMode: true,
-    },
-  )
+      env: {},
+    })
+
+  assert.deepEqual(capabilitiesFor('owner'), {
+    canMutateDashboard: true,
+    canManageOperators: true,
+  })
+  assert.deepEqual(capabilitiesFor('operator'), {
+    canMutateDashboard: true,
+    canManageOperators: false,
+  })
+  assert.deepEqual(capabilitiesFor('viewer'), {
+    canMutateDashboard: false,
+    canManageOperators: false,
+  })
 
   const localIdentity = readDashboardSessionIdentity({
     req: createCookieRequest(''),
@@ -1833,6 +1816,8 @@ test('dashboard operator lifecycle normalizes records and status changes', () =>
     role: 'owner',
     status: 'active',
     source: 'env',
+    walletAddress: undefined,
+    email: undefined,
     createdAt: '2026-05-09T12:00:00.000Z',
     updatedAt: '2026-05-09T12:00:00.000Z',
     lastLoginAt: undefined,
@@ -2461,23 +2446,18 @@ test('dashboard storage restore refuses accidental overwrites', async () => {
 })
 
 test('dashboard role guard protects mutating routes by operator role', () => {
-  const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  // Viewer session is denied a mutating operation.
   const viewerContext = {
     env: {
       PALMOS_PUBLIC_ACCESS_MODE: '1',
-      PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-      PALMOS_OPERATOR_ROLE: 'viewer',
+      PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
     },
   } as never
   const viewerResponse = createTestResponse()
 
   assert.equal(
     requireDashboardRole({
-      req: createCookieRequest(
-        `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
-      ),
+      req: createCookieRequest(operatorSessionCookie({ role: 'viewer' })),
       res: viewerResponse as never,
       context: viewerContext,
       operation: 'agent.create',
@@ -2496,6 +2476,7 @@ test('dashboard role guard protects mutating routes by operator role', () => {
     },
   })
 
+  // Local-dev bypass (non-public mode) resolves the env operator.
   const localResponse = createTestResponse()
   assert.equal(
     requireDashboardRole({
@@ -2511,45 +2492,23 @@ test('dashboard role guard protects mutating routes by operator role', () => {
   )
   assert.equal(localResponse.statusCode, 200)
 
-  const judgeToken = signDashboardAccessExpiry(now + 60_000, 'judge-passcode')
-  const judgeResponse = createTestResponse()
+  // An owner session is allowed the mutating operation.
+  const ownerResponse = createTestResponse()
   assert.equal(
     requireDashboardRole({
-      req: createCookieRequest(
-        `palmos_judge_access=${encodeURIComponent(judgeToken)}`,
-      ),
-      res: judgeResponse as never,
+      req: createCookieRequest(operatorSessionCookie({ role: 'owner' })),
+      res: ownerResponse as never,
       context: {
         env: {
           PALMOS_PUBLIC_ACCESS_MODE: '1',
-          PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
-        },
-      } as never,
-      operation: 'service.register',
-    }),
-    undefined,
-  )
-  assert.equal(judgeResponse.statusCode, 403)
-
-  const judgeCompatResponse = createTestResponse()
-  assert.equal(
-    requireDashboardRole({
-      req: createCookieRequest(
-        `palmos_judge_access=${encodeURIComponent(judgeToken)}`,
-      ),
-      res: judgeCompatResponse as never,
-      context: {
-        env: {
-          PALMOS_PUBLIC_ACCESS_MODE: '1',
-          PALMOS_JUDGE_ACCESS_CODE: 'judge-passcode',
-          PALMOS_ALLOW_JUDGE_MUTATIONS: '1',
+          PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
         },
       } as never,
       operation: 'service.register',
     })?.role,
-    'judge',
+    'owner',
   )
-  assert.equal(judgeCompatResponse.statusCode, 200)
+  assert.equal(ownerResponse.statusCode, 200)
 })
 
 test('creates deterministic PUSD payment instructions and validates policy binding', () => {
@@ -3325,8 +3284,7 @@ test('concurrent approval decisions claim a paid call only once', async () => {
 
 test('approval endpoint audits duplicate decisions as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const operatorToken = operatorSessionToken({ role: 'operator', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const app = express()
   app.use(express.json())
@@ -3335,8 +3293,7 @@ test('approval endpoint audits duplicate decisions as conflicts', async () => {
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-approval-conflict-test',
       workspace: {
@@ -3373,7 +3330,7 @@ test('approval endpoint audits duplicate decisions as conflicts', async () => {
     method: 'post',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(operatorToken)}`,
     },
     params: {
       executionId: 'paid_call_conflict',
@@ -3401,8 +3358,7 @@ test('approval endpoint audits duplicate decisions as conflicts', async () => {
 
 test('credential rotate endpoint audits stale credential claims as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const operatorToken = operatorSessionToken({ role: 'operator', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const agent = createTestAgent()
   const activeCredential = {
@@ -3428,8 +3384,7 @@ test('credential rotate endpoint audits stale credential claims as conflicts', a
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-credential-conflict-test',
       workspace: {
@@ -3459,7 +3414,7 @@ test('credential rotate endpoint audits stale credential claims as conflicts', a
     method: 'post',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(operatorToken)}`,
     },
     params: {
       credentialId: 'credential_rotate_race',
@@ -3488,8 +3443,7 @@ test('credential rotate endpoint audits stale credential claims as conflicts', a
 
 test('credential rotate endpoint replays duplicate idempotent requests', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const operatorToken = operatorSessionToken({ role: 'operator', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const agent = createTestAgent()
   const credentials = new InMemoryAgentCredentialRegistry([
@@ -3511,8 +3465,7 @@ test('credential rotate endpoint replays duplicate idempotent requests', async (
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-credential-idempotency-test',
       mutationIdempotency: createDashboardMutationIdempotencyStore(),
@@ -3532,7 +3485,7 @@ test('credential rotate endpoint replays duplicate idempotent requests', async (
     headers: {
       'content-type': 'application/json',
       'idempotency-key': 'rotate-retry-123',
-      cookie: `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(operatorToken)}`,
     },
     params: {
       credentialId: 'credential_rotate_idempotent',
@@ -3575,8 +3528,7 @@ test('credential rotate endpoint replays duplicate idempotent requests', async (
 
 test('agent policy endpoint audits stale agent updates as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const operatorToken = operatorSessionToken({ role: 'operator', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const agent = createTestAgent()
   const changedAgent = {
@@ -3592,8 +3544,7 @@ test('agent policy endpoint audits stale agent updates as conflicts', async () =
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-agent-conflict-test',
       workspace: {
@@ -3623,7 +3574,7 @@ test('agent policy endpoint audits stale agent updates as conflicts', async () =
     method: 'patch',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(operatorToken)}`,
     },
     params: {
       agentId: agent.agentId,
@@ -3652,8 +3603,7 @@ test('agent policy endpoint audits stale agent updates as conflicts', async () =
 
 test('service disable endpoint audits stale service updates as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const operatorToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const operatorToken = operatorSessionToken({ role: 'operator', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const service = createRegisteredServiceRecord({
     serviceId: 'service_disable_race',
@@ -3672,8 +3622,7 @@ test('service disable endpoint audits stale service updates as conflicts', async
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'operator',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-service-conflict-test',
       workspace: {
@@ -3699,7 +3648,7 @@ test('service disable endpoint audits stale service updates as conflicts', async
     method: 'post',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(operatorToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(operatorToken)}`,
     },
     params: {
       serviceId: service.serviceId,
@@ -3726,8 +3675,7 @@ test('service disable endpoint audits stale service updates as conflicts', async
 
 test('operator disable endpoint audits stale operator updates as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const ownerToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const ownerToken = operatorSessionToken({ role: 'owner', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const operator = createDashboardOperatorRecord({
     env: {
@@ -3753,8 +3701,7 @@ test('operator disable endpoint audits stale operator updates as conflicts', asy
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'owner',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
       },
       baseDir: '/tmp/palmos-operator-conflict-test',
       workspace: {
@@ -3779,7 +3726,7 @@ test('operator disable endpoint audits stale operator updates as conflicts', asy
     method: 'post',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(ownerToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(ownerToken)}`,
     },
     params: {
       operatorId: operator.operatorId,
@@ -3806,8 +3753,7 @@ test('operator disable endpoint audits stale operator updates as conflicts', asy
 
 test('workspace update endpoint audits stale workspace updates as conflicts', async () => {
   const now = Date.now()
-  const operatorSecret = 'operator-session-secret'
-  const ownerToken = signDashboardAccessExpiry(now + 60_000, operatorSecret)
+  const ownerToken = operatorSessionToken({ role: 'owner', expiresAt: now + 60_000 })
   const audit = new InMemoryDashboardAuditLogRegistry()
   const workspace = await ensureDashboardWorkspaceRecord({
     registry: new InMemoryDashboardWorkspaceRegistry(),
@@ -3830,8 +3776,7 @@ test('workspace update endpoint audits stale workspace updates as conflicts', as
     {
       env: {
         PALMOS_PUBLIC_ACCESS_MODE: '1',
-        PALMOS_OPERATOR_SESSION_SECRET: operatorSecret,
-        PALMOS_OPERATOR_ROLE: 'owner',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
         PALMOS_WORKSPACE_ID: workspace.workspaceId,
       },
       baseDir: '/tmp/palmos-workspace-conflict-test',
@@ -3857,7 +3802,7 @@ test('workspace update endpoint audits stale workspace updates as conflicts', as
     method: 'patch',
     headers: {
       'content-type': 'application/json',
-      cookie: `palmos_operator_access=${encodeURIComponent(ownerToken)}`,
+      cookie: `palmos_operator_session=${encodeURIComponent(ownerToken)}`,
     },
     body: {
       displayName: 'Updated Workspace',

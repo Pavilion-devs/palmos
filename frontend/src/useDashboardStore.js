@@ -26,7 +26,6 @@ const EMPTY_SESSION = {
   capabilities: {
     canMutateDashboard: false,
     canManageOperators: false,
-    canUseJudgeMutationMode: false,
   },
 }
 

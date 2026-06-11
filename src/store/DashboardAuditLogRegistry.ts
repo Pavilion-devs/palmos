@@ -17,6 +17,8 @@ export type DashboardAuditAction =
   | 'operator.update'
   | 'operator.disable'
   | 'operator.enable'
+  | 'operator.signin'
+  | 'operator.signout'
   | 'workspace.export'
   | 'agent.run'
   | 'agent_credential.create'
@@ -56,7 +58,7 @@ export type DashboardAuditLogRecord = {
   actorId: string
   operatorId: string
   operatorRole: DashboardOperatorRole
-  source: 'env' | 'judge'
+  source: 'env' | 'siws'
   action: DashboardAuditAction
   status: 'succeeded' | 'failed'
   target?: DashboardAuditTarget

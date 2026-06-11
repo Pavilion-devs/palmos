@@ -59,7 +59,7 @@ export function registerWalletActionRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'wallet_action.detail.read',
     })
     if (!identity) {
@@ -123,7 +123,7 @@ export function registerWalletActionRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'wallet_action.history.read',
     })
     if (!identity) {

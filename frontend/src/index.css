@@ -25,6 +25,22 @@
   --color-amber: #e89c2a;
   --color-pink: #e26a7c;
 
+  /* ---- Dashboard redesign: dark lime-on-black system (additive, no collisions
+     with the light landing tokens above; the redesign wrapper opts in via
+     bg-background so the landing stays light) ---- */
+  --color-background: #0a0b0a;
+  --color-foreground: #f4f6f3;
+  --color-panel: #121512;
+  --color-panel-2: #16191a;
+  --color-sidebar: #0d0f0d;
+  --color-sidebar-accent: #16191a;
+  --color-lime: #c6f94e;
+  --color-primary-foreground: #0a0b0a;
+  --color-hairline: #232823;
+  --color-muted-foreground: #9aa39f;
+  --color-pending: #e8a93a;
+  --color-blocked: #ff5c5c;
+
   --radius: 22px;
   --radius-sm: 14px;
 }
@@ -49,6 +65,30 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #9aa39f;
+}
+
+/* The redesign dashboard is dark — when it is mounted, switch the page base and
+   scrollbars to the dark system so the light landing scrollbar/body never bleeds
+   through (e.g. the white strip on the right). The light landing above is left
+   untouched (these rules only apply while a .redesign-root is present). */
+body:has(.redesign-root) {
+  background-color: var(--color-background);
+}
+.redesign-root,
+body:has(.redesign-root) {
+  scrollbar-color: var(--color-hairline) var(--color-background);
+}
+.redesign-root ::-webkit-scrollbar-track,
+body:has(.redesign-root)::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+.redesign-root ::-webkit-scrollbar-thumb,
+body:has(.redesign-root)::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+}
+.redesign-root ::-webkit-scrollbar-thumb:hover,
+body:has(.redesign-root)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
 }
 
 /* The single saturated moment — Jaguar .card.dark blown up to a field */

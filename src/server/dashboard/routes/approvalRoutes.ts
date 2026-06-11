@@ -21,7 +21,7 @@ export function registerApprovalReadRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'approval.queue.read',
     })
     if (!identity) {

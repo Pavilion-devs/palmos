@@ -124,7 +124,7 @@ export function registerSystemRoutes(
       req,
       res,
       context,
-      roles: ['owner', 'operator', 'judge'],
+      roles: ['owner', 'operator'],
       operation: 'settlement.readiness',
     })
     if (!identity) {

@@ -69,36 +69,28 @@ Current behavior:
    - any blocking/warning readiness checks,
    - dashboard link: `#dashboard/agents/<agentId>`.
 
-## Production / judge backend note
+## Production / remote backend note
 
-If `PALMOS_API_URL` points at `https://api.getpalmos.xyz`, dashboard mutations require a dashboard access cookie and a valid origin header.
+The shared-passcode access gate (judge/operator-login) has been **removed** (P0 of
+the operator-auth migration — see `docs/operator-auth-plan.md`). There is no
+passcode-cookie path anymore.
 
-If `PALMOS_JUDGE_ACCESS_CODE` is available, create a temporary cookie jar first:
+- **Local/dev backend:** run with `PALMOS_DISABLE_DASHBOARD_AUTH=1` (the default in
+  `.env.example`). Dashboard GET/PATCH calls need no auth cookie — just a valid
+  `origin` header:
 
-```bash
-PALMOS_COOKIE_JAR="$(mktemp)"
-curl -s -c "$PALMOS_COOKIE_JAR" \
-  -H 'content-type: application/json' \
-  -H 'origin: https://www.getpalmos.xyz' \
-  -d "{\"passcode\":\"$PALMOS_JUDGE_ACCESS_CODE\"}" \
-  "$PALMOS_API_URL/api/dashboard/judge-access"
-```
+  ```bash
+  curl -s -X PATCH \
+    -H 'origin: http://localhost:4030' \
+    -H 'content-type: application/json' \
+    -d '{"privacyMode":"allowed"}' \
+    "$PALMOS_API_URL/api/dashboard/agents/<agentId>/privacy"
+  ```
 
-Then include the cookie jar and origin on dashboard GET/PATCH calls:
-
-```bash
-curl -s -b "$PALMOS_COOKIE_JAR" \
-  -H 'origin: https://www.getpalmos.xyz' \
-  "$PALMOS_API_URL/api/dashboard/agents"
-
-curl -s -X PATCH -b "$PALMOS_COOKIE_JAR" \
-  -H 'origin: https://www.getpalmos.xyz' \
-  -H 'content-type: application/json' \
-  -d '{"privacyMode":"allowed"}' \
-  "$PALMOS_API_URL/api/dashboard/agents/<agentId>/privacy"
-```
-
-Never print the judge access code in the response.
+- **Production backend (`https://api.getpalmos.xyz`):** dashboard mutations require a
+  real Sign-In With Solana operator session (added in P1/P2). Until that lands there
+  is no scriptable curl auth path against production — drive these mutations from the
+  authenticated dashboard UI instead.
 
 ## Suggested responses
 

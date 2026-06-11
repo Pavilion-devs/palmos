@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    // Solana web3.js / wallet-adapter expect Node globals in the browser.
+    define: {
+      global: 'globalThis',
+    },
+    optimizeDeps: {
+      include: ['buffer', 'bs58'],
+    },
     server: {
       proxy: {
         '/api': {
