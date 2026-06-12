@@ -1,5 +1,5 @@
 import { loadAgentSpendWorkspace } from '../workspace/loadWorkspace.js'
-import { capturePortfolioSnapshot } from '../app/capturePortfolioSnapshot.js'
+import { capturePortfolioSnapshotsForWorkspace } from '../app/capturePortfolioSnapshotsForWorkspace.js'
 import { SolanaPortfolioReader } from '../integrations/portfolio/solanaPortfolioReader.js'
 import {
   InMemoryPortfolioSnapshotRegistry,
@@ -15,21 +15,6 @@ type Command = {
   dryRun: boolean
   limit?: number
 }
-
-type CaptureResult =
-  | {
-      agentId: string
-      outcome: 'captured'
-      snapshotId: string
-      syncKind: string
-      totalValueUsd: number
-      positionsCount: number
-    }
-  | {
-      agentId: string
-      outcome: 'failed'
-      error: string
-    }
 
 function readFlag(args: string[], name: string): string | undefined {
   const exact = `--${name}`
@@ -96,46 +81,12 @@ async function main(): Promise<void> {
       ? new InMemoryPortfolioSnapshotRegistry()
       : workspace.portfolioSnapshotRegistry
 
-    const agents = await workspace.agentRegistry.list()
-    const selectedAgents =
-      command.limit == null ? agents : agents.slice(0, command.limit)
-
-    const results: CaptureResult[] = []
-    let captured = 0
-    let failed = 0
-
-    for (const agent of selectedAgents) {
-      try {
-        const wallet = agent.walletId
-          ? await workspace.walletRegistry.get(agent.walletId)
-          : undefined
-        const record = await capturePortfolioSnapshot({
-          agent,
-          wallet,
-          portfolioReader,
-          registry,
-        })
-        captured += 1
-        results.push({
-          agentId: agent.agentId,
-          outcome: 'captured',
-          snapshotId: record.snapshotId,
-          syncKind: record.syncKind,
-          totalValueUsd: record.totalValueUsd,
-          positionsCount: record.positionsCount,
-        })
-      } catch (error) {
-        failed += 1
-        results.push({
-          agentId: agent.agentId,
-          outcome: 'failed',
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Unable to capture portfolio snapshot.',
-        })
-      }
-    }
+    const summary = await capturePortfolioSnapshotsForWorkspace({
+      workspace,
+      portfolioReader,
+      registry,
+      limit: command.limit,
+    })
 
     console.log(
       JSON.stringify(
@@ -145,10 +96,11 @@ async function main(): Promise<void> {
           storageDriver: workspace.storageDriver,
           dryRun: command.dryRun,
           limit: command.limit,
-          checkedAgents: selectedAgents.length,
-          captured,
-          failed,
-          results,
+          capturedAt: summary.capturedAt,
+          checkedAgents: summary.checkedAgents,
+          captured: summary.captured,
+          failed: summary.failed,
+          results: summary.results,
         },
         null,
         2,

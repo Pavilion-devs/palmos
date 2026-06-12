@@ -15,7 +15,10 @@ import { fetchDashboardApi } from '../../../useDashboardStore'
 
 // Default policy/setup for a freshly connected agent. The operator only names the
 // agent + picks a wallet option here; everything else uses sensible defaults.
-function buildAgentSetup(name) {
+// The wallet choice drives provisioning: "create-new" mints a fresh OWS Solana
+// wallet; "connect-existing" links the operator's configured wallet. Both yield a
+// real, fundable Solana address (no demo/placeholder addresses).
+function buildAgentSetup(name, walletChoice) {
   return {
     agentName: name,
     agentTask: 'Operate wallets and paid services through PalmOS',
@@ -28,7 +31,7 @@ function buildAgentSetup(name) {
       'palmos.ops.vendor_brief',
     ],
     managerAddress: '',
-    walletMode: 'local-demo',
+    walletMode: walletChoice === 'connect-existing' ? 'ows-import' : 'ows',
   }
 }
 
@@ -86,9 +89,14 @@ export function ConnectAgentPanel({ onConnected }) {
   const [created, setCreated] = useState(null) // { agentId, name, token }
 
   // Live roster poll for the "waiting for your agent…" indicator (only in reveal).
+  // Roster entries are shaped { agent, portfolio, ... }; "online" means the agent
+  // has actually authenticated via the SDK (firstConnectedAt set), NOT merely that
+  // the record exists (it exists from creation).
   const { agents } = useAgents({ poll: step === 'reveal' })
-  const agentOnline =
-    created && agents.some((agent) => agent.agentId === created.agentId)
+  const connectedAgent = created
+    ? agents.find((entry) => entry?.agent?.agentId === created.agentId)
+    : undefined
+  const agentOnline = Boolean(connectedAgent?.agent?.firstConnectedAt)
 
   async function handleCreate(event) {
     event.preventDefault()
@@ -104,7 +112,7 @@ export function ConnectAgentPanel({ onConnected }) {
       const response = await fetchDashboardApi('/api/dashboard/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setup: buildAgentSetup(name) }),
+        body: JSON.stringify({ setup: buildAgentSetup(name, walletChoice) }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.ok || !payload?.agent?.agentId) {
@@ -128,10 +136,17 @@ export function ConnectAgentPanel({ onConnected }) {
     const command = `npm install @getpalmos/agent\nexport PALMOS_AGENT_TOKEN=${created.token}`
     return (
       <div className="mx-auto w-full max-w-2xl rounded-[var(--radius)] border border-hairline bg-panel p-7">
-        <div className="flex items-center gap-2 text-sm font-medium text-lime">
-          <Check className="size-4" aria-hidden="true" />
-          Agent “{created.name}” connected
-        </div>
+        {agentOnline ? (
+          <div className="flex items-center gap-2 text-sm font-medium text-lime">
+            <Check className="size-4" aria-hidden="true" />
+            Agent “{created.name}” connected
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <KeyRound className="size-4" aria-hidden="true" />
+            Agent “{created.name}” created
+          </div>
+        )}
         <h2 className="mt-3 text-xl font-semibold tracking-tight text-foreground">
           Bring it online
         </h2>
@@ -159,7 +174,7 @@ export function ConnectAgentPanel({ onConnected }) {
           {agentOnline ? (
             <>
               <span className="size-2 rounded-full bg-lime" />
-              Agent registered — it appears on your dashboard.
+              Agent connected — it’s online and operating under policy.
             </>
           ) : (
             <>

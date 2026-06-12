@@ -28,6 +28,7 @@ import {
   resolveDashboardPort,
 } from './dashboard/config.js'
 import type { DashboardRouteContext } from './dashboard/context.js'
+import { startPortfolioSnapshotScheduler } from './dashboard/portfolioSnapshotScheduler.js'
 import { installDashboardAbuseProtection } from './dashboard/abuseProtection.js'
 import { createDashboardOperationalMetricsStore } from './dashboard/operationalMetrics.js'
 import { createDashboardOperationalAlertDispatcher } from './dashboard/operationalAlerts.js'
@@ -73,6 +74,16 @@ async function resolveDemoPayToAddress(
 
 async function main() {
   const env = readProcessEnv()
+  // loadProcessEnv() merges .env into a fresh map but does NOT mutate the global
+  // process.env. Integrations that read process.env directly (the OWS broadcast
+  // RPC, the price oracle, etc.) would otherwise miss .env-only values such as
+  // PUSD_SOLANA_NETWORK. Hydrate the gaps so .env is authoritative everywhere;
+  // a real process-env value always wins.
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && process.env[key] === undefined) {
+      process.env[key] = value
+    }
+  }
   const baseDir = resolveDashboardBaseDir(env)
   const port = resolveDashboardPort(env)
   const workspace = loadAgentSpendWorkspace({ baseDir, env })
@@ -230,7 +241,19 @@ async function main() {
       ),
     )
   })
+
+  // Self-populate the assets-under-control history while the server runs so the
+  // chart fills in from real snapshots (configurable via
+  // PALMOS_PORTFOLIO_SNAPSHOT_INTERVAL_MS; 0 disables).
+  const snapshotScheduler = startPortfolioSnapshotScheduler({
+    workspace,
+    portfolioReader,
+    env,
+    log: (message) => console.log(message),
+  })
+
   async function shutdown() {
+    snapshotScheduler.stop()
     await new Promise<void>((resolve, reject) => {
       server.close((error) => {
         if (error) {

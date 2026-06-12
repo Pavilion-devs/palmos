@@ -11,6 +11,8 @@ import {
 } from '../policies/compileAgentPolicy.js'
 import type { ActionRequestRecord, ActionRequestRegistry, ActionRequestSource } from '../store/ActionRequestRegistry.js'
 import type { AgentRecord, AgentRegistry } from '../store/AgentRegistry.js'
+import type { OwsClient } from '../integrations/ows/client.js'
+import { readSolanaRpcUrlFromEnv } from '../integrations/pusd/constants.js'
 
 export type RequestAssetTransferInput = {
   agentId: string
@@ -29,8 +31,102 @@ export type RequestAssetTransferDependencies = {
   agentRegistry: AgentRegistry
   actionRequests: ActionRequestRegistry
   runRegistry?: Pick<RunRegistry, 'get'>
+  // When present, approved native-SOL transfers for OWS-backed agents are
+  // settled for real on-chain through this client (instead of the deterministic
+  // runtime broadcast). Cluster follows PUSD_SOLANA_NETWORK — works on mainnet.
+  owsClient?: OwsClient
   now?: () => string
   createId?: (prefix: string) => string
+}
+
+// Parse a decimal SOL amount string into integer lamports without floating-
+// point drift (e.g. "0.1" -> 100000000, "1" -> 1000000000).
+function solAmountToLamports(amount: string): number {
+  const [whole, fraction = ''] = amount.trim().split('.')
+  const fractionPadded = (fraction + '000000000').slice(0, 9)
+  return Number(whole || '0') * 1_000_000_000 + Number(fractionPadded || '0')
+}
+
+// Layer real OWS Solana settlement on top of the runtime-finalized transfer
+// record. Only native SOL for OWS-backed agents is settled today; everything
+// else (non-SOL assets, non-OWS agents, non-executed outcomes) passes through
+// unchanged. A failed broadcast flips the record to `failed` so we never report
+// a fake success.
+async function settleAssetTransferViaOws(input: {
+  deps: RequestAssetTransferDependencies
+  agent: AgentRecord
+  record: ActionRequestRecord
+  decision: 'approved' | 'rejected' | string
+}): Promise<ActionRequestRecord> {
+  const { deps, agent, record } = input
+  // After approval the runtime advances a native transfer to
+  // `waiting_for_execution` (it defers the actual broadcast). That is exactly
+  // where we step in as the real execution backend — so settle on either the
+  // ready-to-execute or already-executed runtime outcome.
+  const runtimeKind = mapActionRequestKindFromStatus(record.status)
+  if (
+    input.decision !== 'approved' ||
+    !deps.owsClient ||
+    agent.walletBackend !== 'ows' ||
+    (runtimeKind !== 'executed' && runtimeKind !== 'waiting_for_execution') ||
+    record.target.kind !== 'address'
+  ) {
+    return record
+  }
+
+  const assetSymbol = record.value?.assetSymbol
+  const amount = record.value?.amount
+  const destination = record.target.address
+  // Only native SOL settles for real right now; leave other assets to the
+  // existing (deterministic) path until SPL settlement is wired.
+  if (assetSymbol !== 'SOL' || !amount || !destination) {
+    return record
+  }
+
+  const walletName =
+    agent.owsWalletName ?? agent.owsWalletId ?? agent.agentId
+  const rpcUrl = readSolanaRpcUrlFromEnv()
+
+  try {
+    const result = await deps.owsClient.paySolanaTransfer({
+      wallet: walletName,
+      destination,
+      lamports: solAmountToLamports(amount),
+      rpcUrl,
+    })
+    const signature = result.signature
+    if (!signature) {
+      throw new Error('OWS Solana settlement returned no signature.')
+    }
+    return {
+      ...record,
+      status: 'executed',
+      errorCode: undefined,
+      errorMessage: undefined,
+      resultRef: signature,
+      runtimeRefs: {
+        ...record.runtimeRefs,
+        intentIds: record.runtimeRefs?.intentIds ?? [],
+        broadcastRefs: [signature],
+      },
+      requestContext: {
+        ...record.requestContext,
+        settlementBackend: 'ows',
+        settlementSignature: signature,
+        settlementRpcUrl: rpcUrl,
+      },
+    }
+  } catch (error) {
+    return {
+      ...record,
+      status: 'failed',
+      errorCode: 'ows.settlement_failed',
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : 'OWS Solana settlement failed after approval.',
+    }
+  }
 }
 
 export type RequestAssetTransferResult =
@@ -1061,7 +1157,7 @@ export async function resolvePendingAssetTransferApproval(
     input.decision === 'approved'
       ? mapRunToActionRequestStatus(refreshedRun)
       : 'failed'
-  const finalRecord = buildRuntimeBackedActionRequest({
+  const runtimeFinalRecord = buildRuntimeBackedActionRequest({
     record: claimedRecord,
     at: nowIso(deps),
     turn: syntheticTurn,
@@ -1074,6 +1170,14 @@ export async function resolvePendingAssetTransferApproval(
       input.decision === 'approved' && finalStatus !== 'failed'
         ? undefined
         : `Asset transfer action request ${input.actionRequestId} was ${input.decision}.`,
+  })
+  // Replace the deterministic runtime broadcast with a real OWS on-chain
+  // settlement for eligible (OWS-backed native-SOL) transfers.
+  const finalRecord = await settleAssetTransferViaOws({
+    deps,
+    agent,
+    record: runtimeFinalRecord,
+    decision: input.decision,
   })
   await deps.actionRequests.put(finalRecord)
 

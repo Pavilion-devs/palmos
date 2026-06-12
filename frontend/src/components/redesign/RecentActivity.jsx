@@ -1,4 +1,13 @@
-import { ArrowLeftRight, Send, Coins, KeyRound, ShieldAlert, Activity } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Send,
+  Coins,
+  KeyRound,
+  ShieldAlert,
+  Activity,
+  Zap,
+  ArrowDownToLine,
+} from 'lucide-react'
 import useDashboardTransactions from '../../hooks/useDashboardTransactions'
 import { selectActivityRows } from './data/selectors'
 
@@ -13,6 +22,8 @@ const typeIcons = {
   Transfer: Send,
   Payment: Coins,
   Wallet: KeyRound,
+  Agent: Zap,
+  Deposit: ArrowDownToLine,
   Action: Activity,
 }
 

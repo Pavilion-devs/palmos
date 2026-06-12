@@ -4,6 +4,7 @@ import { OperatorSessionProvider } from '../../hooks/OperatorSessionProvider'
 import { useOperatorSession } from '../../hooks/useOperatorSession'
 import { OverviewPage } from './OverviewPage'
 import { WalletsPage } from './WalletsPage'
+import { WalletDetailPage } from './WalletDetailPage'
 import { ActivityPage } from './ActivityPage'
 import { ApprovalsPage } from './ApprovalsPage'
 import { ControlsPage } from './ControlsPage'
@@ -20,6 +21,7 @@ function DashboardRoutes() {
     <Routes>
       <Route index element={<OverviewPage />} />
       <Route path="wallets" element={<WalletsPage />} />
+      <Route path="wallets/:agentId" element={<WalletDetailPage />} />
       <Route path="activity" element={<ActivityPage />} />
       <Route path="approvals" element={<ApprovalsPage />} />
       <Route path="controls" element={<ControlsPage />} />

@@ -4,8 +4,8 @@ import useDashboardApprovals from '../../hooks/useDashboardApprovals'
 import {
   activeWalletCount,
   assetsUnderControl,
-  formatTokenAmount,
   formatUsd,
+  selectPendingApprovals,
 } from './data/selectors'
 
 const variantStyles = {
@@ -75,7 +75,13 @@ export function StatCards() {
   const active = activeWalletCount(agents)
   const auc = assetsUnderControl(agents)
   const pendingCount = approvals.summary?.totalPending ?? approvals.approvals.length
-  const pendingAmount = approvals.summary?.totalAmount
+  // Use the pending approvals' real per-item amounts (asset-aware) rather than a
+  // unit-less sum — so a single SOL approval reads "0.1 SOL awaiting", not "PUSD".
+  const pendingItems = selectPendingApprovals(approvals.approvals ?? [])
+  const pendingSub =
+    pendingItems.length === 1 && pendingItems[0].amount !== '—'
+      ? `${pendingItems[0].amount} awaiting`
+      : `${pendingCount} awaiting`
 
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -101,8 +107,8 @@ export function StatCards() {
         sub={
           loading
             ? ' '
-            : pendingCount > 0 && pendingAmount
-              ? `${formatTokenAmount(pendingAmount)} PUSD awaiting`
+            : pendingCount > 0
+              ? pendingSub
               : 'Nothing awaiting'
         }
       />

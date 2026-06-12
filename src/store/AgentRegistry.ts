@@ -50,6 +50,16 @@ export type AgentRecord = {
   trustTier: AgentTrustTier
   status: AgentStatus
   lastCheckInAt: string
+  // First time the agent actually authenticated via the SDK (its real "came
+  // online" moment). Unset until the agent runs with its token — distinct from
+  // createdAt, which is when the operator provisioned the agent + wallet.
+  firstConnectedAt?: string
+  // First time a positive portfolio balance was observed for this wallet (its
+  // funding moment), stamped once at snapshot-capture time. Inbound deposits are
+  // external on-chain credits, not governed actions, so this is how funding
+  // surfaces on the dashboard. firstFundedValueUsd records the observed amount.
+  firstFundedAt?: string
+  firstFundedValueUsd?: number
   xmtpInboxId?: string
 }
 

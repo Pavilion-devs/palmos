@@ -1,5 +1,6 @@
 import type express from 'express'
 import { createAgentFromOnboarding } from '../../../index.js'
+import { readPusdNetworkFromEnv } from '../../../integrations/pusd/constants.js'
 import {
   createOnboardingTurn,
   readOnboardingField,
@@ -81,6 +82,11 @@ export function registerAgentOnboardingRoutes(
         return
       }
 
+      // Both wallet choices provision a real OWS Solana wallet. "create-new"
+      // mints a fresh keypair (no import); "connect-existing" (walletMode
+      // 'ows-import') links the operator's configured OWS_WALLET_PRIVATE_KEY.
+      const wantsImport = setup.walletMode === 'ows-import'
+
       const created = await createAgentFromOnboarding(
         {
           workspace: context.workspace,
@@ -90,11 +96,15 @@ export function registerAgentOnboardingRoutes(
         },
         {
           ...setup,
+          walletMode: 'ows',
+          solanaNetwork: readPusdNetworkFromEnv(context.env),
           organizationId:
             context.env.PALMOS_ORG_ID?.trim() || 'palmos_workspace_default',
           treasuryId:
             context.env.PALMOS_TREASURY_ID?.trim() || 'palmos_treasury_default',
-          owsImportPrivateKey: context.env.OWS_WALLET_PRIVATE_KEY?.trim(),
+          owsImportPrivateKey: wantsImport
+            ? context.env.OWS_WALLET_PRIVATE_KEY?.trim()
+            : undefined,
           servicePayToAddress,
         },
       )

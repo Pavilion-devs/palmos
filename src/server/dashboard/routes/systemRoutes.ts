@@ -1072,6 +1072,7 @@ export function registerSystemRoutes(
               kernel: context.workspace.kernel,
               agentRegistry: context.workspace.agentRegistry,
               actionRequests: context.workspace.actionRequestRegistry!,
+              owsClient: context.owsClient,
             },
             {
               actionRequestId: executionId,

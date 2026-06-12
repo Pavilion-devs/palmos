@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Send, Coins, ShieldAlert, KeyRound, Activity } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Send,
+  Coins,
+  ShieldAlert,
+  KeyRound,
+  Activity,
+  Zap,
+  ArrowDownToLine,
+} from 'lucide-react'
 import { Shell } from './Shell'
 import useDashboardTransactions from '../../hooks/useDashboardTransactions'
 import { selectActivityRows } from './data/selectors'
@@ -15,6 +24,8 @@ const typeIcons = {
   Transfer: Send,
   Payment: Coins,
   Wallet: KeyRound,
+  Agent: Zap,
+  Deposit: ArrowDownToLine,
   Action: Activity,
 }
 
@@ -65,7 +76,7 @@ export function ActivityPage() {
           <span className="text-right">Time</span>
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {status === 'idle' && all.length === 0 && (
             <div className="px-2 py-10 text-center text-sm text-muted-foreground">Loading operations…</div>
           )}

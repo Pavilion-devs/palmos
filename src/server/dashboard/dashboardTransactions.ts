@@ -2,6 +2,7 @@ import type {
   ActionRequestKind,
   ActionRequestSource,
 } from '../../store/ActionRequestRegistry.js'
+import type { AgentRecord } from '../../store/AgentRegistry.js'
 import type {
   PaidCallPaymentRail,
   PaidCallRecord,
@@ -30,7 +31,10 @@ import {
  * compatibility fields are kept, but scoped under `legacy` so the dependency is
  * explicit and easy to remove once the dashboard fully switches over.
  */
-export type DashboardTransactionKind = 'legacy_paid_call' | 'native_wallet_action'
+export type DashboardTransactionKind =
+  | 'legacy_paid_call'
+  | 'native_wallet_action'
+  | 'agent_event'
 
 type DashboardTransactionValue = {
   assetSymbol: string
@@ -104,13 +108,27 @@ export type DashboardNativeWalletActionTransaction = DashboardTransactionBase & 
   }
 }
 
+/**
+ * Timeline events that are NOT governed wallet actions or paid calls, but still
+ * belong in the activity feed: an agent first coming online, an inbound deposit
+ * detected on-chain. These are derived (read-time) from existing state — the
+ * agent record's `firstConnectedAt` and the portfolio snapshot history — so they
+ * never enter the ActionRequest lifecycle.
+ */
+export type DashboardAgentEventTransaction = DashboardTransactionBase & {
+  transactionKind: 'agent_event'
+  eventType: 'agent.connected' | 'deposit.detected'
+}
+
 export type DashboardTransactionRow =
   | DashboardLegacyPaidCallTransaction
   | DashboardNativeWalletActionTransaction
+  | DashboardAgentEventTransaction
 
 export const DASHBOARD_TRANSACTION_KINDS = [
   'legacy_paid_call',
   'native_wallet_action',
+  'agent_event',
 ] as const satisfies readonly DashboardTransactionKind[]
 
 export type DashboardTransactionsSummary = {
@@ -236,14 +254,72 @@ function projectNativeWalletActionTransaction(
   }
 }
 
+// "Agent connected" timeline row, derived from the agent's first-connect stamp.
+function projectAgentConnectedTransaction(
+  agent: AgentRecord,
+  at: string,
+): DashboardAgentEventTransaction {
+  return {
+    transactionKind: 'agent_event',
+    id: `agent_connected:${agent.agentId}`,
+    agentId: agent.agentId,
+    walletId: agent.walletId,
+    status: 'connected',
+    title: 'Agent connected',
+    summary: `${agent.displayName} authenticated and came online.`,
+    createdAt: at,
+    updatedAt: at,
+    eventType: 'agent.connected',
+  }
+}
+
+function formatFundingUsd(value: number): string {
+  return value >= 1000
+    ? `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+    : `$${value.toFixed(2)}`
+}
+
+// "Funding detected" timeline row, derived from the agent's first-funded stamp
+// (set once at snapshot-capture time). An inbound deposit is an external on-chain
+// credit, not a governed action, so this surfaces funding without inventing a
+// fake ActionRequest.
+function projectFundingDetectedTransaction(
+  agent: AgentRecord,
+  at: string,
+  valueUsd: number | undefined,
+): DashboardAgentEventTransaction {
+  const amount =
+    valueUsd != null && Number.isFinite(valueUsd)
+      ? formatFundingUsd(valueUsd)
+      : null
+  return {
+    transactionKind: 'agent_event',
+    id: `deposit:${agent.agentId}:funding`,
+    agentId: agent.agentId,
+    walletId: agent.walletId,
+    status: 'detected',
+    title: 'Funding detected',
+    summary: amount
+      ? `${agent.displayName} was funded — ${amount} received on-chain.`
+      : `${agent.displayName} was funded — deposit detected on-chain.`,
+    createdAt: at,
+    updatedAt: at,
+    eventType: 'deposit.detected',
+  }
+}
+
 export async function buildDashboardTransactions(input: {
   workspace: AgentSpendWorkspace
   query?: DashboardTransactionsQuery
 }): Promise<DashboardTransactions> {
   const query = input.query ?? {}
   const limit = query.limit ?? DEFAULT_TRANSACTION_LIMIT
-  const includeNative = query.transactionKind !== 'legacy_paid_call'
-  const includeLegacy = query.transactionKind !== 'native_wallet_action'
+  const includeNative =
+    !query.transactionKind || query.transactionKind === 'native_wallet_action'
+  const includeLegacy =
+    !query.transactionKind || query.transactionKind === 'legacy_paid_call'
+  const includeEvents =
+    !query.transactionKind || query.transactionKind === 'agent_event'
 
   // Native wallet actions are intentionally read through the dedicated
   // wallet-action history projection, never re-derived from paid calls. The
@@ -282,13 +358,50 @@ export async function buildDashboardTransactions(input: {
         .map(projectPaidCallTransaction)
     : []
 
-  const combined = [...nativeRows, ...legacyRows].sort(sortByRecency)
+  // Agent timeline events (read-time derived from stable agent fields; no
+  // separate store). An agent can contribute more than one: its "connected"
+  // moment (firstConnectedAt) and its "funded" moment (firstFundedAt).
+  const agentEventRows: DashboardAgentEventTransaction[] = []
+  if (includeEvents && input.workspace.agentRegistry) {
+    const agents = (await input.workspace.agentRegistry.list()).filter(
+      (agent) => {
+        if (query.agentId && agent.agentId !== query.agentId) {
+          return false
+        }
+        if (query.walletId && agent.walletId !== query.walletId) {
+          return false
+        }
+        return true
+      },
+    )
+    for (const agent of agents) {
+      if (agent.firstConnectedAt) {
+        agentEventRows.push(
+          projectAgentConnectedTransaction(agent, agent.firstConnectedAt),
+        )
+      }
+      if (agent.firstFundedAt) {
+        agentEventRows.push(
+          projectFundingDetectedTransaction(
+            agent,
+            agent.firstFundedAt,
+            agent.firstFundedValueUsd,
+          ),
+        )
+      }
+    }
+  }
+
+  const combined = [...nativeRows, ...legacyRows, ...agentEventRows].sort(
+    sortByRecency,
+  )
 
   // Breakdowns are computed over the full matching set (pre-limit), matching
   // the wallet-action / action-request history projections.
   const byTransactionKind: Record<DashboardTransactionKind, number> = {
     legacy_paid_call: 0,
     native_wallet_action: 0,
+    agent_event: 0,
   }
   const byStatus: Record<string, number> = {}
   const byActionRequestKind: Partial<Record<ActionRequestKind, number>> = {}
@@ -300,7 +413,7 @@ export async function buildDashboardTransactions(input: {
     if (row.transactionKind === 'native_wallet_action') {
       byActionRequestKind[row.actionRequestKind] =
         (byActionRequestKind[row.actionRequestKind] ?? 0) + 1
-    } else {
+    } else if (row.transactionKind === 'legacy_paid_call') {
       const mode = row.legacy.settlementMode ?? 'unknown'
       byLegacySettlementMode[mode] = (byLegacySettlementMode[mode] ?? 0) + 1
     }

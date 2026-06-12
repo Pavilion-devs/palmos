@@ -9,7 +9,12 @@ import {
   type ApiKeyResult,
   type WalletInfo,
 } from '@open-wallet-standard/core'
-import { Connection, PublicKey, type Transaction } from '@solana/web3.js'
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+} from '@solana/web3.js'
 import { mkdir } from 'fs/promises'
 import { execFile as execFileCallback } from 'child_process'
 import { join, resolve } from 'path'
@@ -315,6 +320,78 @@ export class OwsClient {
       parsedBody: {
         signature: transactionSignature,
       },
+      signature: transactionSignature,
+    }
+  }
+
+  // Build, OWS-sign, and broadcast a NATIVE SOL transfer on the configured
+  // Solana cluster (devnet/mainnet/local via PUSD_SOLANA_NETWORK / rpcUrl). This
+  // is the real settlement backend for approved native asset.transfer actions —
+  // it is not network-specific, so it works on mainnet exactly as on devnet.
+  async paySolanaTransfer(input: {
+    wallet: string
+    destination: string
+    lamports: number
+    rpcUrl?: string
+  }): Promise<OwsSolanaPaymentResult> {
+    await this.ensureHome()
+    const rpcUrl = input.rpcUrl?.trim() || readSolanaRpcUrlFromEnv()
+    const wallet = this.getWallet(input.wallet)
+    const solanaAddress = readSolanaAddress(wallet)
+    if (!solanaAddress) {
+      throw new Error(`OWS wallet ${input.wallet} has no Solana account.`)
+    }
+    if (!Number.isFinite(input.lamports) || input.lamports <= 0) {
+      throw new Error(
+        `Invalid lamports amount for OWS Solana transfer: ${input.lamports}.`,
+      )
+    }
+
+    const connection = new Connection(rpcUrl, 'confirmed')
+    const fromPubkey = new PublicKey(solanaAddress)
+    const toPubkey = new PublicKey(input.destination)
+    const { blockhash, lastValidBlockHeight } =
+      await connection.getLatestBlockhash('confirmed')
+    const transaction = new Transaction({
+      feePayer: fromPubkey,
+      blockhash,
+      lastValidBlockHeight,
+    })
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey,
+        toPubkey,
+        lamports: Math.round(input.lamports),
+      }),
+    )
+
+    const signed = signTransaction(
+      input.wallet,
+      'solana',
+      transactionToUnsignedHex(transaction),
+      this.config.passphrase,
+      0,
+      this.config.vaultPath,
+    )
+    const signatureHex = signed.signature.startsWith('0x')
+      ? signed.signature.slice(2)
+      : signed.signature
+    transaction.addSignature(fromPubkey, Buffer.from(signatureHex, 'hex'))
+    if (!transaction.verifySignatures()) {
+      throw new Error('OWS returned an invalid Solana transaction signature.')
+    }
+
+    const transactionSignature = await connection.sendRawTransaction(
+      transaction.serialize(),
+    )
+    await connection.confirmTransaction(
+      { signature: transactionSignature, blockhash, lastValidBlockHeight },
+      'confirmed',
+    )
+
+    return {
+      stdout: JSON.stringify({ signature: transactionSignature }),
+      parsedBody: { signature: transactionSignature },
       signature: transactionSignature,
     }
   }

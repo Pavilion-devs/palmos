@@ -8,6 +8,8 @@ import {
 import {
   PUSD_SYMBOL,
   SOLANA_MAINNET_CHAIN_ID,
+  readPusdNetworkFromEnv,
+  type SolanaCluster,
 } from '../integrations/pusd/constants.js'
 import type { PalmosServiceCatalog } from '../integrations/pusd/serviceCatalog.js'
 import type { AgentPolicyTemplateInput, AgentVendorRule } from '../policies/compileAgentPolicy.js'
@@ -36,6 +38,9 @@ export type CreateAgentFromOnboardingInput = {
   organizationId: string
   treasuryId?: string
   servicePayToAddress: string
+  // Solana cluster the agent's wallet + policy target. Defaults from
+  // PUSD_SOLANA_NETWORK so a devnet proof doesn't fabricate mainnet/PUSD rails.
+  solanaNetwork?: SolanaCluster
 }
 
 export type CreateAgentFromOnboardingDependencies = {
@@ -211,13 +216,21 @@ export async function createAgentFromOnboarding(
     registeredServices: deps.registeredServices,
     servicePayToAddress: input.servicePayToAddress,
   })
+  // Target cluster drives the agent's rails. On mainnet we keep PUSD; on
+  // devnet/local we expose SOL + USDC (PUSD has no devnet mint) so the rails
+  // match the real fundable wallet instead of lying about mainnet/PUSD.
+  const solanaNetwork = input.solanaNetwork ?? readPusdNetworkFromEnv()
+  const allowedAssets: string[] =
+    solanaNetwork === SOLANA_MAINNET_CHAIN_ID
+      ? [PUSD_SYMBOL]
+      : ['SOL', 'USDC']
   const policyConfig: AgentPolicyTemplateInput = {
     agentId,
     organizationId: input.organizationId,
     environment: 'production',
     walletType: readWalletMode(input.walletMode),
-    allowedChains: [SOLANA_MAINNET_CHAIN_ID],
-    allowedAssets: [PUSD_SYMBOL],
+    allowedChains: [solanaNetwork],
+    allowedAssets,
     allowedSignerClasses: ['multisig'],
     allowedVendors,
     autoApproveUnder,

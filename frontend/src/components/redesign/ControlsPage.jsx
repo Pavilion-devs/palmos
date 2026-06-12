@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Bot, Pencil } from 'lucide-react'
 import { Shell } from './Shell'
 import { useAgents } from '../../hooks/useAgents'
 import { selectControlRows } from './data/selectors'
+import { PolicyEditorDrawer } from './controls/PolicyEditorDrawer'
 
 function Chip({ children, tone = 'muted' }) {
   const styles =
@@ -12,9 +14,10 @@ function Chip({ children, tone = 'muted' }) {
 }
 
 export function ControlsPage() {
-  const { status, agents } = useAgents()
+  const { status, agents, refresh } = useAgents()
   const rows = selectControlRows(agents)
   const allowedRails = [...new Set(rows.flatMap((r) => r.allowed))]
+  const [editingAgent, setEditingAgent] = useState(null)
 
   return (
     <Shell title="Controls">
@@ -53,7 +56,7 @@ export function ControlsPage() {
           <span className="sr-only">Edit</span>
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {status === 'loading' && (
             <div className="px-2 py-10 text-center text-sm text-muted-foreground">Loading controls…</div>
           )}
@@ -93,6 +96,12 @@ export function ControlsPage() {
               <div className="flex lg:justify-end">
                 <button
                   type="button"
+                  onClick={() =>
+                    setEditingAgent(
+                      agents.find((a) => a?.agent?.agentId === w.agentId)
+                        ?.agent ?? null,
+                    )
+                  }
                   className="inline-flex items-center gap-1.5 rounded-full bg-panel-2 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-panel-2/70"
                 >
                   <Pencil className="size-3.5" strokeWidth={2} aria-hidden="true" />
@@ -103,6 +112,14 @@ export function ControlsPage() {
           ))}
         </div>
       </section>
+
+      {editingAgent ? (
+        <PolicyEditorDrawer
+          agent={editingAgent}
+          onClose={() => setEditingAgent(null)}
+          onSaved={() => refresh?.()}
+        />
+      ) : null}
     </Shell>
   )
 }

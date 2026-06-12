@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Lock, Gauge, Boxes, Coins, Bot } from 'lucide-react'
 import { useAgents } from '../../hooks/useAgents'
 import { selectWalletRows } from './data/selectors'
@@ -29,6 +30,7 @@ function RailChip({ rail }) {
 }
 
 export function WalletsTable() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('All Wallets')
   const { status, agents, error } = useAgents()
   const rows = selectWalletRows(agents)
@@ -72,7 +74,7 @@ export function WalletsTable() {
       </div>
 
       {/* Rows */}
-      <div className="flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {status === 'loading' && (
           <div className="px-2 py-10 text-center text-sm text-muted-foreground">
             Loading wallets…
@@ -134,6 +136,7 @@ export function WalletsTable() {
             <div className="flex lg:justify-end">
               <button
                 type="button"
+                onClick={() => navigate(`/dashboard/wallets/${w.agentId}`)}
                 className="inline-flex items-center rounded-full bg-panel-2 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-panel-2/70"
               >
                 View

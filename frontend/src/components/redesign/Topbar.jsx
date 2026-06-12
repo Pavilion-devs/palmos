@@ -1,5 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Bell, LogOut, Search } from 'lucide-react'
 import { useOperatorSession } from '../../hooks/useOperatorSession'
+import useDashboardApprovals from '../../hooks/useDashboardApprovals'
+import { selectPendingApprovals } from './data/selectors'
+import { SearchOverlay } from './topbar/SearchOverlay'
+import { NotificationsPanel } from './topbar/NotificationsPanel'
 
 function formatAddress(address) {
   return address && address.length > 8
@@ -9,6 +14,21 @@ function formatAddress(address) {
 
 export function Topbar({ title }) {
   const { operator, signOut } = useOperatorSession()
+  const { approvals } = useDashboardApprovals()
+  const pending = selectPendingApprovals(approvals)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const label = operator?.walletAddress
     ? formatAddress(operator.walletAddress)
@@ -34,18 +54,30 @@ export function Topbar({ title }) {
         <button
           type="button"
           aria-label="Search"
+          onClick={() => setSearchOpen(true)}
           className="flex size-11 items-center justify-center rounded-full bg-panel-2 text-foreground transition-colors hover:bg-panel-2/70"
         >
           <Search className="size-5" strokeWidth={2} aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex size-11 items-center justify-center rounded-full bg-panel-2 text-foreground transition-colors hover:bg-panel-2/70"
-        >
-          <Bell className="size-5" strokeWidth={2} aria-hidden="true" />
-          <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-lime ring-2 ring-panel-2" />
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Notifications"
+            onClick={() => setNotifOpen((open) => !open)}
+            className="relative flex size-11 items-center justify-center rounded-full bg-panel-2 text-foreground transition-colors hover:bg-panel-2/70"
+          >
+            <Bell className="size-5" strokeWidth={2} aria-hidden="true" />
+            {pending.length > 0 && (
+              <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-lime ring-2 ring-panel-2" />
+            )}
+          </button>
+          {notifOpen && (
+            <NotificationsPanel
+              pending={pending}
+              onClose={() => setNotifOpen(false)}
+            />
+          )}
+        </div>
         <button
           type="button"
           onClick={() => void signOut()}
@@ -55,6 +87,8 @@ export function Topbar({ title }) {
           <LogOut className="size-5" strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+
+      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
     </header>
   )
 }

@@ -158,6 +158,8 @@ const TX_STATUS_TONE = {
   executed: 'executed',
   confirmed: 'executed',
   settled: 'executed',
+  connected: 'executed',
+  detected: 'executed',
   pending: 'pending',
   approval_pending: 'pending',
   waiting_for_execution: 'pending',
@@ -168,7 +170,9 @@ const TX_STATUS_TONE = {
 }
 
 function txType(tx) {
-  const kind = `${tx?.actionRequestKind ?? ''} ${tx?.transactionKind ?? ''}`.toLowerCase()
+  const kind = `${tx?.actionRequestKind ?? ''} ${tx?.transactionKind ?? ''} ${tx?.eventType ?? ''}`.toLowerCase()
+  if (kind.includes('connected')) return 'Agent'
+  if (kind.includes('deposit')) return 'Deposit'
   if (kind.includes('transfer')) return 'Transfer'
   if (kind.includes('swap')) return 'Swap'
   if (kind.includes('service') || kind.includes('paid_call') || kind.includes('pay')) return 'Payment'
@@ -177,9 +181,13 @@ function txType(tx) {
 }
 
 function txAmount(tx) {
-  const amount = tx?.value ?? tx?.amount
+  // tx.value is an object { assetSymbol, amount, ... } for wallet actions /
+  // transfers / paid calls; fall back to a scalar tx.amount otherwise.
+  const v = tx?.value
+  const isObj = v && typeof v === 'object'
+  const amount = isObj ? v.amount : (v ?? tx?.amount)
   if (amount == null || amount === '') return '—'
-  const symbol = tx?.assetSymbol ?? tx?.asset ?? ''
+  const symbol = (isObj ? v.assetSymbol : undefined) ?? tx?.assetSymbol ?? tx?.asset ?? ''
   return `${formatTokenAmount(amount)} ${symbol}`.trim()
 }
 

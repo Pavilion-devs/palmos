@@ -21,7 +21,7 @@ const INITIAL_STATE = {
  * while gracefully falling back to snapshot-derived events when the endpoint is
  * unavailable (older backend, access denied, transient failure).
  */
-export default function useDashboardTransactions(limit = 100) {
+export default function useDashboardTransactions(limit = 100, agentId) {
   const [state, setState] = useState(INITIAL_STATE)
 
   useEffect(() => {
@@ -35,8 +35,11 @@ export default function useDashboardTransactions(limit = 100) {
       inFlight = true
 
       try {
+        const agentQuery = agentId
+          ? `&agentId=${encodeURIComponent(agentId)}`
+          : ''
         const response = await fetchDashboardApi(
-          `/api/dashboard/transactions?limit=${encodeURIComponent(limit)}`,
+          `/api/dashboard/transactions?limit=${encodeURIComponent(limit)}${agentQuery}`,
           { cache: 'no-store' },
         )
         const payload = await response.json().catch(() => null)
@@ -84,7 +87,7 @@ export default function useDashboardTransactions(limit = 100) {
       cancelled = true
       clearInterval(intervalId)
     }
-  }, [limit])
+  }, [limit, agentId])
 
   return state
 }

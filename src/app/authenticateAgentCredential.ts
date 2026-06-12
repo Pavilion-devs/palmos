@@ -67,8 +67,21 @@ export async function authenticateAgentCredential(
     return undefined
   }
 
+  // Stamp the agent's heartbeat on every authenticated SDK call, and record the
+  // first-connect moment once. This is the real "agent came online" signal the
+  // dashboard reads (firstConnectedAt) — distinct from createdAt. The write is
+  // best-effort + optimistic so a concurrent update never clobbers other fields
+  // and a lost race just defers the heartbeat to the next call.
+  const connectedAgent: AgentRecord = {
+    ...agent,
+    lastCheckInAt: at,
+    firstConnectedAt: agent.firstConnectedAt ?? at,
+    updatedAt: at,
+  }
+  await deps.agentRegistry.putIfUpdatedAt(connectedAgent, agent.updatedAt)
+
   return {
-    agent,
+    agent: connectedAgent,
     credential,
   }
 }
