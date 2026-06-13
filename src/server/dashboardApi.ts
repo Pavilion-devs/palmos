@@ -1,6 +1,8 @@
 import express from 'express'
 import { join } from 'path'
 import {
+  buildDashboardAgentRoster,
+  buildDashboardAgentWalletList,
   buildShowcaseSnapshot,
   createDefaultPalmosServiceCatalog,
   loadAgentSpendWorkspace,
@@ -11,6 +13,7 @@ import {
   runDeadMansSwitchSweep,
   startLocalPusdDemoServer,
   XmtpNotifier,
+  CachedPortfolioReader,
   SolanaPortfolioReader,
   type ShowcaseSnapshot,
 } from '../index.js'
@@ -45,7 +48,11 @@ import { registerServiceRoutes } from './dashboard/routes/serviceRoutes.js'
 import { registerSystemRoutes } from './dashboard/routes/systemRoutes.js'
 import { registerTransactionRoutes } from './dashboard/routes/transactionRoutes.js'
 import { registerWalletActionRoutes } from './dashboard/routes/walletActionRoutes.js'
-import { sanitizeSnapshot } from './dashboard/sanitizers.js'
+import {
+  sanitizeAgentRoster,
+  sanitizeAgentWalletList,
+  sanitizeSnapshot,
+} from './dashboard/sanitizers.js'
 
 async function resolveDemoPayToAddress(
   baseDir: string,
@@ -89,7 +96,18 @@ async function main() {
   const workspace = loadAgentSpendWorkspace({ baseDir, env })
   const palmosClient = PalmosClient.fromEnv(env)
   const owsClient = workspace.owsClient ?? OwsClient.fromEnv(baseDir, env)
-  const portfolioReader = SolanaPortfolioReader.fromEnv(env)
+  const livePortfolioReader = SolanaPortfolioReader.fromEnv(env)
+  const portfolioCacheTtlMs = Number(
+    env.PALMOS_DASHBOARD_PORTFOLIO_CACHE_TTL_MS,
+  )
+  const portfolioReader = livePortfolioReader
+    ? new CachedPortfolioReader(livePortfolioReader, {
+        ttlMs:
+          Number.isFinite(portfolioCacheTtlMs) && portfolioCacheTtlMs >= 0
+            ? portfolioCacheTtlMs
+            : undefined,
+      })
+    : undefined
   const pusdReadinessReports =
     workspace.postgresPool != null
       ? new PostgresPusdReadinessReportRegistry(workspace.postgresPool)
@@ -182,6 +200,29 @@ async function main() {
     )
   }
 
+  async function buildDashboardRoster() {
+    return sanitizeAgentRoster(
+      await buildDashboardAgentRoster({
+        baseDir,
+        agentRegistry: workspace.agentRegistry,
+        actionRequestRegistry: workspace.actionRequestRegistry,
+        paidCallRegistry: workspace.paidCallRegistry,
+        xmtpAlertRegistry: workspace.xmtpAlertRegistry,
+      }),
+    )
+  }
+
+  async function buildDashboardWallets() {
+    return sanitizeAgentWalletList(
+      await buildDashboardAgentWalletList({
+        baseDir,
+        portfolioReader,
+        agentRegistry: workspace.agentRegistry,
+        walletRegistry: workspace.walletRegistry,
+      }),
+    )
+  }
+
   const app = express()
   const context: DashboardRouteContext = {
     env,
@@ -199,6 +240,8 @@ async function main() {
     localServer,
     localDemoBaseUrl,
     buildPalmosServiceCatalog,
+    buildDashboardAgentRoster: buildDashboardRoster,
+    buildDashboardAgentWalletList: buildDashboardWallets,
     buildDashboardSnapshot,
     runDashboardDeadMansSwitchSweep,
   }
@@ -247,7 +290,7 @@ async function main() {
   // PALMOS_PORTFOLIO_SNAPSHOT_INTERVAL_MS; 0 disables).
   const snapshotScheduler = startPortfolioSnapshotScheduler({
     workspace,
-    portfolioReader,
+    portfolioReader: livePortfolioReader,
     env,
     log: (message) => console.log(message),
   })

@@ -1,4 +1,6 @@
 import type {
+  DashboardAgentRoster,
+  DashboardAgentWalletList,
   PusdResearchWorkerResult,
   RegisteredPalmosServiceRecord,
   ShowcaseSnapshot,
@@ -46,6 +48,30 @@ export function sanitizeSnapshot(snapshot: ShowcaseSnapshot): ShowcaseSnapshot {
         ...agentSnapshot.audit,
         agent: stripAgentSecrets(agentSnapshot.audit.agent),
       },
+    })),
+  }
+}
+
+export function sanitizeAgentRoster(
+  snapshot: DashboardAgentRoster,
+): DashboardAgentRoster {
+  return {
+    ...snapshot,
+    agents: snapshot.agents.map((entry) => ({
+      ...entry,
+      agent: stripAgentSecrets(entry.agent),
+    })),
+  }
+}
+
+export function sanitizeAgentWalletList(
+  snapshot: DashboardAgentWalletList,
+): DashboardAgentWalletList {
+  return {
+    ...snapshot,
+    agents: snapshot.agents.map((entry) => ({
+      ...entry,
+      agent: stripAgentSecrets(entry.agent),
     })),
   }
 }

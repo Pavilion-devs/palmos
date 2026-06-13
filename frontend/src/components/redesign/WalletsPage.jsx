@@ -1,13 +1,13 @@
 import { Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useAgents } from '../../hooks/useAgents'
+import { useAgentWallets } from '../../hooks/useAgentWallets'
 import { selectWalletRows } from './data/selectors'
 import { Shell } from './Shell'
 import { WalletsTable } from './WalletsTable'
 
 export function WalletsPage() {
   const navigate = useNavigate()
-  const { agents } = useAgents()
+  const { status, agents, error } = useAgentWallets()
   const rows = selectWalletRows(agents)
   const active = rows.filter((w) => w.tone === 'active').length
   const pending = rows.filter((w) => w.tone === 'pending').length
@@ -51,7 +51,7 @@ export function WalletsPage() {
         </button>
       </div>
 
-      <WalletsTable />
+      <WalletsTable status={status} rows={rows} error={error} />
     </Shell>
   )
 }

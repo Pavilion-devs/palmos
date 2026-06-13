@@ -9,6 +9,10 @@ import type {
   PaidCallSettlementMode,
   PaidCallStatus,
 } from '../../store/PaidCallRegistry.js'
+import type {
+  PortfolioReader,
+  WalletPortfolioTransaction,
+} from '../../integrations/portfolio/types.js'
 import type { AgentSpendWorkspace } from '../../workspace/loadWorkspace.js'
 import {
   buildDashboardWalletActionHistory,
@@ -111,9 +115,8 @@ export type DashboardNativeWalletActionTransaction = DashboardTransactionBase & 
 /**
  * Timeline events that are NOT governed wallet actions or paid calls, but still
  * belong in the activity feed: an agent first coming online, an inbound deposit
- * detected on-chain. These are derived (read-time) from existing state — the
- * agent record's `firstConnectedAt` and the portfolio snapshot history — so they
- * never enter the ActionRequest lifecycle.
+ * detected on-chain. These are derived at read time from stable agent fields
+ * and live wallet reads, so they never enter the ActionRequest lifecycle.
  */
 export type DashboardAgentEventTransaction = DashboardTransactionBase & {
   transactionKind: 'agent_event'
@@ -273,43 +276,68 @@ function projectAgentConnectedTransaction(
   }
 }
 
-function formatFundingUsd(value: number): string {
-  return value >= 1000
-    ? `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
-    : `$${value.toFixed(2)}`
+function formatTokenAmount(quantity: number): string {
+  return quantity.toLocaleString('en-US', { maximumFractionDigits: 6 })
 }
 
-// "Funding detected" timeline row, derived from the agent's first-funded stamp
-// (set once at snapshot-capture time). An inbound deposit is an external on-chain
-// credit, not a governed action, so this surfaces funding without inventing a
-// fake ActionRequest.
-function projectFundingDetectedTransaction(
-  agent: AgentRecord,
-  at: string,
-  valueUsd: number | undefined,
-): DashboardAgentEventTransaction {
-  const amount =
-    valueUsd != null && Number.isFinite(valueUsd)
-      ? formatFundingUsd(valueUsd)
-      : null
+// "Funding detected" timeline row for a single inbound credit of one asset.
+// An inbound deposit is an external on-chain credit, not a governed action, so
+// this surfaces funding without inventing a fake ActionRequest.
+function projectDepositTransaction(input: {
+  agent: AgentRecord
+  transactionId: string
+  at: string
+  symbol: string
+  amount: number
+}): DashboardAgentEventTransaction {
   return {
     transactionKind: 'agent_event',
-    id: `deposit:${agent.agentId}:funding`,
-    agentId: agent.agentId,
-    walletId: agent.walletId,
+    id: `deposit:${input.agent.agentId}:${input.transactionId}`,
+    agentId: input.agent.agentId,
+    walletId: input.agent.walletId,
     status: 'detected',
     title: 'Funding detected',
-    summary: amount
-      ? `${agent.displayName} was funded — ${amount} received on-chain.`
-      : `${agent.displayName} was funded — deposit detected on-chain.`,
-    createdAt: at,
-    updatedAt: at,
+    summary: `${input.agent.displayName} received ${formatTokenAmount(input.amount)} ${input.symbol} on-chain.`,
+    createdAt: input.at,
+    updatedAt: input.at,
     eventType: 'deposit.detected',
   }
 }
 
+export function deriveLiveDepositEvents(
+  agent: AgentRecord,
+  transactions: WalletPortfolioTransaction[],
+): DashboardAgentEventTransaction[] {
+  return transactions
+    .filter(
+      (transaction) =>
+        transaction.operationType === 'deposit' &&
+        transaction.direction === 'in' &&
+        typeof transaction.amount === 'number' &&
+        Number.isFinite(transaction.amount) &&
+        transaction.amount > 0 &&
+        typeof transaction.assetSymbol === 'string' &&
+        transaction.assetSymbol.length > 0 &&
+        typeof transaction.minedAt === 'string' &&
+        transaction.minedAt.length > 0,
+    )
+    .map((transaction) =>
+      projectDepositTransaction({
+        agent,
+        transactionId:
+          transaction.id ??
+          transaction.hash ??
+          `${transaction.minedAt}:${transaction.assetSymbol}:${transaction.amount}`,
+        at: transaction.minedAt as string,
+        symbol: transaction.assetSymbol as string,
+        amount: transaction.amount as number,
+      }),
+    )
+}
+
 export async function buildDashboardTransactions(input: {
   workspace: AgentSpendWorkspace
+  portfolioReader?: PortfolioReader
   query?: DashboardTransactionsQuery
 }): Promise<DashboardTransactions> {
   const query = input.query ?? {}
@@ -380,13 +408,25 @@ export async function buildDashboardTransactions(input: {
           projectAgentConnectedTransaction(agent, agent.firstConnectedAt),
         )
       }
-      if (agent.firstFundedAt) {
+    }
+
+    // Inbound deposits come from the live portfolio reader's recent on-chain
+    // transaction classification, not from snapshot-diff heuristics. Snapshots
+    // remain historical/audit state only.
+    if (input.portfolioReader && input.workspace.walletRegistry) {
+      for (const agent of agents) {
+        const wallet = agent.walletId
+          ? await input.workspace.walletRegistry.get(agent.walletId)
+          : undefined
+        const address = wallet?.address?.trim() ?? ''
+        if (!address) {
+          continue
+        }
+        const snapshot = await input.portfolioReader.getWalletSnapshot(address, {
+          chainId: agent.policyConfig.allowedChains?.[0],
+        })
         agentEventRows.push(
-          projectFundingDetectedTransaction(
-            agent,
-            agent.firstFundedAt,
-            agent.firstFundedValueUsd,
-          ),
+          ...deriveLiveDepositEvents(agent, snapshot.transactions),
         )
       }
     }

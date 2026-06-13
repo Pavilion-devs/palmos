@@ -8,7 +8,6 @@ import {
   Zap,
   ArrowDownToLine,
 } from 'lucide-react'
-import useDashboardTransactions from '../../hooks/useDashboardTransactions'
 import { selectActivityRows } from './data/selectors'
 
 const statusStyles = {
@@ -27,8 +26,7 @@ const typeIcons = {
   Action: Activity,
 }
 
-export function RecentActivity() {
-  const { status, transactions } = useDashboardTransactions(5)
+export function RecentActivity({ status = 'idle', transactions = [] }) {
   const items = selectActivityRows(transactions).slice(0, 5)
 
   return (

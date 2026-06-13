@@ -181,6 +181,13 @@ export function registerAgentPolicyRoutes(
           autoApproveUnder: result.plan.nextAuto,
           sessionBudget: result.plan.nextBudget,
           heartbeatTimeoutSeconds: result.plan.nextHeartbeatTimeoutSeconds,
+          transferPolicyUpdated: Boolean(patch.transferPolicy),
+          allowedRecipientCount:
+            result.agent.policyConfig.transferPolicy?.allowedRecipients?.length,
+          allowedAssets:
+            result.agent.policyConfig.transferPolicy?.allowedAssets,
+          allowedChains:
+            result.agent.policyConfig.transferPolicy?.allowedChains,
           actionRequestId: result.actionRequest?.actionRequestId,
           actionRequestKind: result.actionRequest?.kind,
         },

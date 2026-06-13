@@ -3,20 +3,19 @@ import { fetchDashboardApi } from '../useDashboardStore'
 
 const POLL_INTERVAL_MS = 3000
 
-// Reads the cheap workspace agent roster (GET /api/dashboard/agents). Drives
-// the 0-agents onboarding gate, policy editing, and the "waiting for your
-// agent…" poll. Wallet balances live behind useAgentWallets().
-export function useAgents({ poll = false } = {}) {
+// Reads the live wallet snapshot list (GET /api/dashboard/agent-wallets). Use
+// this only on screens that actually need balances or holdings; the cheaper
+// roster hook is still the source for onboarding and control metadata.
+export function useAgentWallets({ poll = false } = {}) {
   const [state, setState] = useState({
     status: 'loading', // 'loading' | 'ready' | 'error'
     agents: [],
-    summary: null,
     error: '',
   })
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetchDashboardApi('/api/dashboard/agents', {
+      const response = await fetchDashboardApi('/api/dashboard/agent-wallets', {
         cache: 'no-store',
       })
       const payload = await response.json().catch(() => null)
@@ -24,23 +23,25 @@ export function useAgents({ poll = false } = {}) {
         setState({
           status: 'ready',
           agents: payload.agents ?? [],
-          summary: payload.summary ?? null,
           error: '',
         })
       } else {
         setState((previous) => ({
           status: 'error',
           agents: previous.agents,
-          summary: previous.summary,
-          error: payload?.error || `Unable to load agents (${response.status})`,
+          error:
+            payload?.error ||
+            `Unable to load agent wallets (${response.status})`,
         }))
       }
     } catch (error) {
       setState((previous) => ({
         status: 'error',
         agents: previous.agents,
-        summary: previous.summary,
-        error: error instanceof Error ? error.message : 'Unable to load agents',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to load agent wallets',
       }))
     }
   }, [])

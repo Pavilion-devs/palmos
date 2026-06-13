@@ -1,6 +1,4 @@
 import { ArrowUpRight, Shield, Wallet, ShieldCheck } from 'lucide-react'
-import { useAgents } from '../../hooks/useAgents'
-import useDashboardApprovals from '../../hooks/useDashboardApprovals'
 import {
   activeWalletCount,
   assetsUnderControl,
@@ -66,18 +64,15 @@ function StatCard({ variant, icon: Icon, label, value, sub }) {
   )
 }
 
-export function StatCards() {
-  const { status, agents } = useAgents()
-  const approvals = useDashboardApprovals()
-
+export function StatCards({ status, agents, approvals = [], approvalsSummary = null }) {
   const loading = status === 'loading'
   const walletCount = agents.length
   const active = activeWalletCount(agents)
   const auc = assetsUnderControl(agents)
-  const pendingCount = approvals.summary?.totalPending ?? approvals.approvals.length
+  const pendingCount = approvalsSummary?.totalPending ?? approvals.length
   // Use the pending approvals' real per-item amounts (asset-aware) rather than a
   // unit-less sum — so a single SOL approval reads "0.1 SOL awaiting", not "PUSD".
-  const pendingItems = selectPendingApprovals(approvals.approvals ?? [])
+  const pendingItems = selectPendingApprovals(approvals)
   const pendingSub =
     pendingItems.length === 1 && pendingItems[0].amount !== '—'
       ? `${pendingItems[0].amount} awaiting`

@@ -26,6 +26,7 @@ export type PortfolioSnapshotRecord = {
   chainId?: string
   capturedAt: string
   totalValueUsd: number
+  valuationComplete?: boolean
   positionsCount: number
   positions: PortfolioSnapshotPosition[]
   syncKind: PortfolioSyncStatus['kind']
@@ -40,6 +41,35 @@ export interface PortfolioSnapshotRegistry {
     options?: { limit?: number },
   ): Promise<PortfolioSnapshotRecord[]>
   latestForAgent(agentId: string): Promise<PortfolioSnapshotRecord | undefined>
+}
+
+const REQUIRED_VALUATION_SYMBOLS = new Set(['SOL', 'USDC', 'PUSD'])
+
+export function isReliablePortfolioSnapshotRecord(
+  record: PortfolioSnapshotRecord,
+): boolean {
+  if (record.syncKind !== 'synced') {
+    return false
+  }
+  if (record.valuationComplete === false) {
+    return false
+  }
+  if (record.valuationComplete === true) {
+    return true
+  }
+  return !record.positions.some((position) => {
+    if (
+      !position.symbol ||
+      !REQUIRED_VALUATION_SYMBOLS.has(position.symbol) ||
+      typeof position.quantity !== 'number' ||
+      position.quantity <= 0
+    ) {
+      return false
+    }
+    return (
+      typeof position.value !== 'number' || !Number.isFinite(position.value)
+    )
+  })
 }
 
 function resolveBaseDir(baseDir?: string): string {

@@ -2,6 +2,8 @@ import type {
   OwsClient,
   PalmosClient,
   PortfolioReader,
+  DashboardAgentRoster,
+  DashboardAgentWalletList,
   ShowcaseSnapshot,
   XmtpNotifier,
 } from '../../index.js'
@@ -36,6 +38,8 @@ export type DashboardRouteContext = {
   localServer?: LocalPusdServerHandle
   localDemoBaseUrl: string
   buildPalmosServiceCatalog(): Promise<PalmosServiceCatalog>
+  buildDashboardAgentRoster(): Promise<DashboardAgentRoster>
+  buildDashboardAgentWalletList(): Promise<DashboardAgentWalletList>
   buildDashboardSnapshot(): Promise<ShowcaseSnapshot>
   runDashboardDeadMansSwitchSweep(): Promise<void>
 }

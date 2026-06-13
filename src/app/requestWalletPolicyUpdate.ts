@@ -1,15 +1,28 @@
 import { parsePusdAmountToBaseUnits } from '../integrations/pusd/amount.js'
+import type { AgentTransferRecipientRule } from '../policies/compileAgentPolicy.js'
 import type {
   ActionRequestRecord,
   ActionRequestRegistry,
 } from '../store/ActionRequestRegistry.js'
 import type { AgentRecord, AgentRegistry } from '../store/AgentRegistry.js'
 
+// Operator-editable transfer rails. Each field, when present, REPLACES the
+// corresponding allowlist on the agent's `policyConfig.transferPolicy` override
+// (the dedicated layer resolved by `resolveAgentTransferPolicy`); when absent it
+// is left untouched. Limits (max/auto-approve) keep following the top-level
+// fields, so they are not duplicated here.
+export type WalletTransferPolicyPatch = {
+  allowedRecipients?: AgentTransferRecipientRule[]
+  allowedAssets?: string[]
+  allowedChains?: string[]
+}
+
 export type WalletPolicyUpdatePatch = {
   sessionBudget?: string
   maxPerTransaction?: string
   autoApproveUnder?: string
   heartbeatTimeoutSeconds?: number
+  transferPolicy?: WalletTransferPolicyPatch
 }
 
 export type RequestWalletPolicyUpdateDependencies = {
@@ -241,10 +254,29 @@ function validateWalletPolicyUpdatePlan(
   return { ok: true }
 }
 
+function mergeTransferPolicy(
+  current: AgentRecord['policyConfig']['transferPolicy'],
+  patch: WalletTransferPolicyPatch,
+): AgentRecord['policyConfig']['transferPolicy'] {
+  return {
+    ...current,
+    ...(patch.allowedRecipients !== undefined
+      ? { allowedRecipients: patch.allowedRecipients }
+      : {}),
+    ...(patch.allowedAssets !== undefined
+      ? { allowedAssets: patch.allowedAssets }
+      : {}),
+    ...(patch.allowedChains !== undefined
+      ? { allowedChains: patch.allowedChains }
+      : {}),
+  }
+}
+
 function applyWalletPolicyUpdate(input: {
   agent: AgentRecord
   at: string
   plan: WalletPolicyUpdatePlan
+  patch: WalletPolicyUpdatePatch
 }): AgentRecord {
   return {
     ...input.agent,
@@ -255,6 +287,14 @@ function applyWalletPolicyUpdate(input: {
       maxPerTransaction: input.plan.nextMax,
       autoApproveUnder: input.plan.nextAuto,
       heartbeatTimeoutSeconds: input.plan.nextHeartbeatTimeoutSeconds,
+      ...(input.patch.transferPolicy
+        ? {
+            transferPolicy: mergeTransferPolicy(
+              input.agent.policyConfig.transferPolicy,
+              input.patch.transferPolicy,
+            ),
+          }
+        : {}),
     },
   }
 }
@@ -349,6 +389,7 @@ export async function requestWalletPolicyUpdate(
     agent,
     at: nowIso(deps),
     plan,
+    patch: input.patch,
   })
   const saved = await deps.agentRegistry.putIfUpdatedAt(updatedAgent, agent.updatedAt)
   if (!saved) {

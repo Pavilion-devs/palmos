@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, Gauge, Boxes, Coins, Bot } from 'lucide-react'
-import { useAgents } from '../../hooks/useAgents'
-import { selectWalletRows } from './data/selectors'
 
 const statusStyles = {
   active: 'bg-lime/15 text-lime',
@@ -29,11 +27,9 @@ function RailChip({ rail }) {
   )
 }
 
-export function WalletsTable() {
+export function WalletsTable({ status, rows, error }) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('All Wallets')
-  const { status, agents, error } = useAgents()
-  const rows = selectWalletRows(agents)
 
   const filtered = rows.filter((w) => {
     if (activeTab === 'Flagged') return w.tone !== 'active'

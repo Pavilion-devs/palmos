@@ -16,7 +16,7 @@ import {
   ArrowDownToLine,
 } from 'lucide-react'
 import { Shell } from './Shell'
-import { useAgents } from '../../hooks/useAgents'
+import { useAgentWallets } from '../../hooks/useAgentWallets'
 import useDashboardTransactions from '../../hooks/useDashboardTransactions'
 import { PolicyEditorDrawer } from './controls/PolicyEditorDrawer'
 import {
@@ -71,7 +71,7 @@ function CopyButton({ value }) {
 
 export function WalletDetailPage() {
   const { agentId } = useParams()
-  const { status, agents, refresh } = useAgents()
+  const { status, agents, error, refresh } = useAgentWallets()
   const [editing, setEditing] = useState(false)
 
   const snap = agents.find((a) => a?.agent?.agentId === agentId)
@@ -85,6 +85,16 @@ export function WalletDetailPage() {
       <Shell title="Wallet">
         <div className="rounded-3xl bg-panel p-10 text-center text-sm text-muted-foreground">
           Loading wallet…
+        </div>
+      </Shell>
+    )
+  }
+
+  if (status === 'error' && !snap) {
+    return (
+      <Shell title="Wallet">
+        <div className="rounded-3xl bg-panel p-10 text-center text-sm text-blocked">
+          {error || 'Unable to load wallet.'}
         </div>
       </Shell>
     )

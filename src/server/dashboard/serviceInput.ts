@@ -1,4 +1,6 @@
 import { PublicKey } from '@solana/web3.js'
+import type { WalletTransferPolicyPatch } from '../../app/requestWalletPolicyUpdate.js'
+import type { AgentTransferRecipientRule } from '../../policies/compileAgentPolicy.js'
 import {
   formatPusdBaseUnits,
   parsePusdAmountToBaseUnits,
@@ -31,11 +33,106 @@ function readPositiveAmount(value: unknown, fallback: string): string {
   return parsed ?? fallback
 }
 
+function isValidSolanaAddress(value: string): boolean {
+  try {
+    return new PublicKey(value).toBase58() === value
+  } catch {
+    return false
+  }
+}
+
+function readNormalizedStringList(
+  value: unknown,
+  normalize: (item: string) => string,
+): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of value) {
+    const normalized = normalize((readMaybeString(item) ?? '').trim())
+    if (!normalized || seen.has(normalized)) {
+      continue
+    }
+    seen.add(normalized)
+    out.push(normalized)
+  }
+  return out
+}
+
+function readTransferRecipientList(
+  value: unknown,
+): AgentTransferRecipientRule[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+  const seen = new Set<string>()
+  const out: AgentTransferRecipientRule[] = []
+  for (const item of value) {
+    const record = readRecord(item)
+    const destinationAddress = readMaybeString(record.destinationAddress)?.trim()
+    const chainId = readMaybeString(record.chainId)?.trim()
+    if (!destinationAddress || !chainId) {
+      continue
+    }
+    // Solana destinations must be real base58 pubkeys — reject typos rather than
+    // silently allowlisting an unspendable address.
+    if (chainId.includes('solana') && !isValidSolanaAddress(destinationAddress)) {
+      continue
+    }
+    const dedupeKey = `${chainId}:${destinationAddress}`
+    if (seen.has(dedupeKey)) {
+      continue
+    }
+    seen.add(dedupeKey)
+    const label = readMaybeString(record.label)?.trim() || undefined
+    const counterpartyId =
+      readMaybeString(record.counterpartyId)?.trim() ||
+      `addr_${destinationAddress.slice(0, 8).toLowerCase()}`
+    out.push({ counterpartyId, label, destinationAddress, chainId })
+  }
+  return out
+}
+
+// Parse the operator-editable transfer rails. A field is only present in the
+// returned patch when the caller actually sent that array, so an omitted field
+// leaves the existing allowlist untouched (vs. an empty array, which is an
+// intentional deny-all lockdown).
+export function readTransferPolicyPatch(
+  value: unknown,
+): WalletTransferPolicyPatch | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  const candidate = readRecord(value)
+  const patch: WalletTransferPolicyPatch = {}
+  const allowedRecipients = readTransferRecipientList(candidate.allowedRecipients)
+  if (allowedRecipients !== undefined) {
+    patch.allowedRecipients = allowedRecipients
+  }
+  const allowedAssets = readNormalizedStringList(candidate.allowedAssets, (item) =>
+    item.toUpperCase(),
+  )
+  if (allowedAssets !== undefined) {
+    patch.allowedAssets = allowedAssets
+  }
+  const allowedChains = readNormalizedStringList(
+    candidate.allowedChains,
+    (item) => item,
+  )
+  if (allowedChains !== undefined) {
+    patch.allowedChains = allowedChains
+  }
+  return Object.keys(patch).length > 0 ? patch : undefined
+}
+
 export function readAgentPolicyPatch(value: unknown): {
   sessionBudget?: string
   maxPerTransaction?: string
   autoApproveUnder?: string
   heartbeatTimeoutSeconds?: number
+  transferPolicy?: WalletTransferPolicyPatch
 } {
   const candidate = readRecord(value)
   const heartbeat = Number(candidate.heartbeatTimeoutSeconds)
@@ -50,6 +147,7 @@ export function readAgentPolicyPatch(value: unknown): {
       Number.isFinite(heartbeat) && heartbeat > 0
         ? Math.round(heartbeat)
         : undefined,
+    transferPolicy: readTransferPolicyPatch(candidate.transferPolicy),
   }
 }
 

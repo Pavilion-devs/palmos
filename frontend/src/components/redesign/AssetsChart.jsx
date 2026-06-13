@@ -7,8 +7,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { useAgents } from '../../hooks/useAgents'
-import { useAssetsHistory } from '../../hooks/useAssetsHistory'
 import { assetsUnderControl, formatUsd } from './data/selectors'
 
 function compactUsd(n) {
@@ -27,12 +25,7 @@ function ChartTooltip({ active, payload }) {
   )
 }
 
-// Real cross-agent assets-under-control: current total from the agent snapshot,
-// the series from the portfolio-snapshot history aggregate. Honest empty chart
-// until snapshots have been captured.
-export function AssetsChart() {
-  const { agents } = useAgents()
-  const { status, series } = useAssetsHistory()
+export function AssetsChart({ agents = [], historyStatus = 'loading', series = [] }) {
   const auc = assetsUnderControl(agents)
 
   const data = series.map((point) => ({
@@ -105,7 +98,7 @@ export function AssetsChart() {
         ) : (
           <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-hairline">
             <p className="max-w-sm px-6 text-center text-sm text-muted-foreground">
-              {status === 'loading'
+              {historyStatus === 'loading'
                 ? 'Loading…'
                 : agents.length === 0
                   ? 'Connect an agent to start tracking assets under control over time.'

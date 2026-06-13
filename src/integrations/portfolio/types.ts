@@ -27,6 +27,8 @@ export type WalletPortfolioTransaction = {
   operationType?: string
   minedAt?: string
   direction?: string
+  assetSymbol?: string
+  amount?: number
   value?: number
 }
 
@@ -34,6 +36,7 @@ export type WalletPortfolioSnapshot = {
   address: string
   positions: WalletPortfolioPosition[]
   transactions: WalletPortfolioTransaction[]
+  valuationComplete?: boolean
   sync: PortfolioSyncStatus
 }
 

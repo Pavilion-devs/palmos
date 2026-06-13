@@ -6,6 +6,7 @@ import {
 } from '../apiErrors.js'
 import type { DashboardRouteContext } from '../context.js'
 import { readMaybeString } from '../shared.js'
+import { isReliablePortfolioSnapshotRecord } from '../../../store/PortfolioSnapshotRegistry.js'
 
 const DEFAULT_PORTFOLIO_HISTORY_LIMIT = 20
 
@@ -120,6 +121,13 @@ export function registerPortfolioHistoryRoutes(
           { limit },
         )
         for (const snapshot of snapshots) {
+          // Historical AUC should only consume snapshots that are both synced and
+          // valuation-complete. A partial live read (e.g. SOL balance present
+          // but price missing) is not a real portfolio drop and must not punch
+          // false holes into the chart.
+          if (!isReliablePortfolioSnapshotRecord(snapshot)) {
+            continue
+          }
           const value = Number.isFinite(snapshot.totalValueUsd)
             ? snapshot.totalValueUsd
             : 0

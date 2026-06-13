@@ -15,6 +15,11 @@ import {
   SystemProgram,
   Transaction,
 } from '@solana/web3.js'
+import {
+  createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddress,
+} from '@solana/spl-token'
 import { mkdir } from 'fs/promises'
 import { execFile as execFileCallback } from 'child_process'
 import { join, resolve } from 'path'
@@ -377,6 +382,121 @@ export class OwsClient {
       ? signed.signature.slice(2)
       : signed.signature
     transaction.addSignature(fromPubkey, Buffer.from(signatureHex, 'hex'))
+    if (!transaction.verifySignatures()) {
+      throw new Error('OWS returned an invalid Solana transaction signature.')
+    }
+
+    const transactionSignature = await connection.sendRawTransaction(
+      transaction.serialize(),
+    )
+    await connection.confirmTransaction(
+      { signature: transactionSignature, blockhash, lastValidBlockHeight },
+      'confirmed',
+    )
+
+    return {
+      stdout: JSON.stringify({ signature: transactionSignature }),
+      parsedBody: { signature: transactionSignature },
+      signature: transactionSignature,
+    }
+  }
+
+  // Build, OWS-sign, and broadcast a real SPL token transfer (transfer-checked,
+  // creating the recipient's associated token account if needed) on the
+  // configured Solana cluster. The mint/decimals/token-program are resolved by
+  // the caller per asset (USDC = classic Token program, PUSD = Token-2022), so
+  // this is asset-agnostic. Network-agnostic — works on mainnet exactly as on
+  // devnet. `amount` is already in integer base units.
+  async paySplTransfer(input: {
+    wallet: string
+    destination: string
+    amount: bigint
+    mint: string
+    decimals: number
+    tokenProgramId: string
+    rpcUrl?: string
+  }): Promise<OwsSolanaPaymentResult> {
+    await this.ensureHome()
+    const rpcUrl = input.rpcUrl?.trim() || readSolanaRpcUrlFromEnv()
+    const wallet = this.getWallet(input.wallet)
+    const solanaAddress = readSolanaAddress(wallet)
+    if (!solanaAddress) {
+      throw new Error(`OWS wallet ${input.wallet} has no Solana account.`)
+    }
+    if (input.amount <= 0n) {
+      throw new Error(
+        `Invalid token amount for OWS SPL transfer: ${input.amount}.`,
+      )
+    }
+
+    const connection = new Connection(rpcUrl, 'confirmed')
+    const owner = new PublicKey(solanaAddress)
+    const mint = new PublicKey(input.mint)
+    const tokenProgramId = new PublicKey(input.tokenProgramId)
+    const recipientOwner = new PublicKey(input.destination)
+    const payerTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      owner,
+      false,
+      tokenProgramId,
+    )
+    const recipientTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      recipientOwner,
+      false,
+      tokenProgramId,
+    )
+
+    if (!(await connection.getAccountInfo(payerTokenAccount))) {
+      throw new Error(
+        `OWS wallet ${input.wallet} has no ${input.mint} token account to transfer from.`,
+      )
+    }
+
+    const { blockhash, lastValidBlockHeight } =
+      await connection.getLatestBlockhash('confirmed')
+    const transaction = new Transaction({
+      feePayer: owner,
+      blockhash,
+      lastValidBlockHeight,
+    })
+
+    if (!(await connection.getAccountInfo(recipientTokenAccount))) {
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          owner,
+          recipientTokenAccount,
+          recipientOwner,
+          mint,
+          tokenProgramId,
+        ),
+      )
+    }
+    transaction.add(
+      createTransferCheckedInstruction(
+        payerTokenAccount,
+        mint,
+        recipientTokenAccount,
+        owner,
+        input.amount,
+        input.decimals,
+        [],
+        tokenProgramId,
+      ),
+    )
+
+    const signed = signTransaction(
+      input.wallet,
+      'solana',
+      transactionToUnsignedHex(transaction),
+      this.config.passphrase,
+      0,
+      this.config.vaultPath,
+    )
+    const signatureHex = signed.signature.startsWith('0x')
+      ? signed.signature.slice(2)
+      : signed.signature
+    transaction.addSignature(owner, Buffer.from(signatureHex, 'hex'))
     if (!transaction.verifySignatures()) {
       throw new Error('OWS returned an invalid Solana transaction signature.')
     }

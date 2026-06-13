@@ -1259,6 +1259,7 @@ test('SDK tool helpers expose services, status, and policy checks', () => {
       'request_asset_transfer',
       'check_policy',
       'get_agent_status',
+      'get_wallet_context',
     ],
   )
   assert.equal(isSdkToolName('check_policy'), true)

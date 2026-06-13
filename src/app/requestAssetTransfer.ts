@@ -13,6 +13,10 @@ import type { ActionRequestRecord, ActionRequestRegistry, ActionRequestSource } 
 import type { AgentRecord, AgentRegistry } from '../store/AgentRegistry.js'
 import type { OwsClient } from '../integrations/ows/client.js'
 import { readSolanaRpcUrlFromEnv } from '../integrations/pusd/constants.js'
+import {
+  resolveSplAssetSettlement,
+  tokenAmountToBaseUnits,
+} from '../integrations/pusd/splAssets.js'
 
 export type RequestAssetTransferInput = {
   agentId: string
@@ -48,10 +52,11 @@ function solAmountToLamports(amount: string): number {
 }
 
 // Layer real OWS Solana settlement on top of the runtime-finalized transfer
-// record. Only native SOL for OWS-backed agents is settled today; everything
-// else (non-SOL assets, non-OWS agents, non-executed outcomes) passes through
-// unchanged. A failed broadcast flips the record to `failed` so we never report
-// a fake success.
+// record. Native SOL and known SPL stablecoins (USDC/PUSD) settle for real on
+// the configured cluster; everything else (unknown assets, non-OWS agents,
+// non-executed outcomes) passes through unchanged on the deterministic path. A
+// failed broadcast flips the record to `failed` so we never report a fake
+// success.
 async function settleAssetTransferViaOws(input: {
   deps: RequestAssetTransferDependencies
   agent: AgentRecord
@@ -74,29 +79,59 @@ async function settleAssetTransferViaOws(input: {
     return record
   }
 
+  const owsClient = deps.owsClient
   const assetSymbol = record.value?.assetSymbol
   const amount = record.value?.amount
   const destination = record.target.address
-  // Only native SOL settles for real right now; leave other assets to the
-  // existing (deterministic) path until SPL settlement is wired.
-  if (assetSymbol !== 'SOL' || !amount || !destination) {
+  if (!assetSymbol || !amount || !destination) {
     return record
   }
 
-  const walletName =
-    agent.owsWalletName ?? agent.owsWalletId ?? agent.agentId
+  const walletName = agent.owsWalletName ?? agent.owsWalletId ?? agent.agentId
   const rpcUrl = readSolanaRpcUrlFromEnv()
 
+  // Resolve the on-chain settlement for this asset. Native SOL and known SPL
+  // stablecoins settle for real; anything else leaves the record unchanged so
+  // it stays on the deterministic path (never a faked success).
+  let broadcast: (() => Promise<string | undefined>) | undefined
+  let settlementAsset = assetSymbol
+  if (assetSymbol === 'SOL') {
+    broadcast = async () =>
+      (
+        await owsClient.paySolanaTransfer({
+          wallet: walletName,
+          destination,
+          lamports: solAmountToLamports(amount),
+          rpcUrl,
+        })
+      ).signature
+  } else {
+    const splAsset = resolveSplAssetSettlement(assetSymbol)
+    if (splAsset) {
+      settlementAsset = splAsset.symbol
+      broadcast = async () =>
+        (
+          await owsClient.paySplTransfer({
+            wallet: walletName,
+            destination,
+            amount: tokenAmountToBaseUnits(amount, splAsset.decimals),
+            mint: splAsset.mint,
+            decimals: splAsset.decimals,
+            tokenProgramId: splAsset.tokenProgramId,
+            rpcUrl,
+          })
+        ).signature
+    }
+  }
+
+  if (!broadcast) {
+    return record
+  }
+
   try {
-    const result = await deps.owsClient.paySolanaTransfer({
-      wallet: walletName,
-      destination,
-      lamports: solAmountToLamports(amount),
-      rpcUrl,
-    })
-    const signature = result.signature
+    const signature = await broadcast()
     if (!signature) {
-      throw new Error('OWS Solana settlement returned no signature.')
+      throw new Error('OWS settlement returned no signature.')
     }
     return {
       ...record,
@@ -112,6 +147,7 @@ async function settleAssetTransferViaOws(input: {
       requestContext: {
         ...record.requestContext,
         settlementBackend: 'ows',
+        settlementAsset,
         settlementSignature: signature,
         settlementRpcUrl: rpcUrl,
       },

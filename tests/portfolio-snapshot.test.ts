@@ -7,6 +7,7 @@ import express from 'express'
 import {
   FilePortfolioSnapshotRegistry,
   InMemoryPortfolioSnapshotRegistry,
+  isReliablePortfolioSnapshotRecord,
   type PortfolioSnapshotRecord,
 } from '../src/store/PortfolioSnapshotRegistry.js'
 import { PostgresPortfolioSnapshotRegistry } from '../src/storage/postgres/registries.js'
@@ -31,6 +32,7 @@ function createSnapshot(
     chainId: 'solana-mainnet',
     capturedAt: '2026-06-09T10:00:00.000Z',
     totalValueUsd: 145.5,
+    valuationComplete: true,
     positionsCount: 2,
     positions: [
       { symbol: 'PUSD', chainId: 'solana-mainnet', quantity: 125.5, value: 125.5 },
@@ -193,6 +195,7 @@ test('capturePortfolioSnapshot maps a live read and persists the snapshot', asyn
         minedAt: '2026-06-09T00:00:00.000Z',
       },
     ],
+    valuationComplete: false,
     sync: { kind: 'synced', chainId: 'solana-mainnet', message: 'Synced.' },
   }
   let requestedAddress: string | undefined
@@ -226,11 +229,48 @@ test('capturePortfolioSnapshot maps a live read and persists the snapshot', asyn
   assert.equal(record.positionsCount, 2)
   assert.equal(record.positions[1]?.symbol, 'SOL')
   assert.equal(record.positions[1]?.value, undefined)
+  assert.equal(record.valuationComplete, false)
   assert.equal(record.syncKind, 'synced')
   assert.equal(record.syncMessage, 'Synced.')
 
   // Persisted, not just returned.
   assert.deepEqual(await registry.get('portfolio_snapshot_test'), record)
+})
+
+test('isReliablePortfolioSnapshotRecord rejects legacy synced rows with missing required valuation', () => {
+  assert.equal(isReliablePortfolioSnapshotRecord(createSnapshot()), true)
+  assert.equal(
+    isReliablePortfolioSnapshotRecord(
+      createSnapshot({
+        valuationComplete: false,
+      }),
+    ),
+    false,
+  )
+  assert.equal(
+    isReliablePortfolioSnapshotRecord(
+      createSnapshot({
+        valuationComplete: undefined,
+        totalValueUsd: 20,
+        positionsCount: 2,
+        positions: [
+          {
+            symbol: 'SOL',
+            chainId: 'solana-mainnet',
+            quantity: 7.23793572,
+            value: undefined,
+          },
+          {
+            symbol: 'USDC',
+            chainId: 'solana-mainnet',
+            quantity: 20,
+            value: 20,
+          },
+        ],
+      }),
+    ),
+    false,
+  )
 })
 
 test('PostgresPortfolioSnapshotRegistry reads agent history newest-first with a limit', async () => {
@@ -414,4 +454,81 @@ test('dashboard portfolio history route returns 404 for an unknown agent', async
   )
 
   assert.equal(response.read().statusCode, 404)
+})
+
+test('dashboard assets-under-control history route excludes valuation-incomplete synced snapshots', async () => {
+  const portfolioSnapshotRegistry = new InMemoryPortfolioSnapshotRegistry([
+    createSnapshot({
+      snapshotId: 'snap_good',
+      capturedAt: '2026-06-09T09:00:00.000Z',
+      totalValueUsd: 145.5,
+    }),
+    createSnapshot({
+      snapshotId: 'snap_bad',
+      capturedAt: '2026-06-09T10:00:00.000Z',
+      totalValueUsd: 20,
+      valuationComplete: false,
+      positionsCount: 2,
+      positions: [
+        {
+          symbol: 'SOL',
+          chainId: 'solana-mainnet',
+          quantity: 7.23793572,
+          value: undefined,
+        },
+        {
+          symbol: 'USDC',
+          chainId: 'solana-mainnet',
+          quantity: 20,
+          value: 20,
+        },
+      ],
+    }),
+  ])
+
+  const app = express()
+  registerPortfolioHistoryRoutes(
+    app,
+    {
+      env: {
+        PALMOS_PUBLIC_ACCESS_MODE: '1',
+        PALMOS_SESSION_SECRET: TEST_SESSION_SECRET,
+      },
+      workspace: {
+        agentRegistry: {
+          async list() {
+            return [createAgent()]
+          },
+        },
+      },
+      portfolioSnapshotRegistry,
+    } as never,
+  )
+
+  const layer = app.router.stack.find(
+    (entry) =>
+      entry.route?.path === '/api/dashboard/assets-under-control/history',
+  )
+  const handler = layer?.route?.stack?.[0]?.handle
+  assert.equal(typeof handler, 'function')
+
+  const response = createMockResponse()
+  await handler(
+    {
+      headers: {
+        cookie: operatorSessionCookie({ role: 'operator' }),
+      },
+      query: {},
+      method: 'GET',
+      path: '/api/dashboard/assets-under-control/history',
+    } as never,
+    response.res as never,
+  )
+
+  const result = response.read()
+  assert.equal(result.statusCode, 200)
+  assert.deepEqual(result.body, {
+    ok: true,
+    series: [{ at: '2026-06-09T09:00:00.000Z', valueUsd: 145.5 }],
+  })
 })

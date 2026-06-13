@@ -55,6 +55,7 @@ export async function capturePortfolioSnapshot(
     chainId: preferredChainId,
     capturedAt: nowIso(input),
     totalValueUsd,
+    valuationComplete: snapshot.valuationComplete !== false,
     positionsCount: snapshot.positions.length,
     positions: snapshot.positions.map((position) => ({
       symbol: position.symbol,

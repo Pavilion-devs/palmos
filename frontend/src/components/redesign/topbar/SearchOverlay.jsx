@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Bot, ArrowRight } from 'lucide-react'
-import { useAgents } from '../../../hooks/useAgents'
+import { useAgentWallets } from '../../../hooks/useAgentWallets'
 import { selectWalletRows } from '../data/selectors'
 
 const PAGES = [
@@ -19,7 +19,7 @@ export function SearchOverlay({ onClose }) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const inputRef = useRef(null)
-  const { agents } = useAgents()
+  const { agents } = useAgentWallets()
   const wallets = selectWalletRows(agents)
 
   useEffect(() => {

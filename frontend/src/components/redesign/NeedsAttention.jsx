@@ -1,10 +1,8 @@
 import { Clock, ShieldCheck } from 'lucide-react'
-import useDashboardApprovals from '../../hooks/useDashboardApprovals'
 import { useApprovalDecision } from '../../hooks/useApprovalDecision'
 import { selectPendingApprovals } from './data/selectors'
 
-export function NeedsAttention() {
-  const { status, approvals, refresh } = useDashboardApprovals()
+export function NeedsAttention({ status = 'idle', approvals = [], refresh }) {
   const { decide, pendingKey, error } = useApprovalDecision(refresh)
   const items = selectPendingApprovals(approvals)
 

@@ -7,6 +7,7 @@ import { operatorSessionCookie, TEST_SESSION_SECRET } from './helpers/siwsAuth.j
 import { buildDashboardAgentWalletContext } from '../src/server/dashboard/agentWalletContext.js'
 import { buildDashboardAgentWalletCycle } from '../src/server/dashboard/agentWalletCycle.js'
 import { createDashboardMutationIdempotencyStore } from '../src/server/dashboard/mutationIdempotency.js'
+import { registerAgentOnboardingRoutes } from '../src/server/dashboard/routes/agentOnboardingRoutes.js'
 import { registerAgentWalletContextRoutes } from '../src/server/dashboard/routes/agentWalletContextRoutes.js'
 import { registerAgentWalletCycleRoutes } from '../src/server/dashboard/routes/agentWalletCycleRoutes.js'
 import {
@@ -456,6 +457,168 @@ test('dashboard agent wallet cycle route requires access and returns cycle', asy
   assert.equal(body.walletCycle.agent.agentId, agent.agentId)
   assert.equal(body.walletCycle.readiness.lifecycleStage, 'active')
   assert.equal(body.walletCycle.actions.total, 1)
+})
+
+test('dashboard agent roster route uses the cheap roster builder', async () => {
+  const agent = createAgent()
+  let rosterCalls = 0
+
+  const app = express()
+  registerAgentOnboardingRoutes(
+    app,
+    {
+      env: {},
+      buildDashboardAgentRoster: async () => {
+        rosterCalls += 1
+        return {
+          generatedAt: '2026-06-13T00:00:00.000Z',
+          summary: {
+            agentCount: 1,
+            executedCalls: 0,
+            approvalPendingCalls: 0,
+            blockedOrFailedCalls: 0,
+            staleAgents: 0,
+            xmtpAlertsSent: 0,
+            owsBackedAgents: 1,
+          },
+          agents: [{ agent }],
+        }
+      },
+      buildDashboardAgentWalletList: async () => {
+        throw new Error('wallet list should not run for roster reads')
+      },
+      buildDashboardSnapshot: async () => {
+        throw new Error('showcase snapshot should not run for roster reads')
+      },
+    } as never,
+  )
+
+  const layer = app.router.stack.find(
+    (entry) => entry.route?.path === '/api/dashboard/agents',
+  )
+  const handler = layer?.route?.stack?.[0]?.handle
+  assert.equal(typeof handler, 'function')
+
+  const response = createMockResponse()
+  await handler(
+    {
+      headers: {},
+      method: 'GET',
+      path: '/api/dashboard/agents',
+    } as never,
+    response.res as never,
+  )
+
+  const result = response.read()
+  assert.equal(result.statusCode, 200)
+  assert.equal(rosterCalls, 1)
+  assert.deepEqual(result.body, {
+    ok: true,
+    agents: [{ agent }],
+    summary: {
+      agentCount: 1,
+      executedCalls: 0,
+      approvalPendingCalls: 0,
+      blockedOrFailedCalls: 0,
+      staleAgents: 0,
+      xmtpAlertsSent: 0,
+      owsBackedAgents: 1,
+    },
+  })
+})
+
+test('dashboard agent wallet route returns live wallet snapshots without the showcase projection', async () => {
+  const agent = createAgent()
+  let walletCalls = 0
+
+  const app = express()
+  registerAgentOnboardingRoutes(
+    app,
+    {
+      env: {},
+      buildDashboardAgentRoster: async () => {
+        throw new Error('roster builder should not run for wallet reads')
+      },
+      buildDashboardAgentWalletList: async () => {
+        walletCalls += 1
+        return {
+          generatedAt: '2026-06-13T00:00:00.000Z',
+          agents: [
+            {
+              agent,
+              portfolio: {
+                address: 'AlphaWallet111',
+                positions: [
+                  {
+                    id: 'p1',
+                    symbol: 'PUSD',
+                    chainId: 'solana-mainnet',
+                    quantity: 12.5,
+                    value: 12.5,
+                  },
+                ],
+                transactions: [],
+                sync: {
+                  kind: 'synced',
+                  chainId: 'solana-mainnet',
+                  message: 'Synced.',
+                },
+              },
+            },
+          ],
+        }
+      },
+      buildDashboardSnapshot: async () => {
+        throw new Error('showcase snapshot should not run for wallet reads')
+      },
+    } as never,
+  )
+
+  const layer = app.router.stack.find(
+    (entry) => entry.route?.path === '/api/dashboard/agent-wallets',
+  )
+  const handler = layer?.route?.stack?.[0]?.handle
+  assert.equal(typeof handler, 'function')
+
+  const response = createMockResponse()
+  await handler(
+    {
+      headers: {},
+      method: 'GET',
+      path: '/api/dashboard/agent-wallets',
+    } as never,
+    response.res as never,
+  )
+
+  const result = response.read()
+  assert.equal(result.statusCode, 200)
+  assert.equal(walletCalls, 1)
+  assert.deepEqual(result.body, {
+    ok: true,
+    agents: [
+      {
+        agent,
+        portfolio: {
+          address: 'AlphaWallet111',
+          positions: [
+            {
+              id: 'p1',
+              symbol: 'PUSD',
+              chainId: 'solana-mainnet',
+              quantity: 12.5,
+              value: 12.5,
+            },
+          ],
+          transactions: [],
+          sync: {
+            kind: 'synced',
+            chainId: 'solana-mainnet',
+            message: 'Synced.',
+          },
+        },
+      },
+    ],
+  })
 })
 
 test('dashboard agent policy update writes native wallet.policy_update ActionRequest', async () => {

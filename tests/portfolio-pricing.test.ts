@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { NATIVE_MINT } from '@solana/spl-token'
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
+import { NATIVE_MINT, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { JupiterPriceOracle } from '../src/integrations/portfolio/jupiterPriceOracle.js'
+import { CachedPortfolioReader } from '../src/integrations/portfolio/cachedPortfolioReader.js'
 import { SolanaPortfolioReader } from '../src/integrations/portfolio/solanaPortfolioReader.js'
-import type { PriceOracle } from '../src/integrations/portfolio/types.js'
+import type {
+  PortfolioReader,
+  PriceOracle,
+  WalletPortfolioSnapshot,
+} from '../src/integrations/portfolio/types.js'
 
 const SOL_MINT = NATIVE_MINT.toBase58()
 const OTHER_MINT = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN'
@@ -104,15 +109,31 @@ test('JupiterPriceOracle.fromEnv is on by default and disabled by PALMOS_PRICE_S
 
 function stubConnection(input: {
   lamports: number
-  tokens: Array<{ mint: string; uiAmount: number }>
+  classicTokens?: Array<{ mint: string; uiAmount: number; address?: string }>
+  token2022Tokens?: Array<{ mint: string; uiAmount: number; address?: string }>
+  signaturesByAddress?: Record<
+    string,
+    Array<{ signature: string; blockTime?: number | null }>
+  >
+  parsedTransactions?: unknown[]
 }) {
   return {
     async getBalance() {
       return input.lamports
     },
-    async getParsedTokenAccountsByOwner() {
+    async getParsedTokenAccountsByOwner(
+      _owner: PublicKey,
+      filter: { programId: PublicKey },
+    ) {
+      const tokens =
+        filter.programId.toBase58() === TOKEN_PROGRAM_ID.toBase58()
+          ? input.classicTokens ?? []
+          : input.token2022Tokens ?? []
       return {
-        value: input.tokens.map((token) => ({
+        value: tokens.map((token, index) => ({
+          pubkey:
+            token.address ??
+            new PublicKey(new Uint8Array(32).fill(index + 1)).toBase58(),
           account: {
             data: {
               parsed: {
@@ -126,8 +147,11 @@ function stubConnection(input: {
         })),
       }
     },
-    async getSignaturesForAddress() {
-      return []
+    async getSignaturesForAddress(address: PublicKey) {
+      return input.signaturesByAddress?.[address.toBase58()] ?? []
+    },
+    async getParsedTransactions() {
+      return input.parsedTransactions ?? []
     },
   }
 }
@@ -140,7 +164,7 @@ test('SolanaPortfolioReader enriches SOL + non-stable SPL with live prices, pegs
       // PUSD must not be asked for — it keeps the $1 peg shortcut.
       assert.ok(!mints.includes(PUSD_MINT))
       return new Map<string, number>([
-        [SOL_MINT, 150],
+        [NATIVE_MINT.toBase58(), 150],
         [OTHER_MINT, 2.5],
         // UNPRICED_MINT intentionally absent.
       ])
@@ -150,11 +174,11 @@ test('SolanaPortfolioReader enriches SOL + non-stable SPL with live prices, pegs
     { rpcUrl: 'http://localhost', chainId: 'solana-mainnet', pusdMint: PUSD_MINT },
     stubConnection({
       lamports: 2 * LAMPORTS_PER_SOL,
-      tokens: [
-        { mint: PUSD_MINT, uiAmount: 10 },
+      classicTokens: [
         { mint: OTHER_MINT, uiAmount: 4 },
         { mint: UNPRICED_MINT, uiAmount: 7 },
       ],
+      token2022Tokens: [{ mint: PUSD_MINT, uiAmount: 10 }],
     }) as never,
     oracle,
   )
@@ -174,12 +198,13 @@ test('SolanaPortfolioReader without an oracle leaves volatile values undefined',
     { rpcUrl: 'http://localhost', chainId: 'solana-mainnet', pusdMint: PUSD_MINT },
     stubConnection({
       lamports: LAMPORTS_PER_SOL,
-      tokens: [{ mint: OTHER_MINT, uiAmount: 4 }],
+      classicTokens: [{ mint: OTHER_MINT, uiAmount: 4 }],
     }) as never,
   )
 
   const snapshot = await reader.getWalletSnapshot(SOL_MINT)
   assert.equal(snapshot.positions.find((p) => p.symbol === 'SOL')?.value, undefined)
+  assert.equal(snapshot.valuationComplete, false)
 })
 
 test('SolanaPortfolioReader never fails a snapshot when the oracle throws', async () => {
@@ -187,7 +212,7 @@ test('SolanaPortfolioReader never fails a snapshot when the oracle throws', asyn
     { rpcUrl: 'http://localhost', chainId: 'solana-mainnet', pusdMint: PUSD_MINT },
     stubConnection({
       lamports: LAMPORTS_PER_SOL,
-      tokens: [{ mint: OTHER_MINT, uiAmount: 4 }],
+      classicTokens: [{ mint: OTHER_MINT, uiAmount: 4 }],
     }) as never,
     {
       async getUsdPrices() {
@@ -199,4 +224,151 @@ test('SolanaPortfolioReader never fails a snapshot when the oracle throws', asyn
   const snapshot = await reader.getWalletSnapshot(SOL_MINT)
   assert.equal(snapshot.sync.kind, 'synced')
   assert.equal(snapshot.positions.find((p) => p.symbol === 'SOL')?.value, undefined)
+  assert.equal(snapshot.valuationComplete, false)
+})
+
+test('SolanaPortfolioReader classifies inbound token-account credits as live deposit transactions', async () => {
+  const owner = SOL_MINT
+  const usdcTokenAccount = 'BhQmDvtviUWSoWNmhNrCePgAb1gpwrFRV9QxXw8SthyN'
+  const reader = new SolanaPortfolioReader(
+    { rpcUrl: 'http://localhost', chainId: 'solana-devnet', pusdMint: PUSD_MINT },
+    stubConnection({
+      lamports: 2 * LAMPORTS_PER_SOL,
+      classicTokens: [
+        {
+          mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+          uiAmount: 20,
+          address: usdcTokenAccount,
+        },
+      ],
+      signaturesByAddress: {
+        [owner]: [],
+        [usdcTokenAccount]: [
+          {
+            signature: 'sig_usdc_credit',
+            blockTime: 1_718_150_400,
+          },
+        ],
+      },
+      parsedTransactions: [
+        {
+          transaction: {
+            message: {
+              accountKeys: [usdcTokenAccount, owner],
+            },
+          },
+          meta: {
+            preBalances: [0, 2 * LAMPORTS_PER_SOL],
+            postBalances: [0, 2 * LAMPORTS_PER_SOL],
+            preTokenBalances: [
+              {
+                accountIndex: 0,
+                uiTokenAmount: { uiAmount: 0 },
+              },
+            ],
+            postTokenBalances: [
+              {
+                accountIndex: 0,
+                uiTokenAmount: { uiAmount: 20 },
+              },
+            ],
+          },
+        },
+      ],
+    }) as never,
+    {
+      async getUsdPrices() {
+        return new Map([[SOL_MINT, 150]])
+      },
+    },
+  )
+
+  const snapshot = await reader.getWalletSnapshot(owner)
+  const deposit = snapshot.transactions[0]
+
+  assert.equal(deposit?.operationType, 'deposit')
+  assert.equal(deposit?.direction, 'in')
+  assert.equal(deposit?.assetSymbol, 'USDC')
+  assert.equal(deposit?.amount, 20)
+})
+
+test('SolanaPortfolioReader keeps balance sync usable when recent activity enrichment is rate-limited', async () => {
+  const reader = new SolanaPortfolioReader(
+    { rpcUrl: 'http://localhost', chainId: 'solana-devnet', pusdMint: PUSD_MINT },
+    {
+      async getBalance() {
+        return LAMPORTS_PER_SOL
+      },
+      async getParsedTokenAccountsByOwner() {
+        return { value: [] }
+      },
+      async getSignaturesForAddress() {
+        throw new Error('Too many requests for a specific RPC call')
+      },
+      async getParsedTransactions() {
+        return []
+      },
+    } as never,
+    {
+      async getUsdPrices() {
+        return new Map([[NATIVE_MINT.toBase58(), 150]])
+      },
+    },
+  )
+
+  const snapshot = await reader.getWalletSnapshot(SOL_MINT)
+  assert.equal(snapshot.sync.kind, 'synced')
+  assert.match(snapshot.sync.message, /recent activity unavailable/i)
+  assert.equal(snapshot.transactions.length, 0)
+  assert.equal(snapshot.positions.find((p) => p.symbol === 'SOL')?.value, 150)
+})
+
+test('CachedPortfolioReader dedupes concurrent reads and reuses fresh snapshots within ttl', async () => {
+  let nowMs = 1_000
+  let calls = 0
+  let release: (() => void) | undefined
+  const snapshot: WalletPortfolioSnapshot = {
+    address: 'AlphaWallet111',
+    positions: [],
+    transactions: [],
+    valuationComplete: true,
+    sync: { kind: 'synced', chainId: 'solana-devnet', message: 'Synced.' },
+  }
+  const reader: PortfolioReader = {
+    async getWalletSnapshot() {
+      calls += 1
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return snapshot
+    },
+  }
+  const cached = new CachedPortfolioReader(reader, {
+    ttlMs: 10_000,
+    now: () => nowMs,
+  })
+
+  const pending = Promise.all([
+    cached.getWalletSnapshot('AlphaWallet111', { chainId: 'solana-devnet' }),
+    cached.getWalletSnapshot('AlphaWallet111', { chainId: 'solana-devnet' }),
+  ])
+  assert.equal(calls, 1)
+  release?.()
+  const [first, second] = await pending
+  assert.equal(first, snapshot)
+  assert.equal(second, snapshot)
+
+  const cachedAgain = await cached.getWalletSnapshot('AlphaWallet111', {
+    chainId: 'solana-devnet',
+  })
+  assert.equal(calls, 1)
+  assert.equal(cachedAgain, snapshot)
+
+  nowMs += 20_000
+  const refreshed = cached.getWalletSnapshot('AlphaWallet111', {
+    chainId: 'solana-devnet',
+  })
+  assert.equal(calls, 2)
+  release?.()
+  await refreshed
 })

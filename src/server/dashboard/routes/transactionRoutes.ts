@@ -97,6 +97,7 @@ export function registerTransactionRoutes(
     try {
       const result = await buildDashboardTransactions({
         workspace: context.workspace,
+        portfolioReader: context.portfolioReader,
         query: {
           agentId: readQueryValue(req.query.agentId),
           walletId: readQueryValue(req.query.walletId),

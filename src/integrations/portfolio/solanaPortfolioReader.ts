@@ -2,9 +2,11 @@ import {
   Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
+  type ConfirmedSignatureInfo,
   type ParsedAccountData,
+  type ParsedTransactionWithMeta,
 } from '@solana/web3.js'
-import { NATIVE_MINT } from '@solana/spl-token'
+import { NATIVE_MINT, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { JupiterPriceOracle } from './jupiterPriceOracle.js'
 import {
   PUSD_SYMBOL,
@@ -14,6 +16,7 @@ import {
   readSolanaRpcUrlFromEnv,
   type SolanaCluster,
 } from '../pusd/constants.js'
+import { knownUsdcMints } from '../pusd/splAssets.js'
 import type {
   PortfolioReader,
   PortfolioSyncStatus,
@@ -27,19 +30,86 @@ import type {
 // price oracle. Everything else is reported by on-chain amount with no USD value;
 // pricing volatile assets is a deliberate later decision, not an external
 // dependency we take on now.
-const USDC_MAINNET_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
-
 type KnownToken = { symbol: string; stableUsd?: boolean }
+type ObservedTokenAccount = {
+  address: string
+  mint: string
+  symbol: string
+}
+type PriceablePosition = {
+  position: WalletPortfolioPosition
+  mint: string
+  requiredValuation: boolean
+}
+type AssetDelta = {
+  symbol: string
+  amount: number
+  direction: 'in' | 'out'
+}
+
+const SIGNATURES_PER_ADDRESS = 10
+const MAX_RECENT_TRANSACTIONS = 20
+const ASSET_DELTA_EPSILON = 1e-9
 
 function buildKnownTokens(pusdMint: string): Map<string, KnownToken> {
-  return new Map<string, KnownToken>([
+  const known = new Map<string, KnownToken>([
     [pusdMint, { symbol: PUSD_SYMBOL, stableUsd: true }],
-    [USDC_MAINNET_MINT, { symbol: 'USDC', stableUsd: true }],
   ])
+  // Recognize USDC on every cluster (mainnet + devnet), not just mainnet — a
+  // devnet wallet holds the devnet USDC mint, which must still value at ~$1.
+  for (const mint of knownUsdcMints()) {
+    known.set(mint, { symbol: 'USDC', stableUsd: true })
+  }
+  return known
 }
 
 function shortMint(mint: string): string {
   return mint.length > 8 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint
+}
+
+function readPubkey(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (value instanceof PublicKey) {
+    return value.toBase58()
+  }
+  if (value && typeof value === 'object' && 'pubkey' in value) {
+    const nested = (value as { pubkey?: unknown }).pubkey
+    if (typeof nested === 'string') {
+      return nested
+    }
+    if (nested instanceof PublicKey) {
+      return nested.toBase58()
+    }
+  }
+  return undefined
+}
+
+function readParsedTokenAccountAddress(value: unknown): string | undefined {
+  if (value && typeof value === 'object' && 'pubkey' in value) {
+    return readPubkey((value as { pubkey?: unknown }).pubkey)
+  }
+  return undefined
+}
+
+function readUiTokenAmount(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const tokenAmount = value as {
+    uiAmount?: number
+    uiAmountString?: string
+  }
+  if (typeof tokenAmount.uiAmount === 'number') {
+    return tokenAmount.uiAmount
+  }
+  const parsed = Number(tokenAmount.uiAmountString)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function hasMeaningfulDelta(value: number): boolean {
+  return Math.abs(value) > ASSET_DELTA_EPSILON
 }
 
 function emptySnapshot(
@@ -147,21 +217,29 @@ export class SolanaPortfolioReader implements PortfolioReader {
     }
 
     try {
-      const [lamports, tokenAccounts, signatures] = await Promise.all([
-        this.connection.getBalance(owner),
-        this.connection.getParsedTokenAccountsByOwner(owner, {
-          programId: new PublicKey(PUSD_TOKEN_PROGRAM_ID),
-        }),
-        this.connection.getSignaturesForAddress(owner, { limit: 10 }),
-      ])
+      // Token accounts live under TWO programs: the classic SPL Token program
+      // (USDC, wrapped SOL, most SPL) and Token-2022 (PUSD). Querying only one
+      // silently drops the other's balances — so scan both and merge.
+      const [lamports, classicTokens, token2022Tokens] =
+        await Promise.all([
+          this.connection.getBalance(owner),
+          this.connection.getParsedTokenAccountsByOwner(owner, {
+            programId: TOKEN_PROGRAM_ID,
+          }),
+          this.connection.getParsedTokenAccountsByOwner(owner, {
+            programId: new PublicKey(PUSD_TOKEN_PROGRAM_ID),
+          }),
+        ])
+      const tokenAccounts = [
+        ...classicTokens.value,
+        ...token2022Tokens.value,
+      ]
 
       const positions: WalletPortfolioPosition[] = []
+      const observedTokenAccounts: ObservedTokenAccount[] = []
       // Positions whose USD value is resolved live from the price oracle, paired
       // with the mint to price (SOL is priced via the wrapped-SOL mint).
-      const priceable: Array<{
-        position: WalletPortfolioPosition
-        mint: string
-      }> = []
+      const priceable: PriceablePosition[] = []
 
       const solQuantity = lamports / LAMPORTS_PER_SOL
       if (solQuantity > 0) {
@@ -173,18 +251,24 @@ export class SolanaPortfolioReader implements PortfolioReader {
           value: undefined, // filled live below when a price oracle is configured
         }
         positions.push(solPosition)
-        priceable.push({ position: solPosition, mint: NATIVE_MINT.toBase58() })
+        priceable.push({
+          position: solPosition,
+          mint: NATIVE_MINT.toBase58(),
+          requiredValuation: true,
+        })
       }
 
-      for (const { account } of tokenAccounts.value) {
+      for (const tokenAccount of tokenAccounts) {
+        const { account } = tokenAccount
         const info = readParsedTokenInfo(account.data)
         if (!info || info.uiAmount <= 0) {
           continue
         }
         const known = this.knownTokens.get(info.mint)
+        const symbol = known?.symbol ?? shortMint(info.mint)
         const position: WalletPortfolioPosition = {
           id: `${walletAddress}:${info.mint}`,
-          symbol: known?.symbol ?? shortMint(info.mint),
+          symbol,
           chainId,
           quantity: info.uiAmount,
           // Known stablecoins keep the ~$1 peg shortcut (no network call);
@@ -192,31 +276,55 @@ export class SolanaPortfolioReader implements PortfolioReader {
           value: known?.stableUsd ? info.uiAmount : undefined,
         }
         positions.push(position)
+        const tokenAccountAddress = readParsedTokenAccountAddress(tokenAccount)
+        if (tokenAccountAddress) {
+          observedTokenAccounts.push({
+            address: tokenAccountAddress,
+            mint: info.mint,
+            symbol,
+          })
+        }
         if (!known?.stableUsd) {
-          priceable.push({ position, mint: info.mint })
+          priceable.push({
+            position,
+            mint: info.mint,
+            requiredValuation: false,
+          })
         }
       }
 
       await this.applyLivePrices(priceable)
-
-      const transactions: WalletPortfolioTransaction[] = signatures.map(
-        (sig) => ({
-          id: sig.signature,
-          hash: sig.signature,
+      let recentTransactions: WalletPortfolioTransaction[] = []
+      let activityUnavailable = false
+      try {
+        const signatureInfos = await this.collectRecentSignatures(
+          owner,
+          observedTokenAccounts,
+        )
+        recentTransactions = await this.buildRecentTransactions({
           chainId,
-          minedAt: sig.blockTime
-            ? new Date(sig.blockTime * 1000).toISOString()
-            : undefined,
-        }),
-      )
+          owner,
+          signatureInfos,
+          tokenAccounts: observedTokenAccounts,
+        })
+      } catch {
+        activityUnavailable = true
+      }
 
-      const hasData = positions.length > 0 || transactions.length > 0
+      const hasData = positions.length > 0 || recentTransactions.length > 0
       return {
         address: walletAddress,
         positions,
-        transactions,
+        transactions: recentTransactions,
+        valuationComplete: this.hasCompleteValuation(positions, priceable),
         sync: hasData
-          ? { kind: 'synced', chainId, message: `Synced on ${chainId}.` }
+          ? {
+              kind: 'synced',
+              chainId,
+              message: activityUnavailable
+                ? `Synced balances on ${chainId}; recent activity unavailable.`
+                : `Synced on ${chainId}.`,
+            }
           : {
               kind: 'empty',
               chainId,
@@ -237,7 +345,7 @@ export class SolanaPortfolioReader implements PortfolioReader {
   // keep an undefined value, exactly as if no oracle were configured. This keeps
   // pricing strictly additive over the RPC balance read.
   private async applyLivePrices(
-    priceable: Array<{ position: WalletPortfolioPosition; mint: string }>,
+    priceable: PriceablePosition[],
   ): Promise<void> {
     if (!this.priceOracle || priceable.length === 0) {
       return
@@ -259,5 +367,223 @@ export class SolanaPortfolioReader implements PortfolioReader {
     } catch {
       // Pricing is enrichment only — never fail a snapshot over it.
     }
+  }
+
+  private hasCompleteValuation(
+    positions: WalletPortfolioPosition[],
+    priceable: PriceablePosition[],
+  ): boolean {
+    const requiredSymbols = new Set(
+      priceable
+        .filter((entry) => entry.requiredValuation)
+        .map((entry) => entry.position.symbol)
+        .filter((symbol): symbol is string => Boolean(symbol)),
+    )
+    if (requiredSymbols.size === 0) {
+      return true
+    }
+    return positions.every((position) => {
+      if (!position.symbol || !requiredSymbols.has(position.symbol)) {
+        return true
+      }
+      return typeof position.value === 'number' && Number.isFinite(position.value)
+    })
+  }
+
+  private async collectRecentSignatures(
+    owner: PublicKey,
+    tokenAccounts: ObservedTokenAccount[],
+  ): Promise<ConfirmedSignatureInfo[]> {
+    const targets = [
+      owner,
+      ...tokenAccounts.map((account) => new PublicKey(account.address)),
+    ]
+    const signatureLists = await Promise.all(
+      targets.map((target) =>
+        this.connection.getSignaturesForAddress(target, {
+          limit: SIGNATURES_PER_ADDRESS,
+        }),
+      ),
+    )
+    const deduped = new Map<string, ConfirmedSignatureInfo>()
+    for (const list of signatureLists) {
+      for (const signature of list) {
+        const current = deduped.get(signature.signature)
+        if (!current || (signature.blockTime ?? 0) > (current.blockTime ?? 0)) {
+          deduped.set(signature.signature, signature)
+        }
+      }
+    }
+    return [...deduped.values()]
+      .sort((left, right) => {
+        const leftAt = left.blockTime ?? 0
+        const rightAt = right.blockTime ?? 0
+        return rightAt - leftAt || right.signature.localeCompare(left.signature)
+      })
+      .slice(0, MAX_RECENT_TRANSACTIONS)
+  }
+
+  private async buildRecentTransactions(input: {
+    chainId: string
+    owner: PublicKey
+    signatureInfos: ConfirmedSignatureInfo[]
+    tokenAccounts: ObservedTokenAccount[]
+  }): Promise<WalletPortfolioTransaction[]> {
+    if (input.signatureInfos.length === 0) {
+      return []
+    }
+      const parsedTransactions = await this.connection.getParsedTransactions(
+        input.signatureInfos.map((signature) => signature.signature),
+        { maxSupportedTransactionVersion: 0 },
+      )
+    const tokenAccountsByAddress = new Map(
+      input.tokenAccounts.map((account) => [account.address, account]),
+    )
+    return input.signatureInfos.map((signatureInfo, index) => {
+      const parsed = parsedTransactions[index]
+      return this.projectRecentTransaction({
+        chainId: input.chainId,
+        ownerAddress: input.owner.toBase58(),
+        signatureInfo,
+        parsed: parsed ?? null,
+        tokenAccountsByAddress,
+      })
+    })
+  }
+
+  private projectRecentTransaction(input: {
+    chainId: string
+    ownerAddress: string
+    signatureInfo: ConfirmedSignatureInfo
+    parsed: ParsedTransactionWithMeta | null
+    tokenAccountsByAddress: Map<string, ObservedTokenAccount>
+  }): WalletPortfolioTransaction {
+    const base: WalletPortfolioTransaction = {
+      id: input.signatureInfo.signature,
+      hash: input.signatureInfo.signature,
+      chainId: input.chainId,
+      minedAt: input.signatureInfo.blockTime
+        ? new Date(input.signatureInfo.blockTime * 1000).toISOString()
+        : undefined,
+    }
+    if (!input.parsed?.meta) {
+      return base
+    }
+
+    const deltas: AssetDelta[] = []
+    const ownerSolDelta = this.readOwnerSolDelta(
+      input.parsed,
+      input.ownerAddress,
+    )
+    if (ownerSolDelta != null && hasMeaningfulDelta(ownerSolDelta)) {
+      deltas.push({
+        symbol: 'SOL',
+        amount: Math.abs(ownerSolDelta),
+        direction: ownerSolDelta > 0 ? 'in' : 'out',
+      })
+    }
+
+    for (const delta of this.readTokenDeltas(
+      input.parsed,
+      input.tokenAccountsByAddress,
+    )) {
+      deltas.push(delta)
+    }
+
+    if (deltas.length === 0) {
+      return base
+    }
+
+    const inbound = deltas.filter((delta) => delta.direction === 'in')
+    const outbound = deltas.filter((delta) => delta.direction === 'out')
+    const primary =
+      [...inbound, ...outbound].sort((left, right) => right.amount - left.amount)[0]
+    if (!primary) {
+      return base
+    }
+
+    return {
+      ...base,
+      operationType:
+        inbound.length > 0 && outbound.length > 0
+          ? 'swap'
+          : inbound.length > 0
+            ? 'deposit'
+            : 'send',
+      direction: primary.direction,
+      assetSymbol: primary.symbol,
+      amount: primary.amount,
+      value: primary.amount,
+    }
+  }
+
+  private readOwnerSolDelta(
+    parsed: ParsedTransactionWithMeta,
+    ownerAddress: string,
+  ): number | undefined {
+    const accountKeys = parsed.transaction.message.accountKeys
+    const ownerIndex = accountKeys.findIndex(
+      (entry) => readPubkey(entry) === ownerAddress,
+    )
+    if (ownerIndex < 0) {
+      return undefined
+    }
+    const pre = parsed.meta?.preBalances?.[ownerIndex]
+    const post = parsed.meta?.postBalances?.[ownerIndex]
+    if (
+      typeof pre !== 'number' ||
+      typeof post !== 'number'
+    ) {
+      return undefined
+    }
+    return (post - pre) / LAMPORTS_PER_SOL
+  }
+
+  private readTokenDeltas(
+    parsed: ParsedTransactionWithMeta,
+    tokenAccountsByAddress: Map<string, ObservedTokenAccount>,
+  ): AssetDelta[] {
+    const accountKeys = parsed.transaction.message.accountKeys
+    const preBalances = new Map<number, number>()
+    for (const entry of parsed.meta?.preTokenBalances ?? []) {
+      const amount = readUiTokenAmount(entry.uiTokenAmount)
+      if (typeof amount === 'number') {
+        preBalances.set(entry.accountIndex, amount)
+      }
+    }
+    const postBalances = new Map<number, number>()
+    for (const entry of parsed.meta?.postTokenBalances ?? []) {
+      const amount = readUiTokenAmount(entry.uiTokenAmount)
+      if (typeof amount === 'number') {
+        postBalances.set(entry.accountIndex, amount)
+      }
+    }
+    const observedIndexes = new Set([
+      ...preBalances.keys(),
+      ...postBalances.keys(),
+    ])
+    const deltas: AssetDelta[] = []
+    for (const accountIndex of observedIndexes) {
+      const address = readPubkey(accountKeys[accountIndex])
+      if (!address) {
+        continue
+      }
+      const tokenAccount = tokenAccountsByAddress.get(address)
+      if (!tokenAccount) {
+        continue
+      }
+      const delta =
+        (postBalances.get(accountIndex) ?? 0) -
+        (preBalances.get(accountIndex) ?? 0)
+      if (!hasMeaningfulDelta(delta)) {
+        continue
+      }
+      deltas.push({
+        symbol: tokenAccount.symbol,
+        amount: Math.abs(delta),
+        direction: delta > 0 ? 'in' : 'out',
+      })
+    }
+    return deltas
   }
 }

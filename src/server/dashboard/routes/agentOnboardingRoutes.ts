@@ -41,11 +41,19 @@ export function registerAgentOnboardingRoutes(
   })
 
   app.get('/api/dashboard/agents', async (_req, res) => {
-    const snapshot = await context.buildDashboardSnapshot()
+    const snapshot = await context.buildDashboardAgentRoster()
     res.json({
       ok: true,
       agents: snapshot.agents,
       summary: snapshot.summary,
+    })
+  })
+
+  app.get('/api/dashboard/agent-wallets', async (_req, res) => {
+    const snapshot = await context.buildDashboardAgentWalletList()
+    res.json({
+      ok: true,
+      agents: snapshot.agents,
     })
   })
 

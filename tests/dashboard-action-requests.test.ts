@@ -27,6 +27,10 @@ import { registerActionRequestRoutes } from '../src/server/dashboard/routes/acti
 import { registerWalletActionRoutes } from '../src/server/dashboard/routes/walletActionRoutes.js'
 import { registerTransactionRoutes } from '../src/server/dashboard/routes/transactionRoutes.js'
 import { registerApprovalReadRoutes } from '../src/server/dashboard/routes/approvalRoutes.js'
+import type {
+  PortfolioReader,
+  WalletPortfolioSnapshot,
+} from '../src/integrations/portfolio/types.js'
 
 function createWallet(overrides: Partial<WalletRecord> = {}): WalletRecord {
   return {
@@ -1260,6 +1264,65 @@ test('buildDashboardTransactions combines legacy paid calls and native wallet ac
     assert.equal(legacyRow.status, 'failed')
     assert.equal(legacyRow.legacy.errorCode, 'connector_failed')
     assert.equal(legacyRow.value?.assetSymbol, 'PUSD')
+  }
+})
+
+test('buildDashboardTransactions includes live deposit agent events from the portfolio reader', async () => {
+  const actionRequests = new InMemoryActionRequestRegistry([])
+  const portfolioReader: PortfolioReader = {
+    async getWalletSnapshot(address, options): Promise<WalletPortfolioSnapshot> {
+      assert.equal(address, 'AlphaWallet111')
+      assert.equal(options?.chainId, 'solana-mainnet')
+      return {
+        address,
+        positions: [],
+        transactions: [
+          {
+            id: 'sig_usdc_credit',
+            hash: 'sig_usdc_credit',
+            chainId: 'solana-mainnet',
+            minedAt: '2026-06-12T22:03:19.000Z',
+            operationType: 'deposit',
+            direction: 'in',
+            assetSymbol: 'USDC',
+            amount: 20,
+          },
+        ],
+        valuationComplete: true,
+        sync: {
+          kind: 'synced',
+          chainId: 'solana-mainnet',
+          message: 'Synced.',
+        },
+      }
+    },
+  }
+
+  const transactions = await buildDashboardTransactions({
+    workspace: {
+      storageDriver: 'postgres',
+      actionRequestRegistry: actionRequests,
+      paidCallRegistry: new InMemoryPaidCallRegistry([], actionRequests),
+      agentRegistry: new InMemoryAgentRegistry([
+        createAgent({ displayName: 'Main', walletId: 'wallet_alpha' }),
+      ]),
+      walletRegistry: new InMemoryWalletRegistry([createWallet()]),
+    } as never,
+    portfolioReader,
+    query: { transactionKind: 'agent_event', limit: 10 },
+  })
+
+  assert.equal(transactions.summary.totalMatching, 1)
+  assert.equal(transactions.summary.byTransactionKind.agent_event, 1)
+  const [event] = transactions.transactions
+  assert.ok(event)
+  assert.equal(event?.transactionKind, 'agent_event')
+  if (event?.transactionKind === 'agent_event') {
+    assert.equal(event.id, 'deposit:agent_alpha:sig_usdc_credit')
+    assert.equal(event.eventType, 'deposit.detected')
+    assert.equal(event.title, 'Funding detected')
+    assert.equal(event.createdAt, '2026-06-12T22:03:19.000Z')
+    assert.equal(event.summary, 'Main received 20 USDC on-chain.')
   }
 })
 
