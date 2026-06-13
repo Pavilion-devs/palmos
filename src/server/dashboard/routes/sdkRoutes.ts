@@ -4,6 +4,7 @@ import {
   executePaidServiceCall,
   requestAssetTransfer,
   requestAssetSwap,
+  requestLiquidityAction,
 } from '../../../index.js'
 import { createByrealClient } from '../../../integrations/byreal/client.js'
 import { requiresPrivateSettlement } from '../../../app/agentPrivacyMode.js'
@@ -41,6 +42,8 @@ import {
   buildSdkServiceSummaries,
   buildSdkWalletContext,
   isSdkToolName,
+  readSdkLiquidityRequestInput,
+  readSdkListPositionsInput,
   readSdkPolicyCheckInput,
   readSdkQuoteRequestInput,
   readSdkSwapRequestInput,
@@ -814,6 +817,202 @@ async function executeSdkAssetSwapRequest(input: {
   })
 }
 
+async function executeSdkListByrealPositionsRequest(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<void> {
+  const { req, res, context, auth } = input
+  const body = readSdkListPositionsInput(req.body)
+  const walletName =
+    auth.agent.owsWalletName ?? auth.agent.owsWalletId ?? auth.agent.agentId
+  const ownerPubkey = context.owsClient?.getSolanaAddress(walletName)
+  if (!ownerPubkey) {
+    sendDashboardApiError(res, 409, {
+      code: 'conflict',
+      message: 'Agent has no OWS Solana wallet to list positions for.',
+    })
+    return
+  }
+
+  const byreal = createByrealClient({
+    apiUrl: context.env.BYREAL_API_URL,
+    rpcUrl: context.env.SOLANA_RPC_URL,
+    bin: context.env.BYREAL_CLI_BIN,
+  })
+  try {
+    const positions = await byreal.listPositions({
+      user: ownerPubkey,
+      pool: body.pool,
+      status: body.status,
+    })
+    res.json({ ok: true, agentId: auth.agent.agentId, positions })
+  } catch (error) {
+    context.operationalMetrics.increment('sdk.internal_failures')
+    console.error('[DashboardApi] Byreal positions list failed', error)
+    sendDashboardInternalError(res, 'Unable to list Byreal positions.')
+  }
+}
+
+async function executeSdkLiquidityActionRequest(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<void> {
+  const { req, res, context, auth } = input
+  const body = readSdkLiquidityRequestInput(req.body)
+  if (!body.op) {
+    sendDashboardApiError(res, 400, {
+      code: 'invalid_request',
+      message: 'Missing op (open | increase | decrease | close) for liquidity action.',
+    })
+    return
+  }
+
+  // Op-specific required fields.
+  let missing: string | undefined
+  if (body.op === 'open') {
+    if (!body.pool || !body.priceLower || !body.priceUpper) {
+      missing = 'open requires pool, priceLower, and priceUpper.'
+    } else if (!body.base || !body.baseAssetSymbol) {
+      missing = 'open requires base and baseAssetSymbol.'
+    } else if (!body.amount && !body.amountUsd) {
+      missing = 'open requires amount or amountUsd.'
+    }
+  } else if (body.op === 'increase') {
+    if (!body.nftMint) missing = 'increase requires nftMint.'
+    else if (!body.base || !body.baseAssetSymbol) missing = 'increase requires base and baseAssetSymbol.'
+    else if (!body.amount && !body.amountUsd) missing = 'increase requires amount or amountUsd.'
+  } else if (body.op === 'decrease') {
+    if (!body.nftMint) missing = 'decrease requires nftMint.'
+    else if (body.percentage == null && !body.amountUsd) missing = 'decrease requires percentage or amountUsd.'
+  } else {
+    if (!body.nftMint) missing = 'close requires nftMint.'
+  }
+  if (missing) {
+    sendDashboardApiError(res, 400, { code: 'invalid_request', message: missing })
+    return
+  }
+
+  if (!context.workspace.actionRequestRegistry) {
+    sendDashboardApiError(res, 409, {
+      code: 'conflict',
+      message: 'ActionRequest registry is not available in this workspace.',
+    })
+    return
+  }
+  const actionRequestRegistry = context.workspace.actionRequestRegistry
+
+  const idempotencyKey =
+    readSdkIdempotencyKey(req) ?? normalizeSdkIdempotencyKey(body.idempotencyKey)
+  const idempotentActionRequestId = idempotencyKey
+    ? createSdkIdempotentActionRequestId({ agentId: auth.agent.agentId, idempotencyKey })
+    : undefined
+  const existingActionRequest = idempotentActionRequestId
+    ? await actionRequestRegistry.get(idempotentActionRequestId)
+    : undefined
+
+  if (existingActionRequest) {
+    res.setHeader('Idempotency-Replayed', 'true')
+    res.json({
+      ok: true,
+      agentId: auth.agent.agentId,
+      credentialId: auth.credential.credentialId,
+      idempotencyKey,
+      idempotentReplay: true,
+      result: {
+        ...existingActionRequestToSdkResult({
+          agent: auth.agent,
+          actionRequest: existingActionRequest,
+        }),
+        agent: stripAgentSecrets(auth.agent),
+      },
+    })
+    return
+  }
+
+  const byreal = createByrealClient({
+    apiUrl: context.env.BYREAL_API_URL,
+    rpcUrl: context.env.SOLANA_RPC_URL,
+    bin: context.env.BYREAL_CLI_BIN,
+  })
+
+  const result = await requestLiquidityAction(
+    {
+      agentRegistry: context.workspace.agentRegistry,
+      actionRequests: actionRequestRegistry,
+      owsClient: context.owsClient,
+      byrealClient: byreal,
+      simulateSettlement: context.env.BYREAL_SETTLE_LIVE !== '1',
+      createId: idempotentActionRequestId
+        ? (prefix) =>
+            prefix === 'action_request'
+              ? idempotentActionRequestId
+              : `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+        : undefined,
+    },
+    {
+      agentId: auth.agent.agentId,
+      op: body.op,
+      pool: body.pool,
+      priceLower: body.priceLower,
+      priceUpper: body.priceUpper,
+      nftMint: body.nftMint,
+      base: body.base,
+      baseAssetSymbol: body.baseAssetSymbol,
+      amount: body.amount,
+      amountUsd: body.amountUsd,
+      percentage: body.percentage,
+      outputMint: body.outputMint,
+      autoSwap: body.autoSwap,
+      slippageBps: body.slippageBps,
+      note: body.note,
+      source: 'sdk',
+    },
+  )
+
+  if (result.kind === 'blocked') {
+    context.operationalMetrics.increment('sdk.policy_denials')
+    sendDashboardApiError(res, 403, {
+      code: 'policy_denied',
+      message: result.reason,
+      details: {
+        agentId: auth.agent.agentId,
+        credentialId: auth.credential.credentialId,
+        result: { ...result, agent: stripAgentSecrets(result.agent) },
+      },
+    })
+    return
+  }
+
+  if (result.kind === 'execution_failed') {
+    context.operationalMetrics.increment('sdk.internal_failures')
+    sendDashboardApiError(res, 502, {
+      code: 'settlement_failed',
+      message: result.error,
+      details: {
+        agentId: auth.agent.agentId,
+        result: { ...result, agent: stripAgentSecrets(result.agent) },
+      },
+    })
+    return
+  }
+
+  res.json({
+    ok: true,
+    agentId: auth.agent.agentId,
+    credentialId: auth.credential.credentialId,
+    idempotencyKey,
+    idempotentReplay: false,
+    result: {
+      ...result,
+      agent: stripAgentSecrets(result.agent),
+    },
+  })
+}
+
 export function registerSdkRoutes(
   app: express.Express,
   context: DashboardRouteContext,
@@ -972,6 +1171,16 @@ export function registerSdkRoutes(
 
       if (toolName === 'request_asset_swap') {
         await executeSdkAssetSwapRequest({ req, res, context, auth })
+        return
+      }
+
+      if (toolName === 'list_byreal_positions') {
+        await executeSdkListByrealPositionsRequest({ req, res, context, auth })
+        return
+      }
+
+      if (toolName === 'request_liquidity_action') {
+        await executeSdkLiquidityActionRequest({ req, res, context, auth })
         return
       }
 

@@ -520,6 +520,123 @@ export function evaluateSwapRequest(input: {
   }
 }
 
+export type LiquidityDecisionReasonCode =
+  | 'policy.invalid_amount'
+  | 'policy.agent_restricted'
+  | 'policy.liquidity_chain_not_allowed'
+  | 'policy.liquidity_asset_not_allowed'
+  | 'policy.liquidity_amount_exceeds_limit'
+  | 'policy.liquidity_approval_required'
+  | 'policy.liquidity_auto_approved'
+
+export type LiquidityDecision = {
+  status: 'allowed' | 'restricted' | 'denied'
+  requiresApproval: boolean
+  effectiveMaxDepositAmount: string
+  reasonCode: LiquidityDecisionReasonCode
+  disallowedAsset?: string
+}
+
+/**
+ * Governance gate for a Byreal CLMM liquidity action. Deposits (open/increase) are gated like a
+ * spend: the deposited asset must be allowed and the amount is held to the per-transaction limit /
+ * auto-approve threshold (same trust multiplier as transfers). Withdrawals (decrease/close) return
+ * the agent's OWN funds — not a spend — so they auto-approve (still blocked for restricted agents
+ * or a disallowed chain). Slippage caps / per-pool rules are layered on in C5.
+ */
+export function evaluateLiquidityRequest(input: {
+  policy: AgentPolicyTemplateInput
+  op: 'open' | 'increase' | 'decrease' | 'close'
+  /** Deposited token symbol (open/increase). Omit for withdraw ops. */
+  depositAssetSymbol?: string
+  /** UI deposit amount or USD notional (open/increase). Omit for withdraw ops. */
+  depositAmount?: string
+  chainId: string
+  trustTier: AgentTrustTier
+}): LiquidityDecision {
+  const transferPolicy = resolveAgentTransferPolicy(input.policy)
+  const maxPerTransfer = parsePolicyAmount(transferPolicy.maxPerTransfer)
+  const autoApproveUnder = parsePolicyAmount(transferPolicy.autoApproveUnder)
+  const effectiveMaxBaseUnits = applyTrustMultiplier(maxPerTransfer ?? 0n, input.trustTier)
+  const effectiveMaxDepositAmount = formatPolicyAmount(effectiveMaxBaseUnits)
+
+  if (!transferPolicy.allowedChains.includes(input.chainId)) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_chain_not_allowed',
+    }
+  }
+
+  if (input.trustTier === 'restricted') {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.agent_restricted',
+    }
+  }
+
+  const isDeposit = input.op === 'open' || input.op === 'increase'
+  if (!isDeposit) {
+    return {
+      status: 'allowed',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_auto_approved',
+    }
+  }
+
+  if (
+    !input.depositAssetSymbol ||
+    !transferPolicy.allowedAssets.includes(input.depositAssetSymbol)
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_asset_not_allowed',
+      disallowedAsset: input.depositAssetSymbol,
+    }
+  }
+
+  const requestedAmount = parsePolicyAmount(input.depositAmount)
+  if (maxPerTransfer == null || autoApproveUnder == null || requestedAmount == null) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.invalid_amount',
+    }
+  }
+
+  if (requestedAmount > effectiveMaxBaseUnits) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_amount_exceeds_limit',
+    }
+  }
+
+  if (requestedAmount > autoApproveUnder) {
+    return {
+      status: 'restricted',
+      requiresApproval: true,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_approval_required',
+    }
+  }
+
+  return {
+    status: 'allowed',
+    requiresApproval: false,
+    effectiveMaxDepositAmount,
+    reasonCode: 'policy.liquidity_auto_approved',
+  }
+}
+
 export function compileAgentProvisioningPolicy(input: {
   agentId: string
   organizationId: string

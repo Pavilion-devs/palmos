@@ -101,6 +101,58 @@ export type QuoteSwapParams = {
 
 export type BuildSwapParams = QuoteSwapParams & { ownerPubkey: string }
 
+export type LiquidityOp = 'open' | 'increase' | 'decrease' | 'close'
+
+/** Discriminated params for a CLMM position op (mirrors `byreal-cli positions <op>`). */
+export type BuildPositionParams =
+  | {
+      op: 'open'
+      pool: string
+      priceLower: string
+      priceUpper: string
+      base?: string
+      amount?: string
+      amountUsd?: string
+      autoSwap?: boolean
+      slippageBps?: number
+      ownerPubkey: string
+    }
+  | {
+      op: 'increase'
+      nftMint: string
+      base?: string
+      amount?: string
+      amountUsd?: string
+      autoSwap?: boolean
+      slippageBps?: number
+      ownerPubkey: string
+    }
+  | {
+      op: 'decrease'
+      nftMint: string
+      percentage?: number
+      amountUsd?: string
+      autoSwap?: boolean
+      outputMint?: string
+      slippageBps?: number
+      ownerPubkey: string
+    }
+  | {
+      op: 'close'
+      nftMint: string
+      autoSwap?: boolean
+      outputMint?: string
+      slippageBps?: number
+      ownerPubkey: string
+    }
+
+/** A Byreal CLMM position (fields mirror byreal-cli `positions list`; kept permissive). */
+export type ByrealPosition = {
+  nftMint?: string
+  poolId?: string
+  [key: string]: unknown
+}
+
 export class ByrealCliError extends Error {
   constructor(
     message: string,
@@ -172,6 +224,62 @@ export class ByrealClient {
       throw new ByrealCliError('byreal-cli returned no unsigned transaction', { args })
     }
     return { ...unsigned, quote }
+  }
+
+  async listPositions(opts: {
+    /** Wallet to query (read-only). Usually the agent's OWS Solana address. */
+    user: string
+    pool?: string
+    /** 0 = active, 1 = closed. */
+    status?: 0 | 1
+    pageSize?: number
+  }): Promise<ByrealPosition[]> {
+    const args = ['positions', 'list', '--user', opts.user]
+    if (opts.pool) args.push('--pool', opts.pool)
+    if (opts.status != null) args.push('--status', String(opts.status))
+    if (opts.pageSize != null) args.push('--page-size', String(opts.pageSize))
+    const data = await this.runEnveloped<{ positions: ByrealPosition[] }>(args)
+    return data.positions ?? []
+  }
+
+  /**
+   * Build an unsigned CLMM position transaction (open/increase/decrease/close). `open` returns a
+   * tx whose position-NFT-mint signature is already applied by the CLI; OWS only adds the owner
+   * signature in C2. Non-auto-swap builds need no balance; `--auto-swap` simulates and so needs a
+   * funded wallet.
+   */
+  async buildPositionUnsigned(p: BuildPositionParams): Promise<ByrealUnsignedTxResult> {
+    const args = ['positions', p.op, '--unsigned-tx', '--wallet-address', p.ownerPubkey]
+    if (p.op === 'open') {
+      args.push('--pool', p.pool, '--price-lower', p.priceLower, '--price-upper', p.priceUpper)
+      if (p.base) args.push('--base', p.base)
+      if (p.amount != null) args.push('--amount', p.amount)
+      else if (p.amountUsd != null) args.push('--amount-usd', p.amountUsd)
+      if (p.autoSwap) args.push('--auto-swap')
+    } else if (p.op === 'increase') {
+      args.push('--nft-mint', p.nftMint)
+      if (p.base) args.push('--base', p.base)
+      if (p.amount != null) args.push('--amount', p.amount)
+      else if (p.amountUsd != null) args.push('--amount-usd', p.amountUsd)
+      if (p.autoSwap) args.push('--auto-swap')
+    } else if (p.op === 'decrease') {
+      args.push('--nft-mint', p.nftMint)
+      if (p.percentage != null) args.push('--percentage', String(p.percentage))
+      else if (p.amountUsd != null) args.push('--amount-usd', p.amountUsd)
+      if (p.autoSwap) args.push('--auto-swap')
+      if (p.outputMint) args.push('--output-mint', p.outputMint)
+    } else {
+      args.push('--nft-mint', p.nftMint)
+      if (p.autoSwap) args.push('--auto-swap')
+      if (p.outputMint) args.push('--output-mint', p.outputMint)
+    }
+    if (p.slippageBps != null) args.push('--slippage', String(p.slippageBps))
+
+    const unsigned = await this.runRaw<ByrealUnsignedTxResult>(args)
+    if (!unsigned.unsignedTransactions?.length) {
+      throw new ByrealCliError('byreal-cli returned no unsigned position transaction', { args })
+    }
+    return unsigned
   }
 
   // ---------------------------------------------------------------------------

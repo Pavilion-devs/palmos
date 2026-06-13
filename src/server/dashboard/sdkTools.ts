@@ -12,6 +12,8 @@ export const SDK_TOOL_NAMES = [
   'request_asset_transfer',
   'get_byreal_quote',
   'request_asset_swap',
+  'list_byreal_positions',
+  'request_liquidity_action',
   'check_policy',
   'get_agent_status',
   'get_wallet_context',
@@ -130,6 +132,46 @@ export const SDK_TOOL_DEFINITIONS = [
         amount: { type: 'string' },
         slippageBps: { type: 'number' },
         swapMode: { type: 'string', enum: ['in', 'out'] },
+        note: { type: 'string' },
+        idempotencyKey: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'list_byreal_positions',
+    description:
+      "List the agent's Byreal CLMM liquidity positions on Solana (read-only). Use the returned nftMint to increase/decrease/close a position.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pool: { type: 'string' },
+        status: { type: 'number', enum: [0, 1] },
+      },
+    },
+  },
+  {
+    name: 'request_liquidity_action',
+    description:
+      'Request a governed Byreal CLMM liquidity action on Solana through PalmOS: open, increase, decrease, or close a position. Enforced against the agent policy (deposits are limited like a spend; withdrawals return the agent\'s own funds) and settled via the OWS vault.',
+    inputSchema: {
+      type: 'object',
+      required: ['op'],
+      additionalProperties: false,
+      properties: {
+        op: { type: 'string', enum: ['open', 'increase', 'decrease', 'close'] },
+        pool: { type: 'string' },
+        priceLower: { type: 'string' },
+        priceUpper: { type: 'string' },
+        nftMint: { type: 'string' },
+        base: { type: 'string' },
+        baseAssetSymbol: { type: 'string' },
+        amount: { type: 'string' },
+        amountUsd: { type: 'string' },
+        percentage: { type: 'number' },
+        outputMint: { type: 'string' },
+        autoSwap: { type: 'boolean' },
+        slippageBps: { type: 'number' },
         note: { type: 'string' },
         idempotencyKey: { type: 'string' },
       },
@@ -290,6 +332,72 @@ export function readSdkQuoteRequestInput(value: unknown): SdkQuoteRequestInput {
     amount: readMaybeString(input.amount),
     slippageBps: readMaybeNumber(input.slippageBps),
     swapMode: readSwapMode(input.swapMode),
+  }
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
+}
+
+function readLiquidityOp(value: unknown): 'open' | 'increase' | 'decrease' | 'close' | undefined {
+  return value === 'open' || value === 'increase' || value === 'decrease' || value === 'close'
+    ? value
+    : undefined
+}
+
+export type SdkLiquidityRequestInput = {
+  op?: 'open' | 'increase' | 'decrease' | 'close'
+  pool?: string
+  priceLower?: string
+  priceUpper?: string
+  nftMint?: string
+  base?: string
+  baseAssetSymbol?: string
+  amount?: string
+  amountUsd?: string
+  percentage?: number
+  outputMint?: string
+  autoSwap?: boolean
+  slippageBps?: number
+  note?: string
+  idempotencyKey?: string
+}
+
+export function readSdkLiquidityRequestInput(value: unknown): SdkLiquidityRequestInput {
+  const input = readSdkToolInput(value)
+  return {
+    op: readLiquidityOp(input.op),
+    pool: readMaybeString(input.pool),
+    priceLower: readMaybeString(input.priceLower),
+    priceUpper: readMaybeString(input.priceUpper),
+    nftMint: readMaybeString(input.nftMint),
+    base: readMaybeString(input.base),
+    baseAssetSymbol: readMaybeString(input.baseAssetSymbol),
+    amount: readMaybeString(input.amount),
+    amountUsd: readMaybeString(input.amountUsd),
+    percentage: readMaybeNumber(input.percentage),
+    outputMint: readMaybeString(input.outputMint),
+    autoSwap: readBoolean(input.autoSwap),
+    slippageBps: readMaybeNumber(input.slippageBps),
+    note: readMaybeString(input.note),
+    idempotencyKey: readMaybeString(input.idempotencyKey),
+  }
+}
+
+export type SdkListPositionsInput = {
+  pool?: string
+  status?: 0 | 1
+}
+
+export function readSdkListPositionsInput(value: unknown): SdkListPositionsInput {
+  const input = readSdkToolInput(value)
+  const statusNum = readMaybeNumber(input.status)
+  return {
+    pool: readMaybeString(input.pool),
+    status: statusNum === 1 ? 1 : statusNum === 0 ? 0 : undefined,
   }
 }
 

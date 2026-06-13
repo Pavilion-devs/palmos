@@ -22,6 +22,7 @@ export type ActionRequestKind =
   | 'service.pay'
   | 'asset.transfer'
   | 'asset.swap'
+  | 'asset.liquidity'
   | 'asset.bridge'
   | 'portfolio.rebalance'
   | 'wallet.create'
