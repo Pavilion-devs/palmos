@@ -336,9 +336,15 @@ Same skeleton as `settleAssetTransferViaOws` (`requestAssetTransfer.ts:60-166`):
 `positions open` carries Byreal's pre-applied NFT-mint signature through C2 untouched.
 
 ### A.4 Build order (de-risked)
-**Spike 0 ✅ DONE (PASS)** → **C1** `ByrealClient` (read-only first: `quoteSwap`/`listPools`
-are demoable immediately, keyless) → **C2** `signAndBroadcastSolanaTx` → **C3** `requestAssetSwap`
-→ **C5** policy fields → **C6** MCP tools → **C4** `asset.liquidity` → **C7/C8** dashboard + reconcile.
+**Spike 0 ✅ DONE (PASS)** → **C1 ✅ DONE** `ByrealClient` (`src/integrations/byreal/client.ts`;
+`listPools`/`listTokens`/`quoteSwap`/`buildSwapUnsigned`, verified live in
+`scripts/verify-byreal-client.ts`) → **C2** `signAndBroadcastSolanaTx` ← *next* → **C3**
+`requestAssetSwap` → **C5** policy fields → **C6** MCP tools → **C4** `asset.liquidity` →
+**C7/C8** dashboard + reconcile.
+
+> C1 requires `byreal-cli` on PATH (`npm i -g @byreal-io/byreal-cli`, or pass `bin` in config).
+> Read-only methods are keyless against `api2.byreal.io` (mainnet); `buildSwapUnsigned` emits an
+> unsigned base64 v0 tx and signs nothing.
 
 > Note for C2: `VersionedTransaction` in `@solana/web3.js` v1 has no `verifySignatures()`; use
 > `nacl.sign.detached.verify(vtx.message.serialize(), sig, ownerPubkey.toBytes())` (tweetnacl is
