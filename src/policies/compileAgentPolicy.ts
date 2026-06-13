@@ -414,6 +414,112 @@ export function evaluateTransferRequest(input: {
   }
 }
 
+export type SwapDecisionReasonCode =
+  | 'policy.invalid_amount'
+  | 'policy.agent_restricted'
+  | 'policy.swap_chain_not_allowed'
+  | 'policy.swap_asset_not_allowed'
+  | 'policy.swap_amount_exceeds_limit'
+  | 'policy.swap_approval_required'
+  | 'policy.swap_auto_approved'
+
+export type SwapDecision = {
+  status: 'allowed' | 'restricted' | 'denied'
+  requiresApproval: boolean
+  effectiveMaxSwapAmount: string
+  reasonCode: SwapDecisionReasonCode
+  /** Which asset failed the allowlist (when reasonCode is swap_asset_not_allowed). */
+  disallowedAsset?: string
+}
+
+/**
+ * Governance gate for a Byreal swap. Unlike a transfer, a swap's output returns to the agent's
+ * own wallet, so there is no recipient allowlist — instead BOTH legs must be allowed assets. The
+ * spend limit / auto-approve threshold are applied to the input amount, mirroring transfer
+ * semantics (and the same trust multiplier). Slippage caps, per-pool rules and USD-notional
+ * limits are layered on in C5; this is the minimal, faithful gate C3 needs.
+ */
+export function evaluateSwapRequest(input: {
+  policy: AgentPolicyTemplateInput
+  inputAssetSymbol: string
+  outputAssetSymbol: string
+  /** UI amount of the input token being spent (same units the policy max is expressed in). */
+  inputAmount: string
+  chainId: string
+  trustTier: AgentTrustTier
+}): SwapDecision {
+  const transferPolicy = resolveAgentTransferPolicy(input.policy)
+  const maxPerTransfer = parsePolicyAmount(transferPolicy.maxPerTransfer)
+  const requestedAmount = parsePolicyAmount(input.inputAmount)
+  const autoApproveUnder = parsePolicyAmount(transferPolicy.autoApproveUnder)
+  const effectiveMaxBaseUnits = applyTrustMultiplier(maxPerTransfer ?? 0n, input.trustTier)
+  const effectiveMaxSwapAmount = formatPolicyAmount(effectiveMaxBaseUnits)
+
+  if (!transferPolicy.allowedChains.includes(input.chainId)) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.swap_chain_not_allowed',
+    }
+  }
+
+  for (const asset of [input.inputAssetSymbol, input.outputAssetSymbol]) {
+    if (!transferPolicy.allowedAssets.includes(asset)) {
+      return {
+        status: 'denied',
+        requiresApproval: false,
+        effectiveMaxSwapAmount,
+        reasonCode: 'policy.swap_asset_not_allowed',
+        disallowedAsset: asset,
+      }
+    }
+  }
+
+  if (maxPerTransfer == null || requestedAmount == null || autoApproveUnder == null) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.invalid_amount',
+    }
+  }
+
+  if (input.trustTier === 'restricted') {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.agent_restricted',
+    }
+  }
+
+  if (requestedAmount > effectiveMaxBaseUnits) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.swap_amount_exceeds_limit',
+    }
+  }
+
+  if (requestedAmount > autoApproveUnder) {
+    return {
+      status: 'restricted',
+      requiresApproval: true,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.swap_approval_required',
+    }
+  }
+
+  return {
+    status: 'allowed',
+    requiresApproval: false,
+    effectiveMaxSwapAmount,
+    reasonCode: 'policy.swap_auto_approved',
+  }
+}
+
 export function compileAgentProvisioningPolicy(input: {
   agentId: string
   organizationId: string
