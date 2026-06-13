@@ -154,6 +154,58 @@ function OperatorProfile() {
   )
 }
 
+function NetworkToggle() {
+  const [network, setNetwork] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchDashboardApi('/api/dashboard/network')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && d?.network) setNetwork(d.network)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function choose(next) {
+    if (busy || next === network) return
+    setBusy(true)
+    try {
+      const response = await fetchDashboardApi('/api/dashboard/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: next }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (response.ok && payload?.network) setNetwork(payload.network)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1 rounded-full bg-panel-2 p-1">
+      {['mainnet', 'devnet'].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => choose(n)}
+          disabled={busy}
+          className={`rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors disabled:opacity-60 ${
+            network === n ? 'bg-lime text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { operator } = useOperatorSession()
   const [driver, setDriver] = useState('File')
@@ -172,7 +224,7 @@ export function SettingsPage() {
                 <Copy className="size-3.5" strokeWidth={2} aria-hidden="true" /> Copy
               </button>
             </Row>
-            <Row label="Network" sub="Solana cluster for reads & settlement" last><Pill>solana-mainnet</Pill></Row>
+            <Row label="Network" sub="Solana cluster for reads & settlement" last><NetworkToggle /></Row>
           </div>
         </section>
 

@@ -44,6 +44,12 @@ import { registerPortfolioHistoryRoutes } from './dashboard/routes/portfolioHist
 import { registerPublicRoutes } from './dashboard/routes/publicRoutes.js'
 import { registerAuthRoutes } from './dashboard/auth/siws.js'
 import { registerSdkRoutes } from './dashboard/routes/sdkRoutes.js'
+import { registerNetworkRoutes } from './dashboard/routes/networkRoutes.js'
+import {
+  applyNetworkToEnv,
+  currentNetwork,
+  loadNetworkOverride,
+} from './dashboard/networkOverride.js'
 import { registerServiceRoutes } from './dashboard/routes/serviceRoutes.js'
 import { registerSystemRoutes } from './dashboard/routes/systemRoutes.js'
 import { registerTransactionRoutes } from './dashboard/routes/transactionRoutes.js'
@@ -92,6 +98,12 @@ async function main() {
     }
   }
   const baseDir = resolveDashboardBaseDir(env)
+  // Solana cluster is chosen on the dashboard Settings page (persisted to baseDir), not env.
+  // Apply it before building the portfolio reader so reads use the right cluster, and to
+  // process.env so settlement (OWS broadcast RPC, read live per call) follows it too.
+  const activeNetwork = loadNetworkOverride(baseDir) ?? currentNetwork(process.env)
+  applyNetworkToEnv(activeNetwork, env)
+  applyNetworkToEnv(activeNetwork, process.env)
   const port = resolveDashboardPort(env)
   const workspace = loadAgentSpendWorkspace({ baseDir, env })
   const palmosClient = PalmosClient.fromEnv(env)
@@ -259,6 +271,7 @@ async function main() {
   installDashboardAccessGuard(app, env)
   installDashboardCsrfProtection(app, env, operationalMetrics)
   registerSystemRoutes(app, context)
+  registerNetworkRoutes(app, context)
   registerActionRequestRoutes(app, context)
   registerWalletActionRoutes(app, context)
   registerPortfolioHistoryRoutes(app, context)
