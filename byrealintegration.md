@@ -244,14 +244,13 @@ Today `transactionToUnsignedHex()` (`client.ts:123`) only handles legacy `Transa
 **base64 `VersionedTransaction`**. The C2 method must produce the unsigned hex from a versioned
 tx (`Buffer.from(vtx.serialize()).toString('hex')`) and re-attach the owner sig.
 
-> **⚠️ Spike 0 (run before committing to path B):** confirm `signTransaction('solana', …)` from
-> `@open-wallet-standard/core` produces a signature valid over a **VersionedTransaction's
-> message** (not just legacy). 30-min test: build any Byreal `--unsigned-tx`, run it through the
-> C2 method, assert `vtx.verifySignatures() === true` and the tx lands on-chain.
-> **Fallbacks if it can't:** (1) check `signMessage` signs raw message bytes without a prefix and
-> attach manually; (2) provision a dedicated Byreal **DeFi sub-wallet** (local keypair, funded
-> from the OWS wallet) and sign versioned txns locally — sacrifices pure custody for the DeFi
-> account only, but is a guaranteed path. Keep (2) in our pocket.
+> **✅ Spike 0 — RESOLVED (PASS), 2026-06-13.** `signTransaction('solana', <versioned-tx hex>)`
+> from `@open-wallet-standard/core` produces a signature **valid over the VersionedTransaction's
+> message**. Verified offline in `scripts/spike0-ows-versioned-sign.ts` (throwaway vault, no RPC,
+> no funds): a legacy tx (the production-path control) and a v0 versioned tx both signed, and the
+> returned sig verified via tweetnacl against `message.serialize()`. **Path B works as-is — no
+> custody compromise, no fallback needed.** (Had it failed, fallbacks were: raw `signMessage` over
+> the message bytes, or a funded local-key DeFi sub-wallet.)
 
 ### A.1 C1 — `ByrealClient` (new: `src/integrations/byreal/client.ts`)
 Thin, typed wrapper over `byreal-cli` (subprocess, `-o json`). Read-only methods need no wallet;
@@ -337,6 +336,10 @@ Same skeleton as `settleAssetTransferViaOws` (`requestAssetTransfer.ts:60-166`):
 `positions open` carries Byreal's pre-applied NFT-mint signature through C2 untouched.
 
 ### A.4 Build order (de-risked)
-**Spike 0** (OWS↔versioned-tx) → **C1** `ByrealClient` (read-only first: `quoteSwap`/`listPools`
+**Spike 0 ✅ DONE (PASS)** → **C1** `ByrealClient` (read-only first: `quoteSwap`/`listPools`
 are demoable immediately, keyless) → **C2** `signAndBroadcastSolanaTx` → **C3** `requestAssetSwap`
 → **C5** policy fields → **C6** MCP tools → **C4** `asset.liquidity` → **C7/C8** dashboard + reconcile.
+
+> Note for C2: `VersionedTransaction` in `@solana/web3.js` v1 has no `verifySignatures()`; use
+> `nacl.sign.detached.verify(vtx.message.serialize(), sig, ownerPubkey.toBytes())` (tweetnacl is
+> already a dep) as the integrity check before broadcast, as Spike 0 does.
