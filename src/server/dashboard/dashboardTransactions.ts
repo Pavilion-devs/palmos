@@ -298,6 +298,7 @@ function projectDepositTransaction(input: {
     status: 'detected',
     title: 'Funding detected',
     summary: `${input.agent.displayName} received ${formatTokenAmount(input.amount)} ${input.symbol} on-chain.`,
+    value: { assetSymbol: input.symbol, amount: String(input.amount) },
     createdAt: input.at,
     updatedAt: input.at,
     eventType: 'deposit.detected',

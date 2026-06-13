@@ -307,7 +307,10 @@ export class SolanaPortfolioReader implements PortfolioReader {
           signatureInfos,
           tokenAccounts: observedTokenAccounts,
         })
-      } catch {
+      } catch (activityError) {
+        if (process.env.PALMOS_DEBUG_PORTFOLIO) {
+          console.error('[portfolio] recent activity fetch failed:', activityError)
+        }
         activityUnavailable = true
       }
 
@@ -432,10 +435,24 @@ export class SolanaPortfolioReader implements PortfolioReader {
     if (input.signatureInfos.length === 0) {
       return []
     }
-      const parsedTransactions = await this.connection.getParsedTransactions(
-        input.signatureInfos.map((signature) => signature.signature),
-        { maxSupportedTransactionVersion: 0 },
-      )
+      // Fetch per-signature, not as a batch RPC: batch getParsedTransactions is blocked on free
+      // RPC tiers (e.g. Helius returns 403 "Batch requests are only available for paid plans"),
+      // which would silently drop ALL recent activity (incl. funding). Small concurrency stays
+      // under per-second limits; a failed single lookup degrades to null rather than failing all.
+      const signatures = input.signatureInfos.map((signature) => signature.signature)
+      const parsedTransactions: (ParsedTransactionWithMeta | null)[] = []
+      const FETCH_CONCURRENCY = 5
+      for (let i = 0; i < signatures.length; i += FETCH_CONCURRENCY) {
+        const chunk = signatures.slice(i, i + FETCH_CONCURRENCY)
+        const results = await Promise.all(
+          chunk.map((signature) =>
+            this.connection
+              .getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 })
+              .catch(() => null),
+          ),
+        )
+        parsedTransactions.push(...results)
+      }
     const tokenAccountsByAddress = new Map(
       input.tokenAccounts.map((account) => [account.address, account]),
     )
