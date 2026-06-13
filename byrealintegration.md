@@ -345,8 +345,12 @@ verify. Confirmed OWS signs Byreal's real v0 swap tx **including its 2 address-l
 (`src/app/requestAssetSwap.ts` + `evaluateSwapRequest` in `compileAgentPolicy.ts`: governed
 `asset.swap` = policy gate → C1 build → C2 sign/broadcast → audit stamp; 4 governance scenarios —
 auto-approve/approval-required/denied-asset/denied-limit — verified `scripts/verify-c3-request-swap.ts`)
-→ **C5** policy fields (slippage cap, USD-notional limit, allowed pools) ← *next* → **C6** MCP
-tools → **C4** `asset.liquidity` → **C7/C8** dashboard + reconcile.
+→ **C5** policy fields (slippage cap, USD-notional limit, allowed pools) → **C6 ✅ DONE**
+agent/SDK tools (`get_byreal_quote` + `request_asset_swap` in `sdkTools.ts` + `sdkRoutes.ts`;
+the swap tool runs the full C3→C1→C2 governed flow, live broadcast gated by `BYREAL_SETTLE_LIVE`
+— default sign-only so a tool call can't accidentally spend; verified `scripts/verify-c6-sdk-tools.ts`,
+tool-list snapshot test updated) → **C4** `asset.liquidity` → **C7/C8** dashboard + reconcile.
+*Remaining: C5 (richer policy), C4 (LP), C7/C8 (dashboard + reconcile).*
 
 > C1 requires `byreal-cli` on PATH (`npm i -g @byreal-io/byreal-cli`, or pass `bin` in config).
 > Read-only methods are keyless against `api2.byreal.io` (mainnet); `buildSwapUnsigned` emits an

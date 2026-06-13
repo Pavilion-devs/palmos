@@ -3,7 +3,9 @@ import {
   authenticateAgentCredential,
   executePaidServiceCall,
   requestAssetTransfer,
+  requestAssetSwap,
 } from '../../../index.js'
+import { createByrealClient } from '../../../integrations/byreal/client.js'
 import { requiresPrivateSettlement } from '../../../app/agentPrivacyMode.js'
 import {
   executeUmbraPrivateSettlement,
@@ -40,6 +42,8 @@ import {
   buildSdkWalletContext,
   isSdkToolName,
   readSdkPolicyCheckInput,
+  readSdkQuoteRequestInput,
+  readSdkSwapRequestInput,
   readSdkToolInput,
   type SdkAuthenticatedAgent,
 } from '../sdkTools.js'
@@ -628,6 +632,188 @@ async function executeSdkAssetTransferRequest(input: {
   })
 }
 
+async function executeSdkByrealQuoteRequest(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<void> {
+  const { req, res, context, auth } = input
+  const body = readSdkQuoteRequestInput(req.body)
+  if (!body.inputMint || !body.outputMint || !body.amount) {
+    sendDashboardApiError(res, 400, {
+      code: 'invalid_request',
+      message: 'Missing inputMint, outputMint, or amount for Byreal quote.',
+    })
+    return
+  }
+
+  const byreal = createByrealClient({
+    apiUrl: context.env.BYREAL_API_URL,
+    rpcUrl: context.env.SOLANA_RPC_URL,
+    bin: context.env.BYREAL_CLI_BIN,
+  })
+  const walletName =
+    auth.agent.owsWalletName ?? auth.agent.owsWalletId ?? auth.agent.agentId
+  const ownerPubkey = context.owsClient?.getSolanaAddress(walletName)
+
+  try {
+    const quote = await byreal.quoteSwap({
+      inputMint: body.inputMint,
+      outputMint: body.outputMint,
+      amount: body.amount,
+      slippageBps: body.slippageBps,
+      swapMode: body.swapMode,
+      ownerPubkey,
+    })
+    res.json({ ok: true, agentId: auth.agent.agentId, quote })
+  } catch (error) {
+    context.operationalMetrics.increment('sdk.internal_failures')
+    console.error('[DashboardApi] Byreal quote failed', error)
+    sendDashboardInternalError(res, 'Unable to fetch a Byreal quote.')
+  }
+}
+
+async function executeSdkAssetSwapRequest(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<void> {
+  const { req, res, context, auth } = input
+  const body = readSdkSwapRequestInput(req.body)
+  if (
+    !body.inputMint ||
+    !body.outputMint ||
+    !body.inputAssetSymbol ||
+    !body.outputAssetSymbol ||
+    !body.amount
+  ) {
+    sendDashboardApiError(res, 400, {
+      code: 'invalid_request',
+      message:
+        'Missing inputMint, outputMint, inputAssetSymbol, outputAssetSymbol, or amount for asset swap.',
+    })
+    return
+  }
+
+  if (!context.workspace.actionRequestRegistry) {
+    sendDashboardApiError(res, 409, {
+      code: 'conflict',
+      message: 'ActionRequest registry is not available in this workspace.',
+    })
+    return
+  }
+  const actionRequestRegistry = context.workspace.actionRequestRegistry
+
+  const idempotencyKey =
+    readSdkIdempotencyKey(req) ?? normalizeSdkIdempotencyKey(body.idempotencyKey)
+  const idempotentActionRequestId = idempotencyKey
+    ? createSdkIdempotentActionRequestId({
+        agentId: auth.agent.agentId,
+        idempotencyKey,
+      })
+    : undefined
+  const existingActionRequest = idempotentActionRequestId
+    ? await actionRequestRegistry.get(idempotentActionRequestId)
+    : undefined
+
+  if (existingActionRequest) {
+    res.setHeader('Idempotency-Replayed', 'true')
+    res.json({
+      ok: true,
+      agentId: auth.agent.agentId,
+      credentialId: auth.credential.credentialId,
+      idempotencyKey,
+      idempotentReplay: true,
+      result: {
+        ...existingActionRequestToSdkResult({
+          agent: auth.agent,
+          actionRequest: existingActionRequest,
+        }),
+        agent: stripAgentSecrets(auth.agent),
+      },
+    })
+    return
+  }
+
+  const byreal = createByrealClient({
+    apiUrl: context.env.BYREAL_API_URL,
+    rpcUrl: context.env.SOLANA_RPC_URL,
+    bin: context.env.BYREAL_CLI_BIN,
+  })
+
+  const result = await requestAssetSwap(
+    {
+      agentRegistry: context.workspace.agentRegistry,
+      actionRequests: actionRequestRegistry,
+      owsClient: context.owsClient,
+      byrealClient: byreal,
+      // Live settlement broadcasts to Solana mainnet (real funds), so default to
+      // sign-only — a tool call can't accidentally spend. Set BYREAL_SETTLE_LIVE=1
+      // to settle for real.
+      simulateSettlement: context.env.BYREAL_SETTLE_LIVE !== '1',
+      createId: idempotentActionRequestId
+        ? (prefix) =>
+            prefix === 'action_request'
+              ? idempotentActionRequestId
+              : `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+        : undefined,
+    },
+    {
+      agentId: auth.agent.agentId,
+      inputMint: body.inputMint,
+      outputMint: body.outputMint,
+      inputAssetSymbol: body.inputAssetSymbol,
+      outputAssetSymbol: body.outputAssetSymbol,
+      amount: body.amount,
+      slippageBps: body.slippageBps,
+      swapMode: body.swapMode,
+      note: body.note,
+      source: 'sdk',
+    },
+  )
+
+  if (result.kind === 'blocked') {
+    context.operationalMetrics.increment('sdk.policy_denials')
+    sendDashboardApiError(res, 403, {
+      code: 'policy_denied',
+      message: result.reason,
+      details: {
+        agentId: auth.agent.agentId,
+        credentialId: auth.credential.credentialId,
+        result: { ...result, agent: stripAgentSecrets(result.agent) },
+      },
+    })
+    return
+  }
+
+  if (result.kind === 'execution_failed') {
+    context.operationalMetrics.increment('sdk.internal_failures')
+    sendDashboardApiError(res, 502, {
+      code: 'settlement_failed',
+      message: result.error,
+      details: {
+        agentId: auth.agent.agentId,
+        result: { ...result, agent: stripAgentSecrets(result.agent) },
+      },
+    })
+    return
+  }
+
+  res.json({
+    ok: true,
+    agentId: auth.agent.agentId,
+    credentialId: auth.credential.credentialId,
+    idempotencyKey,
+    idempotentReplay: false,
+    result: {
+      ...result,
+      agent: stripAgentSecrets(result.agent),
+    },
+  })
+}
+
 export function registerSdkRoutes(
   app: express.Express,
   context: DashboardRouteContext,
@@ -776,6 +962,16 @@ export function registerSdkRoutes(
 
       if (toolName === 'request_asset_transfer') {
         await executeSdkAssetTransferRequest({ req, res, context, auth })
+        return
+      }
+
+      if (toolName === 'get_byreal_quote') {
+        await executeSdkByrealQuoteRequest({ req, res, context, auth })
+        return
+      }
+
+      if (toolName === 'request_asset_swap') {
+        await executeSdkAssetSwapRequest({ req, res, context, auth })
         return
       }
 

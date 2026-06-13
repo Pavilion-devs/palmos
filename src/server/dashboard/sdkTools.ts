@@ -10,6 +10,8 @@ export const SDK_TOOL_NAMES = [
   'list_services',
   'request_paid_service',
   'request_asset_transfer',
+  'get_byreal_quote',
+  'request_asset_swap',
   'check_policy',
   'get_agent_status',
   'get_wallet_context',
@@ -90,6 +92,44 @@ export const SDK_TOOL_DEFINITIONS = [
         assetSymbol: { type: 'string' },
         amount: { type: 'string' },
         counterpartyId: { type: 'string' },
+        note: { type: 'string' },
+        idempotencyKey: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'get_byreal_quote',
+    description:
+      'Get a live Byreal swap quote on Solana (expected output, price impact, route). Read-only — moves no funds and needs no approval.',
+    inputSchema: {
+      type: 'object',
+      required: ['inputMint', 'outputMint', 'amount'],
+      additionalProperties: false,
+      properties: {
+        inputMint: { type: 'string' },
+        outputMint: { type: 'string' },
+        amount: { type: 'string' },
+        slippageBps: { type: 'number' },
+        swapMode: { type: 'string', enum: ['in', 'out'] },
+      },
+    },
+  },
+  {
+    name: 'request_asset_swap',
+    description:
+      'Request a governed token swap on Byreal (Solana) through PalmOS. Enforced against the agent policy (allowed assets, spend limit, approval threshold) and settled via the OWS vault.',
+    inputSchema: {
+      type: 'object',
+      required: ['inputMint', 'outputMint', 'inputAssetSymbol', 'outputAssetSymbol', 'amount'],
+      additionalProperties: false,
+      properties: {
+        inputMint: { type: 'string' },
+        outputMint: { type: 'string' },
+        inputAssetSymbol: { type: 'string' },
+        outputAssetSymbol: { type: 'string' },
+        amount: { type: 'string' },
+        slippageBps: { type: 'number' },
+        swapMode: { type: 'string', enum: ['in', 'out'] },
         note: { type: 'string' },
         idempotencyKey: { type: 'string' },
       },
@@ -190,6 +230,66 @@ export function readSdkPolicyCheckInput(value: unknown): SdkPolicyCheckInput {
   return {
     serviceId: readMaybeString(input.serviceId),
     amount: readMaybeString(input.amount),
+  }
+}
+
+function readSwapMode(value: unknown): 'in' | 'out' | undefined {
+  return value === 'in' || value === 'out' ? value : undefined
+}
+
+function readMaybeNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+    return Number(value)
+  }
+  return undefined
+}
+
+export type SdkSwapRequestInput = {
+  inputMint?: string
+  outputMint?: string
+  inputAssetSymbol?: string
+  outputAssetSymbol?: string
+  amount?: string
+  slippageBps?: number
+  swapMode?: 'in' | 'out'
+  note?: string
+  idempotencyKey?: string
+}
+
+export function readSdkSwapRequestInput(value: unknown): SdkSwapRequestInput {
+  const input = readSdkToolInput(value)
+  return {
+    inputMint: readMaybeString(input.inputMint),
+    outputMint: readMaybeString(input.outputMint),
+    inputAssetSymbol: readMaybeString(input.inputAssetSymbol),
+    outputAssetSymbol: readMaybeString(input.outputAssetSymbol),
+    amount: readMaybeString(input.amount),
+    slippageBps: readMaybeNumber(input.slippageBps),
+    swapMode: readSwapMode(input.swapMode),
+    note: readMaybeString(input.note),
+    idempotencyKey: readMaybeString(input.idempotencyKey),
+  }
+}
+
+export type SdkQuoteRequestInput = {
+  inputMint?: string
+  outputMint?: string
+  amount?: string
+  slippageBps?: number
+  swapMode?: 'in' | 'out'
+}
+
+export function readSdkQuoteRequestInput(value: unknown): SdkQuoteRequestInput {
+  const input = readSdkToolInput(value)
+  return {
+    inputMint: readMaybeString(input.inputMint),
+    outputMint: readMaybeString(input.outputMint),
+    amount: readMaybeString(input.amount),
+    slippageBps: readMaybeNumber(input.slippageBps),
+    swapMode: readSwapMode(input.swapMode),
   }
 }
 

@@ -1257,6 +1257,8 @@ test('SDK tool helpers expose services, status, and policy checks', () => {
       'list_services',
       'request_paid_service',
       'request_asset_transfer',
+      'get_byreal_quote',
+      'request_asset_swap',
       'check_policy',
       'get_agent_status',
       'get_wallet_context',
