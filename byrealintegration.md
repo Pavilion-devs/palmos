@@ -338,9 +338,11 @@ Same skeleton as `settleAssetTransferViaOws` (`requestAssetTransfer.ts:60-166`):
 ### A.4 Build order (de-risked)
 **Spike 0 ✅ DONE (PASS)** → **C1 ✅ DONE** `ByrealClient` (`src/integrations/byreal/client.ts`;
 `listPools`/`listTokens`/`quoteSwap`/`buildSwapUnsigned`, verified live in
-`scripts/verify-byreal-client.ts`) → **C2** `signAndBroadcastSolanaTx` ← *next* → **C3**
-`requestAssetSwap` → **C5** policy fields → **C6** MCP tools → **C4** `asset.liquidity` →
-**C7/C8** dashboard + reconcile.
+`scripts/verify-byreal-client.ts`) → **C2 ✅ DONE** `OwsClient.signAndBroadcastSolanaTx`
+(deserialize → OWS-sign → tweetnacl integrity check → broadcast; `skipBroadcast` for offline
+verify. Confirmed OWS signs Byreal's real v0 swap tx **including its 2 address-lookup-tables** —
+`scripts/verify-c2-ows-byreal-sign.ts`) → **C3** `requestAssetSwap` ← *next* → **C5** policy
+fields → **C6** MCP tools → **C4** `asset.liquidity` → **C7/C8** dashboard + reconcile.
 
 > C1 requires `byreal-cli` on PATH (`npm i -g @byreal-io/byreal-cli`, or pass `bin` in config).
 > Read-only methods are keyless against `api2.byreal.io` (mainnet); `buildSwapUnsigned` emits an

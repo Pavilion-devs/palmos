@@ -14,12 +14,14 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  VersionedTransaction,
 } from '@solana/web3.js'
 import {
   createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
   getAssociatedTokenAddress,
 } from '@solana/spl-token'
+import nacl from 'tweetnacl'
 import { mkdir } from 'fs/promises'
 import { execFile as execFileCallback } from 'child_process'
 import { join, resolve } from 'path'
@@ -398,6 +400,85 @@ export class OwsClient {
       stdout: JSON.stringify({ signature: transactionSignature }),
       parsedBody: { signature: transactionSignature },
       signature: transactionSignature,
+    }
+  }
+
+  // Sign an externally-built Solana transaction (e.g. a Byreal swap/LP tx produced
+  // by `byreal-cli --unsigned-tx`) with the OWS vault and broadcast it. This is C2
+  // of the Byreal integration: "Byreal proposes the tx, OWS signs it" — the vault
+  // key never leaves custody. `base64Tx` is a (possibly partially-signed, e.g. a
+  // position-NFT-mint co-signature) VersionedTransaction; we ONLY add the wallet
+  // owner's signature and preserve any others. Spike 0 confirmed the OWS vault can
+  // sign a VersionedTransaction's message. Network-agnostic — Byreal targets
+  // Solana mainnet. Pass `skipBroadcast` to sign + integrity-check only (no send).
+  async signAndBroadcastSolanaTx(input: {
+    wallet: string
+    base64Tx: string
+    rpcUrl?: string
+    skipBroadcast?: boolean
+  }): Promise<OwsSolanaPaymentResult & { signedBase64: string }> {
+    await this.ensureHome()
+    const rpcUrl = input.rpcUrl?.trim() || readSolanaRpcUrlFromEnv()
+    const wallet = this.getWallet(input.wallet)
+    const solanaAddress = readSolanaAddress(wallet)
+    if (!solanaAddress) {
+      throw new Error(`OWS wallet ${input.wallet} has no Solana account.`)
+    }
+    const ownerPubkey = new PublicKey(solanaAddress)
+
+    const transaction = VersionedTransaction.deserialize(
+      new Uint8Array(Buffer.from(input.base64Tx, 'base64')),
+    )
+
+    // OWS signs the unsigned, serialized transaction hex (same primitive the
+    // transfer paths use); we then attach the returned signature to the owner slot.
+    const unsignedHex = Buffer.from(transaction.serialize()).toString('hex')
+    const signed = signTransaction(
+      input.wallet,
+      'solana',
+      unsignedHex,
+      this.config.passphrase,
+      0,
+      this.config.vaultPath,
+    )
+    const signatureHex = signed.signature.startsWith('0x')
+      ? signed.signature.slice(2)
+      : signed.signature
+    const signatureBytes = new Uint8Array(Buffer.from(signatureHex, 'hex'))
+    transaction.addSignature(ownerPubkey, signatureBytes)
+
+    // VersionedTransaction has no verifySignatures() in web3.js v1 — verify the
+    // owner signature we just produced over the message bytes (tweetnacl).
+    const validOwnerSignature = nacl.sign.detached.verify(
+      transaction.message.serialize(),
+      signatureBytes,
+      ownerPubkey.toBytes(),
+    )
+    if (!validOwnerSignature) {
+      throw new Error('OWS produced an invalid signature for the externally-built transaction.')
+    }
+
+    const signedBase64 = Buffer.from(transaction.serialize()).toString('base64')
+
+    if (input.skipBroadcast) {
+      return {
+        stdout: JSON.stringify({ signed: true }),
+        parsedBody: { signed: true },
+        signedBase64,
+      }
+    }
+
+    const connection = new Connection(rpcUrl, 'confirmed')
+    const transactionSignature = await connection.sendRawTransaction(
+      transaction.serialize(),
+    )
+    await connection.confirmTransaction(transactionSignature, 'confirmed')
+
+    return {
+      stdout: JSON.stringify({ signature: transactionSignature }),
+      parsedBody: { signature: transactionSignature },
+      signature: transactionSignature,
+      signedBase64,
     }
   }
 
