@@ -8,6 +8,8 @@ import {
   Activity,
   Zap,
   ArrowDownToLine,
+  Droplets,
+  ExternalLink,
 } from 'lucide-react'
 import { Shell } from './Shell'
 import useDashboardTransactions from '../../hooks/useDashboardTransactions'
@@ -26,11 +28,12 @@ const typeIcons = {
   Wallet: KeyRound,
   Agent: Zap,
   Deposit: ArrowDownToLine,
+  Liquidity: Droplets,
   Action: Activity,
 }
 
-const tabs = ['All', 'Swaps', 'Transfers', 'Payments', 'Blocked']
-const tabMatch = { Swaps: 'Swap', Transfers: 'Transfer', Payments: 'Payment' }
+const tabs = ['All', 'Swaps', 'Liquidity', 'Transfers', 'Payments', 'Blocked']
+const tabMatch = { Swaps: 'Swap', Liquidity: 'Liquidity', Transfers: 'Transfer', Payments: 'Payment' }
 
 export function ActivityPage() {
   const [tab, setTab] = useState('All')
@@ -115,7 +118,20 @@ export function ActivityPage() {
                     {o.status}
                   </span>
                 </div>
-                <div className="font-mono text-xs text-muted-foreground lg:text-right">{o.time}</div>
+                <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground lg:justify-end">
+                  <span>{o.time}</span>
+                  {o.txUrl && (
+                    <a
+                      href={o.txUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="View on Solscan"
+                      className="text-muted-foreground transition-colors hover:text-lime"
+                    >
+                      <ExternalLink className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                    </a>
+                  )}
+                </div>
               </div>
             )
           })}

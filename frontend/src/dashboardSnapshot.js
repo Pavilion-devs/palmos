@@ -794,7 +794,7 @@ function adaptNativeWalletActionRow(row, agentsById) {
     chainId: row.value?.chainId ?? target.chainId ?? null,
     txHash: shortTxHash(txHashFull),
     txHashFull,
-    txExplorerUrl: null,
+    txExplorerUrl: buildSolscanTxUrl(txHashFull, row.value?.chainId ?? target.chainId ?? null),
     status: row.status,
     errorCode: row.errorCode ?? null,
     errorMessage: row.errorMessage ?? null,

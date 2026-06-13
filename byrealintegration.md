@@ -353,8 +353,13 @@ tool-list snapshot test updated) → **C4 ✅ DONE** `asset.liquidity` (open/inc
 `requestLiquidityAction` + `evaluateLiquidityRequest` + C1 `buildPositionUnsigned`/`listPositions`;
 deposits gated like a spend, withdrawals auto-approve; `open`'s position-NFT-mint co-signature
 handled by C2 untouched; SDK tools `request_liquidity_action` + `list_byreal_positions`; 10 checks
-verified live `scripts/verify-c4-liquidity.ts`) → **C7/C8** dashboard + reconcile.
-*Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools), C7/C8 (dashboard surfacing + reconcile).*
+verified live `scripts/verify-c4-liquidity.ts`) → **C7/C8 ✅ DONE** dashboard surfacing + reconcile
+(swap/liquidity now render in activity + approvals + wallet detail: `txType` Liquidity case +
+`Droplets` icon + a Liquidity tab; on-chain **Solscan** links surfaced on settled native actions by
+populating `txExplorerUrl` (was `null`) and threading `txUrl` into the activity rows; backend
+`isNativeWalletActionRequest` + `DASHBOARD_ACTION_REQUEST_KINDS` extended; inline-settled records are
+already terminal so reconcile just confirms. Frontend `vite build` + eslint clean, 106 backend tests
+green). *Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools).*
 
 > C1 requires `byreal-cli` on PATH (`npm i -g @byreal-io/byreal-cli`, or pass `bin` in config).
 > Read-only methods are keyless against `api2.byreal.io` (mainnet); `buildSwapUnsigned` emits an

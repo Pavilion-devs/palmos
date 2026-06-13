@@ -25,6 +25,7 @@ export const DASHBOARD_ACTION_REQUEST_KINDS = [
   'service.pay',
   'asset.transfer',
   'asset.swap',
+  'asset.liquidity',
   'asset.bridge',
   'portfolio.rebalance',
   'wallet.create',

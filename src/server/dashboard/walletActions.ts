@@ -90,6 +90,7 @@ export function isNativeWalletActionRequest(
   return (
     record.kind === 'asset.transfer' ||
     record.kind === 'asset.swap' ||
+    record.kind === 'asset.liquidity' ||
     record.kind === 'asset.bridge' ||
     record.kind === 'portfolio.rebalance' ||
     record.kind === 'wallet.create' ||

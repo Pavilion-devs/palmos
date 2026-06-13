@@ -7,6 +7,8 @@ import {
   Activity,
   Zap,
   ArrowDownToLine,
+  Droplets,
+  ExternalLink,
 } from 'lucide-react'
 import { selectActivityRows } from './data/selectors'
 
@@ -23,6 +25,7 @@ const typeIcons = {
   Wallet: KeyRound,
   Agent: Zap,
   Deposit: ArrowDownToLine,
+  Liquidity: Droplets,
   Action: Activity,
 }
 
@@ -65,7 +68,20 @@ export function RecentActivity({ status = 'idle', transactions = [] }) {
                 {it.status}
               </span>
 
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">{it.time}</span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{it.time}</span>
+                {it.txUrl && (
+                  <a
+                    href={it.txUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on Solscan"
+                    className="text-muted-foreground transition-colors hover:text-lime"
+                  >
+                    <ExternalLink className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                  </a>
+                )}
+              </div>
             </div>
           )
         })}

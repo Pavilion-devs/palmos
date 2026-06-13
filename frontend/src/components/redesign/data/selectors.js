@@ -175,6 +175,7 @@ function txType(tx) {
   if (kind.includes('deposit')) return 'Deposit'
   if (kind.includes('transfer')) return 'Transfer'
   if (kind.includes('swap')) return 'Swap'
+  if (kind.includes('liquidity')) return 'Liquidity'
   if (kind.includes('service') || kind.includes('paid_call') || kind.includes('pay')) return 'Payment'
   if (kind.includes('wallet')) return 'Wallet'
   return 'Action'
@@ -201,6 +202,7 @@ export function selectActivityRows(transactions = []) {
     status: capitalize(tx?.status),
     tone: TX_STATUS_TONE[tx?.status] ?? 'pending',
     time: formatTime(tx?.updatedAt || tx?.createdAt),
+    txUrl: tx?.txExplorerUrl ?? null,
   }))
 }
 
