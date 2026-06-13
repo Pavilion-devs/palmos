@@ -192,6 +192,26 @@ function txAmount(tx) {
   return `${formatTokenAmount(amount)} ${symbol}`.trim()
 }
 
+// Derive a Solscan link from whatever on-chain signature the row carries. Works for both the
+// live `/api/dashboard/transactions` projection (transactionRef / broadcastRefs) and the static
+// snapshot (pre-computed txExplorerUrl). Mirrors dashboardSnapshot's buildSolscanTxUrl.
+const SOLANA_BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/
+
+function txSignature(tx) {
+  if (tx?.transactionRef) return tx.transactionRef
+  if (tx?.txHashFull) return tx.txHashFull
+  const refs = tx?.broadcastRefs
+  if (Array.isArray(refs) && refs.length) return refs[refs.length - 1]
+  return null
+}
+
+function buildTxExplorerUrl(signature, chainId) {
+  if (!signature || typeof signature !== 'string' || signature.length < 80) return null
+  if (!SOLANA_BASE58.test(signature) || chainId === 'solana-local') return null
+  const cluster = chainId === 'solana-devnet' ? '?cluster=devnet' : ''
+  return `https://solscan.io/tx/${signature}${cluster}`
+}
+
 export function selectActivityRows(transactions = []) {
   return transactions.map((tx) => ({
     id: tx?.id,
@@ -202,7 +222,7 @@ export function selectActivityRows(transactions = []) {
     status: capitalize(tx?.status),
     tone: TX_STATUS_TONE[tx?.status] ?? 'pending',
     time: formatTime(tx?.updatedAt || tx?.createdAt),
-    txUrl: tx?.txExplorerUrl ?? null,
+    txUrl: tx?.txExplorerUrl ?? buildTxExplorerUrl(txSignature(tx), tx?.value?.chainId ?? tx?.chainId),
   }))
 }
 
