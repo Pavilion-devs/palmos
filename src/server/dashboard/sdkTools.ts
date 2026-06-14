@@ -132,6 +132,11 @@ export const SDK_TOOL_DEFINITIONS = [
         amount: { type: 'string' },
         slippageBps: { type: 'number' },
         swapMode: { type: 'string', enum: ['in', 'out'] },
+        chainId: {
+          type: 'string',
+          description:
+            "Settlement chain for the policy gate, e.g. 'solana-mainnet'. Defaults to the agent's first allowed chain.",
+        },
         note: { type: 'string' },
         idempotencyKey: { type: 'string' },
       },
@@ -172,6 +177,11 @@ export const SDK_TOOL_DEFINITIONS = [
         outputMint: { type: 'string' },
         autoSwap: { type: 'boolean' },
         slippageBps: { type: 'number' },
+        chainId: {
+          type: 'string',
+          description:
+            "Settlement chain for the policy gate, e.g. 'solana-mainnet'. Defaults to the agent's first allowed chain.",
+        },
         note: { type: 'string' },
         idempotencyKey: { type: 'string' },
       },
@@ -297,6 +307,7 @@ export type SdkSwapRequestInput = {
   amount?: string
   slippageBps?: number
   swapMode?: 'in' | 'out'
+  chainId?: string
   note?: string
   idempotencyKey?: string
 }
@@ -311,6 +322,7 @@ export function readSdkSwapRequestInput(value: unknown): SdkSwapRequestInput {
     amount: readMaybeString(input.amount),
     slippageBps: readMaybeNumber(input.slippageBps),
     swapMode: readSwapMode(input.swapMode),
+    chainId: readMaybeString(input.chainId),
     note: readMaybeString(input.note),
     idempotencyKey: readMaybeString(input.idempotencyKey),
   }
@@ -362,6 +374,7 @@ export type SdkLiquidityRequestInput = {
   outputMint?: string
   autoSwap?: boolean
   slippageBps?: number
+  chainId?: string
   note?: string
   idempotencyKey?: string
 }
@@ -382,6 +395,7 @@ export function readSdkLiquidityRequestInput(value: unknown): SdkLiquidityReques
     outputMint: readMaybeString(input.outputMint),
     autoSwap: readBoolean(input.autoSwap),
     slippageBps: readMaybeNumber(input.slippageBps),
+    chainId: readMaybeString(input.chainId),
     note: readMaybeString(input.note),
     idempotencyKey: readMaybeString(input.idempotencyKey),
   }
