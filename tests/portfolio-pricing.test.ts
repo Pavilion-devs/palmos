@@ -117,6 +117,15 @@ function stubConnection(input: {
   >
   parsedTransactions?: unknown[]
 }) {
+  // The reader fetches recent txns per-signature (getParsedTransaction), not as a batch, to stay
+  // compatible with free-tier RPCs (batch getParsedTransactions is 403'd by e.g. Helius free).
+  // Map each collected signature to its index-aligned parsed tx fixture.
+  const flatSignatures = Object.values(input.signaturesByAddress ?? {}).flat()
+  const sigToParsed = new Map<string, unknown>()
+  ;(input.parsedTransactions ?? []).forEach((parsed, index) => {
+    const sig = flatSignatures[index]?.signature
+    if (sig) sigToParsed.set(sig, parsed)
+  })
   return {
     async getBalance() {
       return input.lamports
@@ -152,6 +161,9 @@ function stubConnection(input: {
     },
     async getParsedTransactions() {
       return input.parsedTransactions ?? []
+    },
+    async getParsedTransaction(signature: string) {
+      return sigToParsed.get(signature) ?? null
     },
   }
 }
