@@ -110,6 +110,7 @@ export type DashboardNativeWalletActionTransaction = DashboardTransactionBase & 
     simulationRefs: string[]
     broadcastRefs: string[]
   }
+  mantle?: DashboardWalletAction['mantle']
 }
 
 /**
@@ -254,6 +255,7 @@ function projectNativeWalletActionTransaction(
       simulationRefs: action.execution.simulationRefs,
       broadcastRefs: action.execution.broadcastRefs,
     },
+    mantle: action.mantle,
   }
 }
 

@@ -24,6 +24,8 @@ import type { AgentRecord } from '../store/AgentRegistry.js'
 import { evaluateSwapRequest, type SwapDecision } from '../policies/compileAgentPolicy.js'
 import type { ByrealClient } from '../integrations/byreal/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
+import type { MantleRecorder } from '../integrations/mantle/client.js'
+import { recordGovernedDecisionOnMantle } from './mantleDecisionRecording.js'
 
 export type RequestAssetSwapInput = {
   agentId: string
@@ -50,6 +52,12 @@ export type RequestAssetSwapDependencies = {
   actionRequests: { put(record: ActionRequestRecord): Promise<unknown> }
   byrealClient?: Pick<ByrealClient, 'buildSwapUnsigned'>
   owsClient?: Pick<OwsClient, 'signAndBroadcastSolanaTx' | 'getSolanaAddress'>
+  /**
+   * Optional Mantle decision-log recorder. After the decision resolves, the verdict + outcome
+   * (incl. denied/blocked) are recorded on Mantle and the tx ref stamped onto the action request.
+   * Best-effort: a recorder failure never affects the Solana settlement. Gated by MANTLE_RECORD_LIVE.
+   */
+  mantleRecorder?: MantleRecorder
   /** Sign but do not broadcast — for dry runs / tests. */
   simulateSettlement?: boolean
   now?: () => string
@@ -184,6 +192,22 @@ function withSwapPolicySnapshot(input: {
 }
 
 export async function requestAssetSwap(
+  deps: RequestAssetSwapDependencies,
+  input: RequestAssetSwapInput,
+): Promise<RequestAssetSwapResult> {
+  const result = await runRequestAssetSwap(deps, input)
+  // Additive Mantle audit layer — record the governed decision + outcome on-chain (best-effort).
+  const actionRequest = await recordGovernedDecisionOnMantle({
+    recorder: deps.mantleRecorder,
+    actionRequests: deps.actionRequests,
+    actionRequest: result.actionRequest,
+    kind: 'asset.swap',
+    resultKind: result.kind,
+  })
+  return { ...result, actionRequest }
+}
+
+async function runRequestAssetSwap(
   deps: RequestAssetSwapDependencies,
   input: RequestAssetSwapInput,
 ): Promise<RequestAssetSwapResult> {

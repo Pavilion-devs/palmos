@@ -1,0 +1,254 @@
+{
+  "contractName": "IdentityRegistry",
+  "sourceName": "IdentityRegistry.sol",
+  "compiler": "0.8.26+commit.8a97fa7a.Emscripten.clang",
+  "evmVersion": "paris",
+  "optimizer": {
+    "enabled": true,
+    "runs": 200
+  },
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "agentCardURI",
+          "type": "string"
+        }
+      ],
+      "name": "AgentCardUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "agentCardURI",
+          "type": "string"
+        }
+      ],
+      "name": "Registered",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "tokenId",
+          "type": "uint256"
+        }
+      ],
+      "name": "Transfer",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "agentIdOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "balanceOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "name",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "tokenId",
+          "type": "uint256"
+        }
+      ],
+      "name": "ownerOf",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "agentCardURI",
+          "type": "string"
+        }
+      ],
+      "name": "register",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "agentCardURI",
+          "type": "string"
+        }
+      ],
+      "name": "setAgentCard",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes4",
+          "name": "interfaceId",
+          "type": "bytes4"
+        }
+      ],
+      "name": "supportsInterface",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "symbol",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "tokenId",
+          "type": "uint256"
+        }
+      ],
+      "name": "tokenURI",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "totalSupply",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60808060405234601a5760016000556109b990816100208239f35b600080fdfe608080604052600436101561001357600080fd5b60003560e01c90816301ffc9a7146107dd5750806306fdde031461078d57806318160ddd146107625780636352211e1461072357806370a08231146106ab57806395d89b411461066a578063a67af3241461047b578063c87b56dd14610384578063e9c9ec73146103465763f2c298be1461008d57600080fd5b346103415760203660031901126103415760043567ffffffffffffffff8111610341576100be9036906004016108b3565b90336000526004602052604060002054610307576000549060001982146102f157600182016000558160005260016020526040600020336bffffffffffffffffffffffff60a01b8254161790553360005260026020526040600020805490600182018092116102f15755816000526003602052604060002067ffffffffffffffff84116102db5761014f8154610921565b601f8111610293575b5060209383916000601f831160011461020a57916101f491817fc118700a4fa70d79a8f1df06b1d2ff9aeaf09bdc4c528a45ddd5182856864594946000916101ff575b508260011b906000198460031b1c19161790555b336000526004875283604060002055604051918291853360007fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef8180a433968361095b565b0390a3604051908152f35b90508601353861019b565b81815286812090601f198416815b8181106102795750916101f49391857fc118700a4fa70d79a8f1df06b1d2ff9aeaf09bdc4c528a45ddd518285686459496941061025f575b5050600182811b0190556101af565b870135600019600385901b60f8161c191690553880610250565b878301358455889650600190930192918901918901610218565b816000526020600020601f860160051c810191602087106102d1575b601f0160051c01905b8181106102c55750610158565b600081556001016102b8565b90915081906102af565b634e487b7160e01b600052604160045260246000fd5b634e487b7160e01b600052601160045260246000fd5b60405162461bcd60e51b8152602060048201526012602482015271185b1c9958591e481c9959da5cdd195c995960721b6044820152606490fd5b600080fd5b34610341576020366003190112610341576004356001600160a01b038116908190036103415760005260046020526020604060002054604051908152f35b34610341576020366003190112610341576004356000818152600160205260409020546103bb906001600160a01b031615156108e1565b60005260036020526040600020604051906000908054906103db82610921565b80855291600181169081156104545750600114610413575b61040f8461040381860382610848565b6040519182918261086a565b0390f35b600090815260208120939250905b80821061043a57509091508101602001610403826103f3565b919260018160209254838588010152019101909291610421565b60ff191660208087019190915292151560051b8501909201925061040391508390506103f3565b346103415760403660031901126103415760043560243567ffffffffffffffff8111610341576104af9036906004016108b3565b6000838152600160205260409020549192916001600160a01b031633036106395781600052600360205260406000209267ffffffffffffffff82116102db576104f88454610921565b601f81116105f1575b50600093601f831160011461056f57827f28b890b32e56d7079379175f76d553b08d61675ccb43f808c088068bff403e879495600091610564575b508360011b906000198560031b1c19161790555b61055f6040519283928361095b565b0390a2005b90508201358661053c565b80855260208520601f19841695805b8781106105d95750847f28b890b32e56d7079379175f76d553b08d61675ccb43f808c088068bff403e879697106105bf575b5050600183811b019055610550565b830135600019600386901b60f8161c1916905585806105b0565b9091602060018192858801358155019301910161057e565b846000526020600020601f840160051c8101916020851061062f575b601f0160051c01905b8181106106235750610501565b60008155600101610616565b909150819061060d565b60405162461bcd60e51b81526020600482015260096024820152683737ba1037bbb732b960b91b6044820152606490fd5b346103415760003660031901126103415761040f60405161068c604082610848565b600681526514105313525160d21b60208201526040519182918261086a565b34610341576020366003190112610341576004356001600160a01b038116908190036103415780156106ef5760005260026020526020604060002054604051908152f35b60405162461bcd60e51b815260206004820152600c60248201526b7a65726f206164647265737360a01b6044820152606490fd5b34610341576020366003190112610341576004356000526001602052602060018060a01b036040600020541661075a8115156108e1565b604051908152f35b346103415760003660031901126103415760005460001981019081116102f157602090604051908152f35b346103415760003660031901126103415761040f6040516107af604082610848565b601581527450616c6d4f53204167656e74204964656e7469747960581b60208201526040519182918261086a565b34610341576020366003190112610341576004359063ffffffff60e01b8216809203610341576020916301ffc9a760e01b8114908115610837575b8115610826575b5015158152f35b635b5e139f60e01b1490508361081f565b6380ac58cd60e01b81149150610818565b90601f8019910116810190811067ffffffffffffffff8211176102db57604052565b91909160208152825180602083015260005b81811061089d575060409293506000838284010152601f8019910116010190565b806020809287010151604082860101520161087c565b9181601f840112156103415782359167ffffffffffffffff8311610341576020838186019501011161034157565b156108e857565b60405162461bcd60e51b81526020600482015260116024820152703737b732bc34b9ba32b73a103a37b5b2b760791b6044820152606490fd5b90600182811c92168015610951575b602083101461093b57565b634e487b7160e01b600052602260045260246000fd5b91607f1691610930565b90918060409360208452816020850152848401376000828201840152601f01601f191601019056fea26469706673582212206104f3a92ed15e033e88e85c26dc50277589ecfa81be9bb1c6419d9b71dc5d5864736f6c634300081a0033",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.26+commit.8a97fa7a\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"agentCardURI\",\"type\":\"string\"}],\"name\":\"AgentCardUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"agentCardURI\",\"type\":\"string\"}],\"name\":\"Registered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"agentIdOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"agentCardURI\",\"type\":\"string\"}],\"name\":\"register\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"agentCardURI\",\"type\":\"string\"}],\"name\":\"setAgentCard\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"totalSupply\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"supportsInterface(bytes4)\":{\"details\":\"ERC-165: advertises ERC-721 + Metadata so explorers index this as an NFT collection.\"}},\"title\":\"PalmOS ERC-8004 Identity Registry\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"agentIdOf(address)\":{\"notice\":\"agentId owned by an address (0 == not registered). Enables idempotent minting.\"},\"register(string)\":{\"notice\":\"Mint the caller a soulbound agent-identity NFT. One identity per address.\"},\"setAgentCard(uint256,string)\":{\"notice\":\"Update the agent card for an identity you own (capabilities can evolve).\"}},\"notice\":\"A minimal-but-faithful ERC-8004 *trustless agent identity* registry. Each agent is a         soulbound ERC-721 whose tokenURI is the agent card (name, functionalities, service         endpoints, payment address). `register` mints the caller an identity NFT. Identity is         non-transferable because it represents *which agent this is*, not a tradable asset \\u2014         the common soulbound pattern for on-chain identity.         Self-contained (no imports) so it compiles with a single solc invocation and verifies         on the Mantle Sepolia explorer as a single flattened source \\u2014 no remappings.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"IdentityRegistry.sol\":\"IdentityRegistry\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"IdentityRegistry.sol\":{\"keccak256\":\"0x33f68375a3e42d32d45f98bc8c44d8490d4d2c6d44aed5e1d23fe5cfa7bc9e8c\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://0f23117fd1e82c5bdcc452c74045a2832572c47f51efa3bef4185ead15f30c1b\",\"dweb:/ipfs/QmdjQps2VGtyzt9HZoEUXv6CEGEkEZSVbBEEvcXhyJEEcP\"]}},\"version\":1}"
+}

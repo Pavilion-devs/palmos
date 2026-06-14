@@ -368,3 +368,62 @@ green). *Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools
 > Note for C2: `VersionedTransaction` in `@solana/web3.js` v1 has no `verifySignatures()`; use
 > `nacl.sign.detached.verify(vtx.message.serialize(), sig, ownerPubkey.toBytes())` (tweetnacl is
 > already a dep) as the integrity check before broadcast, as Spike 0 does.
+
+---
+
+## 9. Mantle layer (Turing Test "Part A" — Mantle-general + Defining Features)
+
+> **Story:** Solana = Byreal DeFi execution (done). Mantle = agent **identity** (ERC-8004) + a
+> verifiable **decision/outcome log**. **One agent, one OWS vault, two chains** — the SAME vault
+> that signs Main's Solana swaps also signs its Mantle identity + every governed decision. Additive
+> only; the Solana/Byreal settlement path is untouched.
+
+**Rubric mapping:** Technical (runs on Mantle) · Ecosystem fit (Mantle stack: viem + Mantle Sepolia)
+· Defining Feature #1 (every decision + outcome on Mantle, incl. *denied*) · Defining Feature #2
+(ERC-8004 identity NFT).
+
+### Build status (M-series)
+- **Spike E ✅ PASS** (`scripts/spike-e-ows-evm-sign.ts`) — OWS signs EVM tx hashes; viem recovers
+  the vault's `eip155:` address (low-s normalized). The OWS-EVM bridge is real → **OWS-EVM is the
+  deployer + identity owner + decision-log signer** (no separate recorder key needed; a
+  `MANTLE_RECORDER_PRIVATE_KEY` fallback exists but is unused). Live Main vault confirmed signing.
+- **M1 ✅ Contracts** (`contracts/`, self-contained, solc 0.8.26 viaIR, isolated local toolchain):
+  `IdentityRegistry.sol` (minimal-but-faithful ERC-8004 soulbound ERC-721; `register(agentCardURI)`
+  mints; tokenURI = on-chain base64 agent card) + `AgentActionLog.sol` (one cheap `DecisionRecorded`
+  event per governed decision — kind/verdict/outcome/**solanaSignature** cross-chain link/amount;
+  records denied/blocked too). Compiled artifacts in `contracts/out/`.
+- **M2 ✅ Module** (`src/integrations/mantle/*`): `owsAccount.ts` (OWS→viem `LocalAccount` bridge),
+  `client.ts` (`MantleClient` = deploy/mint/record/read + the narrow `MantleRecorder`), `chain.ts`
+  (Mantle Sepolia 5003 + explorer URLs), `agentCard.ts`, `deploymentStore.ts` (artifact at
+  `<baseDir>/mantle/deployment.json` is the source of truth; env overrides; `MANTLE_RECORD_LIVE`
+  env-only). OWS client gained `getEvmAddress` + `signEvmHash`.
+- **M3 ✅ Wiring**: `mantleRecorder?` optional structural dep on `requestAssetSwap` +
+  `requestLiquidityAction` (assembled in `sdkRoutes.ts`). After each decision resolves, the
+  verdict+outcome (incl. blocked/failed) is recorded and `requestContext.mantle*` stamped.
+  **Best-effort** (never breaks a governed swap) and **gated by `MANTLE_RECORD_LIVE`** (default off
+  → simulate-only, no gas). Helper: `src/app/mantleDecisionRecording.ts`.
+- **M4 ✅ Dashboard**: "Recorded on Mantle" Mantlescan link on governed activity rows (mirrors the
+  Solscan precedent: `walletActions.ts` → `dashboardTransactions.ts` → `selectors.js` →
+  RecentActivity/ActivityPage/WalletDetailPage), plus an **ERC-8004 identity card**
+  (`AgentIdentityCard.jsx` + `useMantleIdentity` hook + `GET /api/dashboard/mantle`). Dark
+  lime-on-black; renders only once deployed/minted.
+- **M5 ✅ LIVE on Mantle Sepolia** (funded + executed 2026-06-14; deployer = Main's OWS EVM
+  `0x868C23dbfd439d3c9477FE6B192dA2265c3c31f5`, the same vault that signs its Solana swaps). Canonical
+  explorer = **sepolia.mantlescan.xyz** (the old Blockscout host 302-redirects there).
+  - **IdentityRegistry** `0xed9317a4b16d275c59bd2bcfa7336d28efcebe41`
+  - **AgentActionLog** `0x67f76b19141228c339f3c0b241af0c1c9f9b1772`
+  - **Identity NFT #1** owner = the OWS EVM address; tokenURI = on-chain agent card (name Main,
+    5 Byreal skills, pays to Solana `4Lerm…3XW6`). https://sepolia.mantlescan.xyz/nft/0xed9317a4b16d275c59bd2bcfa7336d28efcebe41/1
+  - **Decision log:** `recordCount = 3` — incl. a real **denied/blocked** governed swap routed through
+    `requestAssetSwap` (out-of-policy → stopped before any Solana call → recorded on Mantle).
+  - Re-run any time: `scripts/mantle-deploy.ts` → `mantle-mint-identity.ts` → `mantle-verify-record.ts`.
+- **M6 ✅ Dashboard proven live** — the overview renders the **ERC-8004 identity card** (skills +
+  addresses + NFT link) and **"Recorded on Mantle"** Mantlescan links on the governed denials in
+  Recent Activity / Activity (screenshots captured).
+- **M7 ✅ Source verified on Mantlescan** — both contracts show their Solidity source on the explorer
+  (compiler v0.8.26, viaIR, optimizer 200, evmVersion paris) via `scripts/mantle-verify.ts`
+  (Etherscan V2, chainid 5003; needs `ETHERSCAN_API_KEY`).
+
+> Verification: backend `tsc` + 175/177 tests (1 pre-existing portfolio failure, unrelated) +
+> frontend `vite build` + eslint all green; on-chain reads confirm identity owner, agent card, and
+> `recordCount = 3`; dashboard screenshots confirm the identity card + Mantle links render live.

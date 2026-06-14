@@ -6,6 +6,7 @@ import {
   listWallets,
   signTransaction,
   signMessage,
+  signHash,
   type ApiKeyResult,
   type WalletInfo,
 } from '@open-wallet-standard/core'
@@ -230,6 +231,33 @@ export class OwsClient {
 
   getSolanaAddress(nameOrId: string): string | undefined {
     return readSolanaAddress(this.getWallet(nameOrId))
+  }
+
+  // The wallet's EVM (eip155, secp256k1 @ m/44'/60'/0'/0/0) address — the SAME vault that signs
+  // this agent's Solana txns. This is what ties the Mantle ERC-8004 identity + decision log to the
+  // OWS custody: "one agent, one vault, two chains".
+  getEvmAddress(nameOrId: string): string | undefined {
+    return readEvmAddress(this.getWallet(nameOrId))
+  }
+
+  // Sign a 32-byte hash with the wallet's EVM (secp256k1) key. Returns the raw r||s signature hex
+  // plus the recovery id. This is the signing primitive the Mantle viem account bridges to:
+  // viem builds an EVM tx, we keccak256 it, OWS signs the hash here, viem re-attaches {r,s,yParity}.
+  // Proven in scripts/spike-e-ows-evm-sign.ts (sign → recover → matches the eip155 address).
+  signEvmHash(
+    walletNameOrId: string,
+    hashHex: string,
+  ): { signature: string; recoveryId: number } {
+    const hex = hashHex.startsWith('0x') ? hashHex.slice(2) : hashHex
+    const result = signHash(
+      walletNameOrId,
+      'ethereum',
+      hex,
+      this.config.passphrase,
+      0,
+      this.config.vaultPath,
+    )
+    return { signature: result.signature, recoveryId: result.recoveryId ?? 0 }
   }
 
   signMessage(walletNameOrId: string, chain: string, message: string) {

@@ -292,6 +292,18 @@ export function WalletDetailPage() {
                         <ExternalLink className="size-3.5" strokeWidth={2} aria-hidden="true" />
                       </a>
                     )}
+                    {it.mantleTxUrl && (
+                      <a
+                        href={it.mantleTxUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Recorded on Mantle${it.mantleOutcome ? ` (${it.mantleOutcome})` : ''}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-lime/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-lime transition-colors hover:bg-lime/20"
+                      >
+                        Mantle
+                        <ExternalLink className="size-3" strokeWidth={2} aria-hidden="true" />
+                      </a>
+                    )}
                   </div>
                 </div>
               )

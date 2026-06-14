@@ -40,6 +40,19 @@ export type DashboardWalletAction = {
     errorCode?: string
     errorMessage?: string
   }
+  /**
+   * Mantle decision-log stamp (set by the additive Mantle audit layer when MANTLE_RECORD_LIVE=1).
+   * Lets the dashboard surface "Recorded on Mantle" + a Mantlescan link on governed actions.
+   */
+  mantle?: {
+    recorded?: boolean
+    simulated?: boolean
+    verdict?: string
+    outcome?: string
+    txHash?: string
+    txUrl?: string
+    agentId?: string
+  }
 }
 
 export type DashboardWalletActionHistory = {
@@ -132,6 +145,22 @@ export function projectWalletAction(
       ? record.requestContext.approvalStateRef
       : undefined
 
+  const ctx = record.requestContext ?? {}
+  const ctxString = (key: string): string | undefined =>
+    typeof ctx[key] === 'string' && (ctx[key] as string).length > 0 ? (ctx[key] as string) : undefined
+  const mantle =
+    ctx.mantleRecorded != null || ctx.mantleTxUrl != null || ctx.mantleVerdict != null
+      ? {
+          recorded: typeof ctx.mantleRecorded === 'boolean' ? ctx.mantleRecorded : undefined,
+          simulated: typeof ctx.mantleSimulated === 'boolean' ? ctx.mantleSimulated : undefined,
+          verdict: ctxString('mantleVerdict'),
+          outcome: ctxString('mantleOutcome'),
+          txHash: ctxString('mantleTxHash'),
+          txUrl: ctxString('mantleTxUrl'),
+          agentId: ctxString('mantleAgentId'),
+        }
+      : undefined
+
   return {
     walletActionId: record.actionRequestId,
     actionRequestId: record.actionRequestId,
@@ -166,6 +195,7 @@ export function projectWalletAction(
       errorCode: record.errorCode,
       errorMessage: record.errorMessage,
     },
+    mantle,
   }
 }
 

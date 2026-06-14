@@ -3,16 +3,19 @@ import { StatCards } from './StatCards'
 import { AssetsChart } from './AssetsChart'
 import { RecentActivity } from './RecentActivity'
 import { NeedsAttention } from './NeedsAttention'
+import { AgentIdentityCard } from './AgentIdentityCard'
 import { useAgentWallets } from '../../hooks/useAgentWallets'
 import useDashboardApprovals from '../../hooks/useDashboardApprovals'
 import { useAssetsHistory } from '../../hooks/useAssetsHistory'
 import useDashboardTransactions from '../../hooks/useDashboardTransactions'
+import useMantleIdentity from '../../hooks/useMantleIdentity'
 
 export function OverviewPage() {
   const agentsState = useAgentWallets()
   const approvalsState = useDashboardApprovals()
   const assetsHistoryState = useAssetsHistory()
   const transactionsState = useDashboardTransactions(5)
+  const mantleState = useMantleIdentity()
 
   return (
     <Shell title="Overview">
@@ -32,11 +35,14 @@ export function OverviewPage() {
           status={transactionsState.status}
           transactions={transactionsState.transactions}
         />
-        <NeedsAttention
-          status={approvalsState.status}
-          approvals={approvalsState.approvals}
-          refresh={approvalsState.refresh}
-        />
+        <div className="flex flex-col gap-6">
+          <AgentIdentityCard mantle={mantleState.mantle} />
+          <NeedsAttention
+            status={approvalsState.status}
+            approvals={approvalsState.approvals}
+            refresh={approvalsState.refresh}
+          />
+        </div>
       </div>
     </Shell>
   )

@@ -27,6 +27,7 @@ import {
 import { recordDashboardAudit } from '../audit.js'
 import { isShowcaseRunEnabled } from '../config.js'
 import type { DashboardRouteContext } from '../context.js'
+import { readMantleDeployment } from '../../../integrations/mantle/deploymentStore.js'
 import {
   beginDashboardMutationIdempotency,
   completeDashboardMutationIdempotency,
@@ -79,6 +80,17 @@ export function registerSystemRoutes(
       localDemoBaseUrl: context.localDemoBaseUrl,
       localPusdServer: Boolean(context.localServer),
     })
+  })
+
+  // The agent's ERC-8004 identity on Mantle (deployed contracts + minted agent card). Read-only,
+  // degrades to { mantle: null } until scripts/mantle-deploy + mantle-mint-identity have run.
+  app.get('/api/dashboard/mantle', async (_req, res) => {
+    try {
+      const deployment = await readMantleDeployment(context.baseDir)
+      res.json({ ok: true, mantle: deployment ?? null })
+    } catch {
+      res.json({ ok: true, mantle: null })
+    }
   })
 
   app.get('/api/dashboard/system/health', async (_req, res) => {

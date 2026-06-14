@@ -7,6 +7,7 @@ import {
   requestLiquidityAction,
 } from '../../../index.js'
 import { createByrealClient } from '../../../integrations/byreal/client.js'
+import { createMantleRecorder } from '../../../integrations/mantle/deploymentStore.js'
 import { requiresPrivateSettlement } from '../../../app/agentPrivacyMode.js'
 import {
   executeUmbraPrivateSettlement,
@@ -746,12 +747,20 @@ async function executeSdkAssetSwapRequest(input: {
     bin: context.env.BYREAL_CLI_BIN,
   })
 
+  const mantleRecorder = await createMantleRecorder({
+    baseDir: context.baseDir,
+    ows: context.owsClient,
+    walletName: auth.agent.owsWalletName ?? auth.agent.owsWalletId ?? auth.agent.agentId,
+    env: context.env,
+  })
+
   const result = await requestAssetSwap(
     {
       agentRegistry: context.workspace.agentRegistry,
       actionRequests: actionRequestRegistry,
       owsClient: context.owsClient,
       byrealClient: byreal,
+      mantleRecorder,
       // Live settlement broadcasts to Solana mainnet (real funds), so default to
       // sign-only — a tool call can't accidentally spend. Set BYREAL_SETTLE_LIVE=1
       // to settle for real.
@@ -772,6 +781,10 @@ async function executeSdkAssetSwapRequest(input: {
       amount: body.amount,
       slippageBps: body.slippageBps,
       swapMode: body.swapMode,
+      // The policy gate matches on the agent's allowed chains (e.g. solana-mainnet); the
+      // generic requestAssetSwap default of 'solana' would never match, so resolve from the
+      // agent's policy (mainnet first) unless the caller pins one explicitly.
+      chainId: body.chainId ?? auth.agent.policyConfig.allowedChains[0],
       note: body.note,
       source: 'sdk',
     },
@@ -939,12 +952,20 @@ async function executeSdkLiquidityActionRequest(input: {
     bin: context.env.BYREAL_CLI_BIN,
   })
 
+  const mantleRecorder = await createMantleRecorder({
+    baseDir: context.baseDir,
+    ows: context.owsClient,
+    walletName: auth.agent.owsWalletName ?? auth.agent.owsWalletId ?? auth.agent.agentId,
+    env: context.env,
+  })
+
   const result = await requestLiquidityAction(
     {
       agentRegistry: context.workspace.agentRegistry,
       actionRequests: actionRequestRegistry,
       owsClient: context.owsClient,
       byrealClient: byreal,
+      mantleRecorder,
       simulateSettlement: context.env.BYREAL_SETTLE_LIVE !== '1',
       createId: idempotentActionRequestId
         ? (prefix) =>
@@ -968,6 +989,9 @@ async function executeSdkLiquidityActionRequest(input: {
       outputMint: body.outputMint,
       autoSwap: body.autoSwap,
       slippageBps: body.slippageBps,
+      // Match the policy gate on the agent's allowed chains (mainnet first); the generic
+      // 'solana' default would never match. Caller may pin one explicitly.
+      chainId: body.chainId ?? auth.agent.policyConfig.allowedChains[0],
       note: body.note,
       source: 'sdk',
     },

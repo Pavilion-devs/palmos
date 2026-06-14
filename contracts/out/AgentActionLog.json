@@ -1,0 +1,142 @@
+{
+  "contractName": "AgentActionLog",
+  "sourceName": "AgentActionLog.sol",
+  "compiler": "0.8.26+commit.8a97fa7a.Emscripten.clang",
+  "evmVersion": "paris",
+  "optimizer": {
+    "enabled": true,
+    "runs": 200
+  },
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "actionId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "seq",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "verdict",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "solanaSignature",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "detail",
+          "type": "string"
+        }
+      ],
+      "name": "DecisionRecorded",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "recordCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "actionId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "string",
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "verdict",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "solanaSignature",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "detail",
+          "type": "string"
+        }
+      ],
+      "name": "recordDecision",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "seq",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60808060405234601557610261908161001b8239f35b600080fdfe608080604052600436101561001357600080fd5b60003560e01c908163900407bc146101c1575063a2f9e0d61461003557600080fd5b346101bc576101003660031901126101bc5760443567ffffffffffffffff81116101bc576100679036906004016101dc565b9060643567ffffffffffffffff81116101bc576100889036906004016101dc565b91909260843567ffffffffffffffff81116101bc576100ab9036906004016101dc565b92909160a43567ffffffffffffffff81116101bc576100ce9036906004016101dc565b60e43567ffffffffffffffff81116101bc576100ee9036906004016101dc565b95909660005460001981146101a657600101998a998a60005560405197889760c0895260c089019061011f9261020a565b9087820360208901526101319261020a565b9085820360408701526101439261020a565b9083820360608501526101559261020a565b9360c435608083015281850360a083015260243594600435946101779261020a565b037f53a2977f3770629e2bebdb11e564fdb3371aa70ab4e248b2b1e62e46dd6dca7491a4604051908152602090f35b634e487b7160e01b600052601160045260246000fd5b600080fd5b346101bc5760003660031901126101bc576020906000548152f35b9181601f840112156101bc5782359167ffffffffffffffff83116101bc57602083818601950101116101bc57565b908060209392818452848401376000828201840152601f01601f191601019056fea26469706673582212207419c13a10507f947eb9dbf3991794bb68c29cb1f6ec937f43615ad8d347bbaa64736f6c634300081a0033",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.26+commit.8a97fa7a\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"actionId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"seq\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"kind\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"verdict\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"outcome\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"solanaSignature\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"detail\",\"type\":\"string\"}],\"name\":\"DecisionRecorded\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"recordCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"agentId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"actionId\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"kind\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"verdict\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"outcome\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"solanaSignature\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"detail\",\"type\":\"string\"}],\"name\":\"recordDecision\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"seq\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"events\":{\"DecisionRecorded(uint256,bytes32,uint256,string,string,string,string,uint256,string)\":{\"params\":{\"actionId\":\"keccak256 of the PalmOS actionRequestId (stable cross-system key)\",\"agentId\":\"the ERC-8004 IdentityRegistry token id of the acting agent\",\"amount\":\"informational notional/base-unit amount\",\"detail\":\"freeform context (asset pair, policy reason code, etc.)\",\"kind\":\"asset.swap | asset.liquidity\",\"outcome\":\"executed | approval_pending | blocked | failed\",\"seq\":\"global monotonic sequence number\",\"solanaSignature\":\"Solana settlement signature (empty when not executed)\",\"verdict\":\"auto_approved | approval_required | denied\"}}},\"kind\":\"dev\",\"methods\":{},\"title\":\"PalmOS Agent Action Log\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"recordCount()\":{\"notice\":\"Monotonic count of all decisions ever recorded (also used as the per-record seq).\"},\"recordDecision(uint256,bytes32,string,string,string,string,uint256,string)\":{\"notice\":\"Record one governed decision + outcome. Anyone can call, but in PalmOS the caller is         the agent's own OWS EVM account \\u2014 so msg.sender == the agent that made the decision.\"}},\"notice\":\"An ERC-8004-style validation/reputation log: an on-chain benchmark of *governed* agent         behavior. EVERY policy decision and its outcome is recorded as one cheap, indexable         event \\u2014 INCLUDING denied/blocked actions, which is the governance money-shot (\\\"the         agent was stopped on-chain\\\"). `solanaSignature` is the cross-chain link tying a decision         to its Byreal/Solana settlement. This is PalmOS's audit/governance thesis living on         Mantle: the hackathon's \\\"on-chain benchmarking of AI\\\", not a bolt-on.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"AgentActionLog.sol\":\"AgentActionLog\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"AgentActionLog.sol\":{\"keccak256\":\"0xc5c7f62ea7a104fa3e82b410ea492a1cbd61de8e461b11121d8e486243fa72b8\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://105d7ca6636da130e7c7bb496ea2d9a5941fda88d494552321427543ad76e057\",\"dweb:/ipfs/QmbQxB8vFtqP8eeyTr1Xjohtofpiwyoxw4W9Wwn4bE4ii1\"]}},\"version\":1}"
+}

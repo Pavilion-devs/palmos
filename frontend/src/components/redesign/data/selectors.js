@@ -223,6 +223,9 @@ export function selectActivityRows(transactions = []) {
     tone: TX_STATUS_TONE[tx?.status] ?? 'pending',
     time: formatTime(tx?.updatedAt || tx?.createdAt),
     txUrl: tx?.txExplorerUrl ?? buildTxExplorerUrl(txSignature(tx), tx?.value?.chainId ?? tx?.chainId),
+    // Mantle decision-log link: the on-chain record of this governed decision + outcome.
+    mantleTxUrl: tx?.mantle?.txUrl ?? tx?.mantleTxUrl ?? null,
+    mantleOutcome: tx?.mantle?.outcome ?? tx?.mantleOutcome ?? null,
   }))
 }
 

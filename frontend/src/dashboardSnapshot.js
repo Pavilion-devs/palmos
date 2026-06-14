@@ -795,6 +795,12 @@ function adaptNativeWalletActionRow(row, agentsById) {
     txHash: shortTxHash(txHashFull),
     txHashFull,
     txExplorerUrl: buildSolscanTxUrl(txHashFull, row.value?.chainId ?? target.chainId ?? null),
+    // Mantle decision-log stamp (additive audit layer): a Mantlescan link to the on-chain record
+    // of this governed decision + outcome, set when MANTLE_RECORD_LIVE=1.
+    mantleTxUrl: row.mantle?.txUrl ?? null,
+    mantleRecorded: row.mantle?.recorded ?? false,
+    mantleVerdict: row.mantle?.verdict ?? null,
+    mantleOutcome: row.mantle?.outcome ?? null,
     status: row.status,
     errorCode: row.errorCode ?? null,
     errorMessage: row.errorMessage ?? null,

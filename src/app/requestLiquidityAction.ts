@@ -18,6 +18,8 @@ import type { AgentRecord } from '../store/AgentRegistry.js'
 import { evaluateLiquidityRequest, type LiquidityDecision } from '../policies/compileAgentPolicy.js'
 import type { BuildPositionParams, ByrealClient, LiquidityOp } from '../integrations/byreal/client.js'
 import type { OwsClient } from '../integrations/ows/client.js'
+import type { MantleRecorder } from '../integrations/mantle/client.js'
+import { recordGovernedDecisionOnMantle } from './mantleDecisionRecording.js'
 
 export type RequestLiquidityActionInput = {
   agentId: string
@@ -54,6 +56,11 @@ export type RequestLiquidityActionDependencies = {
   actionRequests: { put(record: ActionRequestRecord): Promise<unknown> }
   byrealClient?: Pick<ByrealClient, 'buildPositionUnsigned'>
   owsClient?: Pick<OwsClient, 'signAndBroadcastSolanaTx' | 'getSolanaAddress'>
+  /**
+   * Optional Mantle decision-log recorder. Records the LP decision + outcome (incl. denied/blocked)
+   * on Mantle and stamps the tx ref onto the action request. Best-effort; gated by MANTLE_RECORD_LIVE.
+   */
+  mantleRecorder?: MantleRecorder
   /** Sign but do not broadcast — for dry runs / tests. */
   simulateSettlement?: boolean
   now?: () => string
@@ -276,6 +283,22 @@ function toBuildPositionParams(
 }
 
 export async function requestLiquidityAction(
+  deps: RequestLiquidityActionDependencies,
+  input: RequestLiquidityActionInput,
+): Promise<RequestLiquidityActionResult> {
+  const result = await runRequestLiquidityAction(deps, input)
+  // Additive Mantle audit layer — record the governed decision + outcome on-chain (best-effort).
+  const actionRequest = await recordGovernedDecisionOnMantle({
+    recorder: deps.mantleRecorder,
+    actionRequests: deps.actionRequests,
+    actionRequest: result.actionRequest,
+    kind: 'asset.liquidity',
+    resultKind: result.kind,
+  })
+  return { ...result, actionRequest }
+}
+
+async function runRequestLiquidityAction(
   deps: RequestLiquidityActionDependencies,
   input: RequestLiquidityActionInput,
 ): Promise<RequestLiquidityActionResult> {
