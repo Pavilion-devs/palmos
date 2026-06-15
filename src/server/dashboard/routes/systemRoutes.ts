@@ -201,6 +201,81 @@ export function registerSystemRoutes(
     })
   })
 
+  // Self-service profile update: any authenticated operator may edit *their own*
+  // display name + email. Unlike PATCH /operators/:operatorId (owner-only, for
+  // managing other operators), this is scoped to the caller and never changes
+  // role/status. Upserts so it also works for the local-dev/env identity that
+  // has no stored operator record yet.
+  app.patch('/api/dashboard/session/profile', async (req, res) => {
+    const identity = readDashboardSessionIdentity({ req, env: context.env })
+    if (!identity) {
+      sendDashboardApiError(res, 401, {
+        code: 'dashboard_access_required',
+        message: 'Dashboard access is required.',
+      })
+      return
+    }
+
+    try {
+      const patch = readDashboardOperatorPatch(req.body)
+      const existing = await context.workspace.dashboardOperatorRegistry.get(
+        identity.operatorId,
+      )
+      // Only profile fields move; role comes from the trusted session identity
+      // (and only when seeding a brand-new record), never from the request body.
+      const operator = createDashboardOperatorRecord({
+        env: context.env,
+        existing,
+        patch: {
+          operatorId: identity.operatorId,
+          displayName: patch.displayName,
+          email: patch.email,
+          role: existing ? undefined : identity.role,
+        },
+      })
+      if (!operator) {
+        sendDashboardApiError(res, 400, {
+          code: 'invalid_request',
+          message: 'Invalid profile update.',
+        })
+        return
+      }
+
+      if (existing) {
+        const saved =
+          await context.workspace.dashboardOperatorRegistry.putIfUpdatedAt(
+            operator,
+            existing.updatedAt,
+          )
+        if (!saved) {
+          sendDashboardApiError(res, 409, {
+            code: 'operator_conflict',
+            message: 'Profile changed while the update was in progress.',
+          })
+          return
+        }
+      } else {
+        await context.workspace.dashboardOperatorRegistry.put(operator)
+      }
+
+      await recordDashboardAudit({
+        context,
+        identity,
+        action: 'operator.update',
+        target: { type: 'operator', id: operator.operatorId },
+        summary: `Operator ${operator.operatorId} updated their profile.`,
+        metadata: sanitizeDashboardOperator(operator),
+      })
+
+      res.json({ ok: true, operator: sanitizeDashboardOperator(operator) })
+    } catch (error) {
+      sendDashboardInternalError(
+        res,
+        error instanceof Error ? error.message : 'Unable to update profile.',
+      )
+    }
+  })
+
   app.get('/api/dashboard/operators', async (_req, res) => {
     const workspace = await ensureDashboardWorkspaceRecord({
       registry: context.workspace.dashboardWorkspaceRegistry,

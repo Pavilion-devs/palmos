@@ -5,9 +5,9 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Settings,
-  LifeBuoy,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useWorkspace } from '../../hooks/useWorkspace'
 
 const navItems = [
   { label: 'Overview', icon: LayoutGrid, to: '/dashboard', end: true },
@@ -19,6 +19,10 @@ const navItems = [
 ]
 
 export function Sidebar() {
+  const { workspace } = useWorkspace()
+  const workspaceName = workspace?.displayName?.trim() || 'Workspace'
+  const initial = workspaceName.charAt(0).toUpperCase()
+
   return (
     <aside className="flex w-[248px] shrink-0 flex-col rounded-3xl bg-sidebar p-5">
       {/* Logo */}
@@ -50,15 +54,23 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Workspace identity */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="h-px bg-hairline" />
-        <button
-          type="button"
-          className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+        <NavLink
+          to="/dashboard/settings"
+          className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-sidebar-accent/60"
         >
-          <LifeBuoy className="size-5" strokeWidth={2} aria-hidden="true" />
-          Support
-        </button>
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sm font-semibold text-lime">
+            {initial}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {workspaceName}
+            </span>
+            <span className="block text-xs text-muted-foreground">Workspace</span>
+          </span>
+        </NavLink>
       </div>
     </aside>
   )

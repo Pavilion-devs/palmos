@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { Shell } from './Shell'
 import { useOperatorSession } from '../../hooks/useOperatorSession'
+import { useWorkspace } from '../../hooks/useWorkspace'
 import { fetchDashboardApi } from '../../useDashboardStore'
 import { truncateAddress } from './data/selectors'
 
@@ -69,14 +70,13 @@ function OperatorProfile() {
     setSaved(false)
     setError('')
     try {
-      const response = await fetchDashboardApi(
-        `/api/dashboard/operators/${encodeURIComponent(operator.operatorId)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ displayName: name.trim(), email: email.trim() }),
-        },
-      )
+      // Self-service profile endpoint — any role may edit their own name/email
+      // (the owner-only /operators/:id route is for managing other operators).
+      const response = await fetchDashboardApi('/api/dashboard/session/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: name.trim(), email: email.trim() }),
+      })
       const payload = await response.json().catch(() => null)
       if (!response.ok || payload?.ok === false) {
         throw new Error(payload?.message || payload?.error || 'Could not save profile.')
@@ -154,6 +154,117 @@ function OperatorProfile() {
   )
 }
 
+function WorkspaceSettings() {
+  const { workspace, refresh } = useWorkspace()
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  // Sync the form once the workspace record loads.
+  useEffect(() => {
+    setName(workspace?.displayName ?? '')
+  }, [workspace?.displayName])
+
+  const workspaceId = workspace?.workspaceId ?? '—'
+  const dirty =
+    name.trim().length > 0 && name.trim() !== (workspace?.displayName ?? '')
+
+  async function save() {
+    setSaving(true)
+    setSaved(false)
+    setError('')
+    try {
+      const response = await fetchDashboardApi('/api/dashboard/workspace', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: name.trim() }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.message || payload?.error || 'Could not save workspace.')
+      }
+      await refresh()
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save workspace.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function copyId() {
+    if (!workspace?.workspaceId) return
+    try {
+      await navigator.clipboard?.writeText(workspace.workspaceId)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  return (
+    <section className="rounded-3xl bg-panel p-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Workspace</h2>
+        {saved && !dirty && (
+          <span className="inline-flex items-center gap-1 text-xs text-lime">
+            <Check className="size-3.5" aria-hidden="true" /> Saved
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-3 rounded-xl border border-blocked/30 bg-blocked/10 px-3 py-2 text-xs text-blocked">
+          {error}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-col">
+        <Row label="Workspace name" sub="Shown across the dashboard">
+          <Input
+            value={name}
+            readOnly={false}
+            placeholder="My workspace"
+            onChange={(e) => {
+              setName(e.target.value)
+              setSaved(false)
+            }}
+          />
+        </Row>
+        <Row label="Workspace ID" sub={workspaceId}>
+          <button
+            type="button"
+            onClick={copyId}
+            className="inline-flex items-center gap-2 rounded-full border border-hairline px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-panel-2"
+          >
+            {copied ? (
+              <Check className="size-3.5 text-lime" strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <Copy className="size-3.5" strokeWidth={2} aria-hidden="true" />
+            )}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </Row>
+        <Row label="Network" sub="Solana cluster for reads & settlement" last><NetworkToggle /></Row>
+      </div>
+
+      <div className="mt-5 flex justify-end">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !dirty}
+          className="rounded-full bg-lime px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function NetworkToggle() {
   const [network, setNetwork] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -207,7 +318,6 @@ function NetworkToggle() {
 }
 
 export function SettingsPage() {
-  const { operator } = useOperatorSession()
   const [driver, setDriver] = useState('File')
   const [snapshots, setSnapshots] = useState(true)
 
@@ -215,18 +325,7 @@ export function SettingsPage() {
     <Shell title="Settings">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Workspace */}
-        <section className="rounded-3xl bg-panel p-6">
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Workspace</h2>
-          <div className="mt-4 flex flex-col">
-            <Row label="Workspace name" sub="Shown across the dashboard"><Input value="Default workspace" /></Row>
-            <Row label="Workspace ID" sub={operator?.workspaceId ?? 'palmos_workspace_default'}>
-              <button type="button" className="inline-flex items-center gap-2 rounded-full border border-hairline px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-panel-2">
-                <Copy className="size-3.5" strokeWidth={2} aria-hidden="true" /> Copy
-              </button>
-            </Row>
-            <Row label="Network" sub="Solana cluster for reads & settlement" last><NetworkToggle /></Row>
-          </div>
-        </section>
+        <WorkspaceSettings />
 
         {/* Operator profile */}
         <OperatorProfile />
