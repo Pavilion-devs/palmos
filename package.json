@@ -21,6 +21,7 @@
     "palmos:readiness": "node --import tsx src/cli/checkPusdReadiness.ts",
     "palmos:storage": "node --import tsx src/cli/manageStorage.ts",
     "palmos:postgres": "node --import tsx src/cli/managePostgres.ts",
+    "mcp:byreal": "node --import tsx src/mcp/byrealMcpServer.ts",
     "palmos:action-requests": "node --import tsx src/cli/reconcileActionRequests.ts",
     "palmos:action-lifecycle": "node --import tsx src/cli/reconcileNativeActionRequests.ts",
     "palmos:portfolio-snapshots": "node --import tsx src/cli/capturePortfolioSnapshots.ts",

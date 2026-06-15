@@ -87,6 +87,8 @@ function describeSwapPolicyFailure(decision: SwapDecision, input: RequestAssetSw
       return `Chain ${input.chainId ?? 'solana'} is not allowed for this agent's swap policy.`
     case 'policy.swap_asset_not_allowed':
       return `Asset ${decision.disallowedAsset ?? ''} is not allowed for this agent's swap policy.`
+    case 'policy.swap_slippage_exceeds_cap':
+      return `Swap slippage ${input.slippageBps ?? ''}bps exceeds this agent's risk policy cap.`
     case 'policy.swap_amount_exceeds_limit':
       return `Swap amount ${input.amount} ${input.inputAssetSymbol} exceeds the effective limit of ${decision.effectiveMaxSwapAmount}.`
     case 'policy.agent_restricted':
@@ -251,6 +253,7 @@ async function runRequestAssetSwap(
     inputAmount: input.amount,
     chainId,
     trustTier: agent.trustTier,
+    slippageBps: input.slippageBps,
   })
 
   if (decision.status === 'denied') {

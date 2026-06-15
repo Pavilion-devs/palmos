@@ -169,13 +169,27 @@ export const SDK_TOOL_DEFINITIONS = [
         priceLower: { type: 'string' },
         priceUpper: { type: 'string' },
         nftMint: { type: 'string' },
-        base: { type: 'string' },
+        base: {
+          type: 'string',
+          description:
+            'For open/increase: the MINT address of the token you are supplying (must be one of the pool mints). Required with autoSwap.',
+        },
         baseAssetSymbol: { type: 'string' },
-        amount: { type: 'string' },
-        amountUsd: { type: 'string' },
+        amount: {
+          type: 'string',
+          description: 'UI amount of `base` to supply. With autoSwap, use this (not amountUsd).',
+        },
+        amountUsd: {
+          type: 'string',
+          description: 'USD-notional deposit. NOT supported together with autoSwap — use amount + base instead.',
+        },
         percentage: { type: 'number' },
         outputMint: { type: 'string' },
-        autoSwap: { type: 'boolean' },
+        autoSwap: {
+          type: 'boolean',
+          description:
+            'Zap: supply from one token and auto-swap the other side. Requires amount + base (a pool mint); rejects amountUsd.',
+        },
         slippageBps: { type: 'number' },
         chainId: {
           type: 'string',

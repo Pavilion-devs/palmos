@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "palmos-byreal": {
+      "command": "node",
+      "args": ["--import", "tsx", "src/mcp/byrealMcpServer.ts"],
+      "env": {
+        "PALMOS_API_URL": "http://localhost:4030"
+      }
+    }
+  }
+}

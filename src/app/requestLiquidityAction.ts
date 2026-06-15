@@ -101,6 +101,10 @@ function describeLiquidityPolicyFailure(
       return `Chain ${input.chainId ?? 'solana'} is not allowed for this agent's liquidity policy.`
     case 'policy.liquidity_asset_not_allowed':
       return `Asset ${decision.disallowedAsset ?? ''} is not allowed for this agent's liquidity policy.`
+    case 'policy.liquidity_pool_not_allowed':
+      return `Pool ${decision.disallowedPool ?? input.pool ?? ''} is not on this agent's vetted-pool allowlist (risk policy).`
+    case 'policy.liquidity_slippage_exceeds_cap':
+      return `Liquidity slippage ${input.slippageBps ?? ''}bps exceeds this agent's risk policy cap.`
     case 'policy.liquidity_amount_exceeds_limit':
       return `Deposit ${depositAmountFor(input) ?? ''} ${input.baseAssetSymbol ?? ''} exceeds the effective limit of ${decision.effectiveMaxDepositAmount}.`
     case 'policy.agent_restricted':
@@ -338,6 +342,8 @@ async function runRequestLiquidityAction(
     op: input.op,
     depositAssetSymbol: isDepositOp(input.op) ? input.baseAssetSymbol : undefined,
     depositAmount: depositAmountFor(input),
+    poolId: input.pool,
+    slippageBps: input.slippageBps,
     chainId,
     trustTier: agent.trustTier,
   })

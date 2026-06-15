@@ -49,6 +49,13 @@ export type AgentPolicyTemplateInput = {
   allowedVendors: AgentVendorRule[]
   autoApproveUnder: string
   maxPerTransaction: string
+  /**
+   * Byreal risk controls (C5). `allowedPools` is a CLMM pool allowlist — a liquidity deposit into
+   * any pool not on the list is denied (only vetted pools). `maxSlippageBps` caps the slippage a
+   * swap/LP route may carry. Both are optional; absent = no restriction.
+   */
+  allowedPools?: string[]
+  maxSlippageBps?: number
   transferPolicy?: AgentTransferPolicy
   sessionBudget?: string
   heartbeatTimeoutSeconds: number
@@ -419,6 +426,7 @@ export type SwapDecisionReasonCode =
   | 'policy.agent_restricted'
   | 'policy.swap_chain_not_allowed'
   | 'policy.swap_asset_not_allowed'
+  | 'policy.swap_slippage_exceeds_cap'
   | 'policy.swap_amount_exceeds_limit'
   | 'policy.swap_approval_required'
   | 'policy.swap_auto_approved'
@@ -447,6 +455,8 @@ export function evaluateSwapRequest(input: {
   inputAmount: string
   chainId: string
   trustTier: AgentTrustTier
+  /** Requested slippage tolerance (bps) — checked against the policy's maxSlippageBps cap. */
+  slippageBps?: number
 }): SwapDecision {
   const transferPolicy = resolveAgentTransferPolicy(input.policy)
   const maxPerTransfer = parsePolicyAmount(transferPolicy.maxPerTransfer)
@@ -473,6 +483,19 @@ export function evaluateSwapRequest(input: {
         reasonCode: 'policy.swap_asset_not_allowed',
         disallowedAsset: asset,
       }
+    }
+  }
+
+  if (
+    input.policy.maxSlippageBps != null &&
+    input.slippageBps != null &&
+    input.slippageBps > input.policy.maxSlippageBps
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxSwapAmount,
+      reasonCode: 'policy.swap_slippage_exceeds_cap',
     }
   }
 
@@ -525,6 +548,8 @@ export type LiquidityDecisionReasonCode =
   | 'policy.agent_restricted'
   | 'policy.liquidity_chain_not_allowed'
   | 'policy.liquidity_asset_not_allowed'
+  | 'policy.liquidity_pool_not_allowed'
+  | 'policy.liquidity_slippage_exceeds_cap'
   | 'policy.liquidity_amount_exceeds_limit'
   | 'policy.liquidity_approval_required'
   | 'policy.liquidity_auto_approved'
@@ -535,6 +560,8 @@ export type LiquidityDecision = {
   effectiveMaxDepositAmount: string
   reasonCode: LiquidityDecisionReasonCode
   disallowedAsset?: string
+  /** Which pool failed the allowlist (when reasonCode is liquidity_pool_not_allowed). */
+  disallowedPool?: string
 }
 
 /**
@@ -551,6 +578,10 @@ export function evaluateLiquidityRequest(input: {
   depositAssetSymbol?: string
   /** UI deposit amount or USD notional (open/increase). Omit for withdraw ops. */
   depositAmount?: string
+  /** Target CLMM pool (open/increase) — checked against the policy's allowedPools allowlist. */
+  poolId?: string
+  /** Requested slippage tolerance (bps) — checked against the policy's maxSlippageBps cap. */
+  slippageBps?: number
   chainId: string
   trustTier: AgentTrustTier
 }): LiquidityDecision {
@@ -598,6 +629,36 @@ export function evaluateLiquidityRequest(input: {
       effectiveMaxDepositAmount,
       reasonCode: 'policy.liquidity_asset_not_allowed',
       disallowedAsset: input.depositAssetSymbol,
+    }
+  }
+
+  // Risk control: only deposit into vetted pools. The agent picking an unlisted pool is denied.
+  const allowedPools = input.policy.allowedPools
+  if (
+    allowedPools != null &&
+    allowedPools.length > 0 &&
+    input.poolId != null &&
+    !allowedPools.includes(input.poolId)
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_pool_not_allowed',
+      disallowedPool: input.poolId,
+    }
+  }
+
+  if (
+    input.policy.maxSlippageBps != null &&
+    input.slippageBps != null &&
+    input.slippageBps > input.policy.maxSlippageBps
+  ) {
+    return {
+      status: 'denied',
+      requiresApproval: false,
+      effectiveMaxDepositAmount,
+      reasonCode: 'policy.liquidity_slippage_exceeds_cap',
     }
   }
 

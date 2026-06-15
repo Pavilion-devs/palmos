@@ -51,7 +51,7 @@ if (mntBalance === 0n) {
 }
 
 console.log(`\nAgent: ${agent.displayName} | Solana owner ${ows?.getSolanaAddress(walletName)}`)
-console.log('Cross-chain run: 0.02 USDC -> SOL on Solana (Byreal) + record decision on Mantle…\n')
+console.log('Cross-chain run: 0.05 USDC -> SOL on Solana (Byreal) + record decision on Mantle…\n')
 
 const result = await requestAssetSwap(
   {
@@ -68,7 +68,7 @@ const result = await requestAssetSwap(
     outputMint: SOL,
     inputAssetSymbol: 'USDC',
     outputAssetSymbol: 'SOL',
-    amount: '0.02',
+    amount: '0.05',
     slippageBps: 100,
     chainId: 'solana-mainnet',
     eligibleAgentStatuses: ['ready', 'approval_pending'],
