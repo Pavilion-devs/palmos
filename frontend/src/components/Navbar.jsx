@@ -23,18 +23,10 @@ export default function Navbar({ waitlistUrl }) {
       <div className="flex items-center justify-between px-6 py-5 md:px-12 md:py-6">
         <a href="#top" className="flex items-center gap-2">
           <img
-            src={scrolled ? '/mark-ink.svg' : '/vite.svg'}
-            alt=""
-            aria-hidden="true"
-            className="h-6 w-6"
+            src="/logo.png"
+            alt="PalmOS"
+            className="h-7 w-auto transition-opacity hover:opacity-80"
           />
-          <span
-            className={`text-xl font-bold tracking-tight transition-colors ${
-              scrolled ? 'text-ink' : 'text-white'
-            }`}
-          >
-            PalmOS
-          </span>
         </a>
 
         <div className="hidden gap-8 text-sm font-semibold md:flex">

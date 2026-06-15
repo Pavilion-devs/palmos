@@ -408,12 +408,12 @@ green). *Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools
   (`AgentIdentityCard.jsx` + `useMantleIdentity` hook + `GET /api/dashboard/mantle`). Dark
   lime-on-black; renders only once deployed/minted.
 - **M5 ✅ LIVE on Mantle Sepolia** (funded + executed 2026-06-14; deployer = Main's OWS EVM
-  `0x868C23dbfd439d3c9477FE6B192dA2265c3c31f5`, the same vault that signs its Solana swaps). Canonical
+  `0x7b85349ef33A9751f3DAfdF9006Fe242595c54Bb`, the same vault that signs its Solana swaps). Canonical
   explorer = **sepolia.mantlescan.xyz** (the old Blockscout host 302-redirects there).
-  - **IdentityRegistry** `0xed9317a4b16d275c59bd2bcfa7336d28efcebe41`
-  - **AgentActionLog** `0x67f76b19141228c339f3c0b241af0c1c9f9b1772`
+  - **IdentityRegistry** `0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c`
+  - **AgentActionLog** `0x1c1099805e5ca8182569c3a4110de36a6c581922`
   - **Identity NFT #1** owner = the OWS EVM address; tokenURI = on-chain agent card (name Main,
-    5 Byreal skills, pays to Solana `4Lerm…3XW6`). https://sepolia.mantlescan.xyz/nft/0xed9317a4b16d275c59bd2bcfa7336d28efcebe41/1
+    5 Byreal skills, pays to Solana `Crc86…Xv2Gz`). https://sepolia.mantlescan.xyz/nft/0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c/1
   - **Decision log:** `recordCount = 3` — incl. a real **denied/blocked** governed swap routed through
     `requestAssetSwap` (out-of-policy → stopped before any Solana call → recorded on Mantle).
   - Re-run any time: `scripts/mantle-deploy.ts` → `mantle-mint-identity.ts` → `mantle-verify-record.ts`.

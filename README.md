@@ -82,24 +82,24 @@ That contrast — *autonomous when safe, blocked the instant it crosses a line, 
 ## Live on-chain evidence
 
 **Solana mainnet — Byreal execution.**
-Governed wallet [`4LermEmh8…Pk3XW6`](https://solscan.io/account/4LermEmh8qcN5Kq8wk6ALFHT1PaKFDcLK3a1PcPk3XW6)
+Governed wallet [`Crc86vh…RXv2Gz`](https://solscan.io/account/Crc86vhXFrYBwN5rwccX9sVKixcnHFHuWkPkJyRXv2Gz)
 
 | What | Outcome | Proof |
 |---|---|---|
-| Agent-decided swap (LLM chose size + direction), 0.05 USDC → ~0.000733 SOL | ✅ executed | [`svWHono…b3Hf`](https://solscan.io/tx/svWHonoFh3ozzaWxF6ioxsVYfxTGvBwQUxraB7wzKDWVyfFaET3K4Vu1cLxKztvB1EBcwunnXnZDK8vM8QSb3Hf) |
-| First governed swap (custody/flow proof), 0.02 USDC → ~0.000279 SOL | ✅ executed | [`5FSBF5ks…nJ1H88`](https://solscan.io/tx/5FSBF5ks4vTxjQbraKxMT2nCx5p3AxHf6qaLMtTGZNqwYQ6ATapwXN2h2X3D5Tkpq3XwskXUiG4xWMbLXnJ1H88) |
+| Agent-decided swap (LLM chose size + direction), 0.1 USDC → ~0.001409 SOL | ✅ executed | [`bwWUdd…MJLcbX`](https://solscan.io/tx/bwWUddCjbY5WwJenGTQGd7iiA7VkcqcBLhMCYhgg8e7LSxsgqSX2usxzvJRNgG15rW5FdCApd3ajjyLv2MJLcbX) |
+| First governed swap (custody/flow proof), 0.05 USDC → ~0.000701 SOL | ✅ executed | [`2Ndsfi…6JzG4wR`](https://solscan.io/tx/2Ndsfiert66StuxV95WXEkTuuZuELnZLHnEiey9dJxspjqAtjvhSXPPcT7N2MQtd1bSv9jgf16UGHqnuc6JzG4wR) |
 | Out-of-policy attempt, 2.5 USDC → SOL | 🛑 denied by policy | `policy.swap_amount_exceeds_limit` (never broadcast) |
 
 **Mantle Sepolia — identity + decision log.**
-OWS EVM vault [`0x868C23…3c31f5`](https://sepolia.mantlescan.xyz/address/0x868C23dbfd439d3c9477FE6B192dA2265c3c31f5) (the same vault, EVM side)
+OWS EVM vault [`0x7b8534…5c54Bb`](https://sepolia.mantlescan.xyz/address/0x7b85349ef33A9751f3DAfdF9006Fe242595c54Bb) (the same vault, EVM side)
 
 | What | Proof |
 |---|---|
-| ERC-8004 **IdentityRegistry** (source-verified) | [`0xed9317…cebe41`](https://sepolia.mantlescan.xyz/address/0xed9317a4b16d275c59bd2bcfa7336d28efcebe41) |
-| **AgentActionLog** decision log (source-verified) | [`0x67f76b…9b1772`](https://sepolia.mantlescan.xyz/address/0x67f76b19141228c339f3c0b241af0c1c9f9b1772) |
-| Agent **identity NFT #1** — agent card on-chain (Byreal skills + Solana payment address) | [`nft/…/1`](https://sepolia.mantlescan.xyz/nft/0xed9317a4b16d275c59bd2bcfa7336d28efcebe41/1) |
-| Governed swap **DENIED**, recorded on-chain | [tx `0x2c7898…f15be3a`](https://sepolia.mantlescan.xyz/tx/0x2c7898988899b8c9787b9c92d16e808963d651fa68c7104874e342199f15be3a) |
-| Governed swap **executed**, recorded on-chain | [tx `0xd365df…81a00c4`](https://sepolia.mantlescan.xyz/tx/0xd365dfd8acb79367993f80b66d6a8d34372339266cd5cbe0ff4043ecf81a00c4) |
+| ERC-8004 **IdentityRegistry** (source-verified) | [`0xcdaf24…41302c`](https://sepolia.mantlescan.xyz/address/0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c) |
+| **AgentActionLog** decision log (source-verified) | [`0x1c1099…581922`](https://sepolia.mantlescan.xyz/address/0x1c1099805e5ca8182569c3a4110de36a6c581922) |
+| Agent **identity NFT #1** — agent card on-chain (Byreal skills + Solana payment address) | [`nft/…/1`](https://sepolia.mantlescan.xyz/nft/0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c/1) |
+| Governed swap **DENIED**, recorded on-chain | [tx `0xc689e1…c6863d`](https://sepolia.mantlescan.xyz/tx/0xc689e1bc1b14c4c4d852f7009594ac90ac4e5a9cc025f7ad1cd12e885ac6863d) |
+| Governed swap **executed**, recorded on-chain | [tx `0x246f45…7dbc12`](https://sepolia.mantlescan.xyz/tx/0x246f4552dad71b3a2466942fa5d48f4bc4a5d864372515a0db7c7c1c087dbc12) |
 
 Both Solana swaps route through Byreal's AMM; the OWS vault adds the owner signature to Byreal's
 unsigned transaction (including its address-lookup-tables) and broadcasts via Helius. The same

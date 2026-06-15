@@ -35,6 +35,7 @@
   --color-sidebar: #0d0f0d;
   --color-sidebar-accent: #16191a;
   --color-lime: #c6f94e;
+  --color-lime-hover: #d4fb6a;
   --color-primary-foreground: #0a0b0a;
   --color-hairline: #232823;
   --color-muted-foreground: #9aa39f;
@@ -231,5 +232,165 @@ details > summary::-webkit-details-marker {
   .palm-hero-mark,
   .palm-leaf {
     animation: none;
+  }
+}
+
+/* ============================================================
+   LANDING (dark + lime) — ported from the editorial template.
+   Tailwind v4 has no JIT animation config, so the entry/reveal/
+   flashlight effects are authored as plain CSS classes here.
+   ============================================================ */
+
+/* Keep the page base + scrollbars dark while the landing is mounted, so the
+   light body never bleeds through on overscroll (mirrors .redesign-root above). */
+body:has(.landing-dark) {
+  background-color: var(--color-background);
+}
+.landing-dark ::-webkit-scrollbar-track,
+body:has(.landing-dark)::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+.landing-dark ::-webkit-scrollbar-thumb,
+body:has(.landing-dark)::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+}
+.landing-dark ::-webkit-scrollbar-thumb:hover,
+body:has(.landing-dark)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+.text-pretty {
+  text-wrap: pretty;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* --- entry animations (run once on mount) --- */
+.animate-blur-in {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(20px);
+  animation: landingBlurIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.animate-fade-in {
+  opacity: 0;
+  animation: landingFadeIn 1s ease-out forwards;
+}
+@keyframes landingBlurIn {
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+@keyframes landingFadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.stagger-1 {
+  animation-delay: 100ms;
+}
+.stagger-2 {
+  animation-delay: 200ms;
+}
+.stagger-3 {
+  animation-delay: 300ms;
+}
+.stagger-4 {
+  animation-delay: 400ms;
+}
+.stagger-5 {
+  animation-delay: 500ms;
+}
+.stagger-6 {
+  animation-delay: 600ms;
+}
+.stagger-7 {
+  animation-delay: 700ms;
+}
+
+/* --- scroll reveal: RevealManager toggles `.is-revealed` on intersection --- */
+.scroll-fade-in {
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scroll-fade-in.is-revealed {
+  opacity: 1;
+  filter: blur(0);
+  transform: none;
+}
+
+/* --- hover flashlight glow on bordered cards (FlashlightLayer sets --mouse-*) --- */
+.flashlight-target {
+  position: relative;
+  overflow: hidden;
+}
+.flashlight-target::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 0),
+    rgba(198, 249, 78, 0.15),
+    transparent 40%
+  );
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.flashlight-target::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: radial-gradient(
+    800px circle at var(--mouse-x, 50%) var(--mouse-y, 0),
+    rgba(255, 255, 255, 0.025),
+    transparent 40%
+  );
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.flashlight-target:hover::before,
+.flashlight-target:hover::after {
+  opacity: 1;
+}
+.flashlight-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blur-in,
+  .animate-fade-in {
+    animation: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+  .scroll-fade-in {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition: none;
   }
 }

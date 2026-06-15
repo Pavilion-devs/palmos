@@ -29,8 +29,7 @@ export default function SiteFooter() {
           {/* Brand col */}
           <div className="flex flex-col gap-5 md:col-span-2">
             <a href="#top" className="inline-flex items-center gap-2">
-              <img src="/vite.svg" alt="" aria-hidden="true" className="h-6 w-6" />
-              <span className="text-lg font-bold tracking-tight text-white">PalmOS</span>
+              <img src="/logo.png" alt="PalmOS" className="h-7 w-auto" />
             </a>
             <p className="max-w-xs text-sm font-light leading-relaxed text-green-light/60">
               Give AI agents controlled access to wallets, portfolios, and on-chain actions.
