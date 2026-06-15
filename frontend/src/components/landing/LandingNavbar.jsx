@@ -27,6 +27,12 @@ export default function LandingNavbar() {
 
         <div className="flex animate-blur-in stagger-4 items-center gap-3">
           <a
+            href="/docs"
+            className="hidden text-xs tracking-tight text-white/50 transition-colors hover:text-white sm:inline-flex"
+          >
+            Docs
+          </a>
+          <a
             href={CONSOLE_URL}
             className="hidden text-xs tracking-tight text-white/50 transition-colors hover:text-white sm:inline-flex"
           >
