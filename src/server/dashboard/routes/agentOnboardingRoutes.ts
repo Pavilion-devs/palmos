@@ -132,11 +132,24 @@ export function registerAgentOnboardingRoutes(
         },
       })
 
+      // Export-once backup: for a freshly CREATED wallet (not an import), return the recovery phrase
+      // exactly once so the user can save it. We never persist it anywhere new — this is the only
+      // time it leaves the vault. The client must show it once and discard it.
+      const walletBackup =
+        !wantsImport && created.walletRecoveryPhrase
+          ? {
+              recoveryPhrase: created.walletRecoveryPhrase,
+              warning:
+                'Save this recovery phrase somewhere safe. It is shown only once and is the only way to recover this wallet — PalmOS cannot show it again.',
+            }
+          : undefined
+
       res.json({
         ok: true,
         agent: stripAgentSecrets(created.agent),
         credential: sanitizeCredential(created.credential),
         token: created.token,
+        walletBackup,
         snapshot,
       })
     } catch (error) {

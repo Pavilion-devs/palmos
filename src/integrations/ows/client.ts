@@ -1,6 +1,7 @@
 import {
   createApiKey,
   createWallet,
+  exportWallet,
   getWallet,
   importWalletPrivateKey,
   listWallets,
@@ -53,6 +54,14 @@ export type OwsWalletBinding = {
   evmAddress?: string
   solanaAddress?: string
   importedFromPrivateKey: boolean
+  /** True when this call CREATED the wallet (vs. returning an existing one). */
+  created?: boolean
+  /**
+   * Recovery phrase for a freshly-created (non-imported) wallet — present ONCE, only at creation,
+   * so the operator/user can back it up. It is NOT stored anywhere new; it already lives (encrypted)
+   * in the vault. Never surfaced for existing or imported wallets. Treat as a one-time secret.
+   */
+  recoveryPhrase?: string
 }
 
 export type OwsPayRequestResult = {
@@ -198,30 +207,40 @@ export class OwsClient {
         evmAddress: readEvmAddress(existing),
         solanaAddress: readSolanaAddress(existing),
         importedFromPrivateKey: false,
+        created: false,
       }
     }
 
-    const wallet =
-      input.importPrivateKey != null
-        ? importWalletPrivateKey(
-            input.name,
-            normalizePrivateKeyForImport(input.importPrivateKey, input.importChain),
-            this.config.passphrase,
-            this.config.vaultPath,
-            input.importChain ?? 'evm',
-          )
-        : createWallet(
-            input.name,
-            this.config.passphrase,
-            12,
-            this.config.vaultPath,
-          )
+    const isImport = input.importPrivateKey != null
+    const wallet = isImport
+      ? importWalletPrivateKey(
+          input.name,
+          normalizePrivateKeyForImport(input.importPrivateKey!, input.importChain),
+          this.config.passphrase,
+          this.config.vaultPath,
+          input.importChain ?? 'evm',
+        )
+      : createWallet(input.name, this.config.passphrase, 12, this.config.vaultPath)
+
+    // Export the recovery phrase ONCE for a freshly-created wallet so it can be backed up. Imported
+    // wallets already have their key with the user, so no phrase is surfaced. Read-only: it doesn't
+    // store anything new (the seed already lives encrypted in the vault).
+    let recoveryPhrase: string | undefined
+    if (!isImport) {
+      try {
+        recoveryPhrase = exportWallet(input.name, this.config.passphrase, this.config.vaultPath)
+      } catch {
+        recoveryPhrase = undefined
+      }
+    }
 
     return {
       wallet,
       evmAddress: readEvmAddress(wallet),
       solanaAddress: readSolanaAddress(wallet),
-      importedFromPrivateKey: input.importPrivateKey != null,
+      importedFromPrivateKey: isImport,
+      created: true,
+      recoveryPhrase,
     }
   }
 

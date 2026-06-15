@@ -200,6 +200,8 @@ export async function createAgentFromOnboarding(
   agent: AgentRecord
   credential: AgentCredentialRecord
   token: string
+  /** Recovery phrase for a freshly-created OWS wallet — present once, for backup. */
+  walletRecoveryPhrase?: string
 }> {
   const displayName = input.agentName?.trim() || 'PalmOS Agent'
   const slug = slugify(displayName) || 'agent'
@@ -296,5 +298,6 @@ export async function createAgentFromOnboarding(
     agent,
     credential,
     token,
+    walletRecoveryPhrase: created.walletRecoveryPhrase,
   }
 }

@@ -124,6 +124,8 @@ export function ConnectAgentPanel({ onConnected }) {
         agentId: payload.agent.agentId,
         name,
         token: payload.token,
+        // Present only for a freshly-created (non-imported) wallet — shown once, for backup.
+        recoveryPhrase: payload.walletBackup?.recoveryPhrase,
       })
       setStep('reveal')
     } catch (err) {
@@ -169,6 +171,25 @@ export function ConnectAgentPanel({ onConnected }) {
             <span className="break-all text-lime">{created.token}</span>
           </pre>
         </div>
+
+        {created.recoveryPhrase && (
+          <div className="mt-5 overflow-hidden rounded-[var(--radius-sm)] border border-pending/40 bg-pending/5">
+            <div className="flex items-center justify-between border-b border-pending/30 px-4 py-2">
+              <span className="inline-flex items-center gap-2 text-xs font-medium text-pending">
+                <KeyRound className="size-3.5" aria-hidden="true" />
+                Wallet recovery phrase — save it now
+              </span>
+              <CopyButton value={created.recoveryPhrase} label="recovery phrase" />
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-6 text-foreground">
+              {created.recoveryPhrase}
+            </pre>
+            <p className="px-4 pb-3 text-xs leading-5 text-muted-foreground">
+              Shown <span className="text-foreground">once</span> — this is the only way to recover this
+              wallet. PalmOS can’t show it again. Store it somewhere safe and offline.
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1.5 text-xs text-muted-foreground">
           {agentOnline ? (

@@ -205,6 +205,8 @@ export async function createAgentWallet(
   agent: AgentRecord
   run: KernelTurnResult['run']
   turn: KernelTurnResult
+  /** Recovery phrase for a freshly-created OWS wallet — present once, for backup. */
+  walletRecoveryPhrase?: string
 }> {
   const at = deps.now?.() ?? new Date().toISOString()
   const existing = await deps.agentRegistry.get(input.agentId)
@@ -343,6 +345,8 @@ export async function createAgentWallet(
     status: 'ready',
   }
 
+  // Surfaced ONCE to the caller for a freshly-created OWS wallet so the user can back it up.
+  let walletRecoveryPhrase: string | undefined
   if (deps.owsClient) {
     let owsWallet
     try {
@@ -369,6 +373,7 @@ export async function createAgentWallet(
       }
       throw error
     }
+    walletRecoveryPhrase = owsWallet.recoveryPhrase
 
     const owsApiKey = deps.owsClient.createApiKey({
       name: `${input.agentId}-agent-key`,
@@ -427,5 +432,6 @@ export async function createAgentWallet(
     agent,
     run: turn.run,
     turn,
+    walletRecoveryPhrase,
   }
 }
