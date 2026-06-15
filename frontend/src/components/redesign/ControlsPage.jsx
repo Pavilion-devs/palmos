@@ -27,7 +27,7 @@ export function ControlsPage() {
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold tracking-tight text-foreground">Allowed rails</h2>
             <p className="font-mono text-xs text-muted-foreground">
-              Chains and assets your agents are permitted to operate
+              Assets your agents are permitted to operate
             </p>
           </div>
         </div>
