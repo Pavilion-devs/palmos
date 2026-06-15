@@ -62,7 +62,6 @@ render.yaml
 cards/
 
 # Internal assets
-image.png
 assets/*concepts*.png
 assets/logo-with-background.png
 

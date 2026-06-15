@@ -1,4 +1,8 @@
-# PalmOS × Byreal — Governance for Agentic Wallets
+<p align="center">
+  <img src="./image.png" alt="PalmOS — Governed Wallets for AI Agents" width="100%" />
+</p>
+
+# PalmOS — Governance for Agentic Wallets
 
 > **Byreal gives an AI agent hands. PalmOS gives it guardrails.**
 > One agent, one vault, two chains: it **acts on Solana** (Byreal DeFi), and its **identity + every
@@ -10,8 +14,7 @@ human-in-the-loop approval for larger moves, vault custody the agent **cannot dr
 on-chain audit trail. Its on-chain **identity (ERC-8004)** and a tamper-proof **decision/outcome
 log** live on **Mantle**, signed by the *same* vault that signs its Solana trades.
 
-*Mantle "Turing Test" Hackathon — Byreal-sponsored "Agentic Wallets & Economy" track.*
-Rubric-by-rubric write-up + full proof appendix: **[SUBMISSION.md](./SUBMISSION.md)**.
+**[▶︎ Live Demo](https://youtu.be/inojv7Dfc7A)**  ·  **[🌐 Live App](https://getpalmos.xyz)**  ·  **[📖 Documentation](https://www.getpalmos.xyz/docs)**  ·  **[🏗 Architecture](https://www.getpalmos.xyz/architecture)**
 
 ---
 
@@ -24,25 +27,25 @@ today there are no brakes and no neutral record.
 
 PalmOS is the brakes **and** the black box. Byreal proposes a transaction; **PalmOS governs it and
 signs it** inside a vault the agent never holds keys to; then it **records the decision and its
-outcome on Mantle** — including the ones it *blocked*. Every other entry in this track is "an agent
-that trades on Byreal." Ours is the only one with **governance + a verifiable on-chain audit of the
-agent's behavior**.
+outcome on Mantle** — including the ones it *blocked*. Most "agentic wallet" projects stop at "an
+agent that can trade." PalmOS adds the missing half: **governance + a verifiable on-chain audit of
+the agent's behavior**.
 
 ---
 
 ## Architecture: one OWS vault, two chains
 
 ```
-  Claude Sonnet 4.6                 ┌──────────────── PalmOS governance ─────────────────┐
-  (the brain — decides)            │   policy gate            OWS vault (one key set)     │
-        │   tools / HTTP            │   limits · approval ·    ├─ Solana acct → Byreal txns│
-        ▼                          │   auto-approve           └─ EVM acct → Mantle txns   │
-  request_asset_swap ──────────────┤        │                                             │
-  request_liquidity_action         │   allowed → Byreal builds unsigned tx                │
-                                   │            → OWS(Solana) signs → SETTLE on Solana     │
-                                   │   every decision + outcome                            │
-                                   │            → OWS(EVM) signs → RECORD on Mantle        │
-                                   └──────────────────────────────────────────────────────┘
+  Claude (the agent brain)          ┌──────────────── PalmOS governance ─────────────────┐
+        │   tools / HTTP            │   policy gate            OWS vault (one key set)     │
+        ▼                           │   limits · approval ·    ├─ Solana acct → Byreal txns│
+  request_asset_swap ───────────────┤   auto-approve           └─ EVM acct → Mantle txns   │
+  request_liquidity_action          │        │                                             │
+                                    │   allowed → Byreal builds unsigned tx                │
+                                    │            → OWS(Solana) signs → SETTLE on Solana     │
+                                    │   every decision + outcome                           │
+                                    │            → OWS(EVM) signs → RECORD on Mantle        │
+                                    └──────────────────────────────────────────────────────┘
      SOLANA = execution (Byreal CLMM DEX)        MANTLE = identity (ERC-8004) + decision log
 ```
 
@@ -54,28 +57,27 @@ action, and the audit trail are cryptographically the **same actor**.
 
 ## What you can see, live
 
-A real AI agent — **Claude Sonnet 4.6** (the "brain") — is given a treasury mandate and
-PalmOS-governed tools. It inspects its own wallet, **decides on its own** whether and how to
-rebalance, and acts. PalmOS evaluates every move *before* it can settle — and records every outcome
-on Mantle.
+A real AI agent — a live **Claude** session — is given a treasury mandate and PalmOS-governed tools.
+It inspects its own wallet, **decides on its own** whether and how to rebalance, and acts. PalmOS
+evaluates every move *before* it can settle — and records every outcome on Mantle.
 
 **1. Autonomous, in-policy → settles on Solana, recorded on Mantle.**
 
-> *"The wallet is at 42.23% SOL vs. the 50% target … exactly at the auto-approve threshold, so it
-> should settle autonomously. Submitting now."*
+> *"The wallet is light on SOL versus the target, and this amount is within the auto-approve
+> threshold, so it should settle autonomously. Submitting now."*
 
-→ PalmOS auto-approved, Byreal built the AMM swap, the OWS vault signed it, it **settled on Solana**,
-and the decision was **logged on Mantle**.
+→ PalmOS auto-approves, Byreal builds the AMM swap, the OWS vault signs it, it **settles on Solana**,
+and the decision is **logged on Mantle**.
 
 **2. Out-of-policy → denied instantly, and the denial is on-chain.**
 
-> *"My job is to submit it faithfully and let PalmOS enforce policy."*
+> *"That pool isn't on the vetted allowlist — I'll respect the policy."*
 
-→ PalmOS **denied** it (`policy.swap_amount_exceeds_limit`). No funds moved — and the *blocked*
-decision is recorded on Mantle. *The agent was stopped, and you can prove it.*
+→ PalmOS **denies** it. No funds move — and the *blocked* decision is recorded on Mantle.
+*The agent was stopped, and you can prove it.*
 
 That contrast — *autonomous when safe, blocked the instant it crosses a line, every outcome on-chain*
-— is the whole pitch.
+— is the whole pitch. Watch it run end-to-end in the **[demo video](https://youtu.be/inojv7Dfc7A)**.
 
 ---
 
@@ -103,20 +105,20 @@ OWS EVM vault [`0x7b8534…5c54Bb`](https://sepolia.mantlescan.xyz/address/0x7b8
 
 Both Solana swaps route through Byreal's AMM; the OWS vault adds the owner signature to Byreal's
 unsigned transaction (including its address-lookup-tables) and broadcasts via Helius. The same
-vault's **EVM key** — proven to sign Mantle transactions in `scripts/spike-e-ows-evm-sign.ts` — owns
-the identity NFT and signs each decision record. The agent never sees a private key on either chain.
+vault's **EVM key** owns the identity NFT and signs each decision record. The agent never sees a
+private key on either chain.
 
 ---
 
 ## How it works
 
 ```
- Claude Sonnet 4.6 (the brain — decides whether & how much to trade)
-   │  tools over HTTP: get_wallet_context · get_byreal_quote · request_asset_swap · request_liquidity_action
+ Claude (the brain — decides whether & how much to trade)
+   │  tools over HTTP / MCP: get_wallet_context · get_byreal_quote · request_asset_swap · request_liquidity_action
    ▼
  PalmOS SDK (/api/sdk/v1/*)
    ▼
- Policy gate (allowed assets · per-tx limit · auto-approve threshold · trust tier)
+ Policy gate (allowed assets · per-tx limit · auto-approve threshold · vetted pools · slippage cap)
    │  allowed ───────┐      needs-approval ──┐      over limit / off-policy ──┐
    ▼                 ▼                        ▼                               ▼
  Byreal builds   settles autonomously   operator approval queue          DENIED (no funds move)
@@ -133,50 +135,46 @@ the identity NFT and signs each decision record. The agent never sees a private 
 
 The agent only decides. The hands (Byreal), the guardrails + custody (PalmOS/OWS), and the audit
 (Mantle) are separate — so the agent can be autonomous without being trusted with keys, limits, or
-the record of its own behavior. The autonomy loop lives in
-[`scripts/agent-autonomy.ts`](./scripts/agent-autonomy.ts): a tool-use loop where Claude is given a
-mandate ("keep ≈50% of the treasury in SOL") and the governed tools, and chooses its own actions.
+the record of its own behavior.
 
 ---
 
-## The Byreal integration (Part B)
+## The Byreal integration
 
 Byreal Agent Skills via [`@byreal-io/byreal-cli`](https://github.com/byreal-git/byreal-agent-skills),
 wired into PalmOS as new **governed action kinds** — `asset.swap` and `asset.liquidity` — flowing
 through the existing policy → approval → OWS-sign → reconcile → audit spine:
 
-- **AMM spot swaps** (`swap execute`) and **CLMM liquidity** (open / increase / decrease / close).
-- Every write uses `--unsigned-tx --wallet-address <vault pubkey> -o json` — the "Byreal proposes,
-  you sign" custody path. Byreal builds a base64 Solana `VersionedTransaction` and never touches a
-  key; the OWS vault signs it as owner (preserving Byreal's pre-applied position-NFT co-signature on
+- **AMM spot swaps** and **CLMM liquidity** (open / increase / decrease / close).
+- Every write uses `--unsigned-tx --wallet-address <vault pubkey>` — the "Byreal proposes, you sign"
+  custody path. Byreal builds a base64 Solana `VersionedTransaction` and never touches a key; the OWS
+  vault signs it as owner (preserving Byreal's pre-applied position-NFT co-signature on
   `positions open`) and broadcasts.
-- New agent/SDK tools — `get_byreal_quote`, `request_asset_swap`, `request_liquidity_action`,
-  `list_byreal_positions` — expose this to any agent runtime over HTTP.
+- Agent tools — `get_byreal_quote`, `request_asset_swap`, `request_liquidity_action`,
+  `list_byreal_positions` — exposed over HTTP and via an **MCP server** for clients like Claude Code.
 
-Code: `src/integrations/byreal/`, `src/app/requestAssetSwap.ts`, `src/app/requestLiquidityAction.ts`,
-`src/server/dashboard/`. The four formal submission answers are in [SUBMISSION.md](./SUBMISSION.md).
+Code: `src/integrations/byreal/`, `src/app/requestAssetSwap.ts`, `src/app/requestLiquidityAction.ts`.
 
 ---
 
-## The Mantle layer (Part A)
+## The Mantle layer
 
-PalmOS records the agent's **identity** and its **governed behavior** on Mantle — the chain's
-"on-chain benchmarking of AI", made real:
+PalmOS records the agent's **identity** and its **governed behavior** on Mantle:
 
 - **ERC-8004 identity** — `IdentityRegistry` mints the agent a soulbound identity NFT whose tokenURI
-  is its **agent card** (name, its Byreal functionalities, the `@getpalmos` MCP/agent endpoints, and
-  its Solana payment address) — stored fully on-chain.
-- **Decision/outcome log** — `AgentActionLog` emits one cheap, indexable `DecisionRecorded` event
-  per governed action: kind, policy **verdict**, **outcome**, the Solana settlement signature
-  (cross-chain link), and amount. **Denied/blocked actions are recorded too** — the money-shot.
-- **Same-vault signing** — built on `viem`; the OWS vault's EVM account (secp256k1, same vault as the
-  Solana key) deploys, mints, and signs every record. No separate key, no separate identity.
+  is its **agent card** (name, its Byreal functionalities, `@getpalmos` endpoints, and its Solana
+  payment address) — stored fully on-chain.
+- **Decision/outcome log** — `AgentActionLog` emits one cheap, indexable `DecisionRecorded` event per
+  governed action: kind, policy **verdict**, **outcome**, the Solana settlement signature (the
+  cross-chain link), and amount. **Denied/blocked actions are recorded too.**
+- **Same-vault signing** — built on `viem`; the OWS vault's EVM account (same seed as the Solana key)
+  deploys, mints, and signs every record. No separate key, no separate identity.
 
 Contracts in [`contracts/`](./contracts) (deployed + source-verified on Mantle Sepolia); integration
-in `src/integrations/mantle/`; both orchestrators gain an optional `mantleRecorder` that writes after
-each decision (best-effort — a Mantle hiccup can never break a Solana settlement — and gated by
-`MANTLE_RECORD_LIVE`, default off). The operator dashboard surfaces the **ERC-8004 identity card**
-and a **"Recorded on Mantle"** link on every governed action.
+in `src/integrations/mantle/`. Both orchestrators carry an optional `mantleRecorder` that writes
+after each decision — best-effort (a Mantle hiccup can never break a Solana settlement) and gated by
+`MANTLE_RECORD_LIVE` (default off). The dashboard surfaces the **ERC-8004 identity card** and a
+**"Recorded on Mantle"** link on every governed action.
 
 ---
 
@@ -186,56 +184,40 @@ Prerequisites: Node 22+, npm, and `byreal-cli` on PATH (`npm i -g @byreal-io/byr
 
 ```bash
 npm install && (cd frontend && npm install)
-cp .env.example .env      # fill in: AWS_BEARER_TOKEN_BEDROCK, AWS_REGION, PALMOS_AGENT_TOKEN,
-                          # PALMOS_API_URL=http://localhost:4030, HELIUS_API_KEY
-```
+cp .env.example .env      # then set AGENT_SPEND_OS_BASE_DIR (persistent), HELIUS_API_KEY, etc.
 
-```bash
-# governed backend + dashboard (sign-only by default)
+# governed backend + dashboard (sign-only by default — nothing spends)
 npm run dashboard:api                  # SDK + dashboard API on :4030
 cd frontend && npm run dev             # dashboard on :5173
-
-# the autonomous agent (sign-only — nothing broadcasts)
-node --import tsx scripts/agent-autonomy.ts --scenario rebalance   # in-policy → settles (signed)
-node --import tsx scripts/agent-autonomy.ts --scenario overlimit   # out-of-policy → DENIED
 ```
 
-**Live Solana settlement** is gated server-side by `BYREAL_SETTLE_LIVE=1` on the API (default off, so
-a tool call can never accidentally spend). **Mantle layer** (testnet, gas-gated):
+Settlement is gated **server-side** and off by default, so a tool call can never accidentally spend:
+- `BYREAL_SETTLE_LIVE=1` — broadcast real Solana settlement.
+- `MANTLE_RECORD_LIVE=1` — write decisions to Mantle (testnet gas).
 
-```bash
-node --import tsx scripts/mantle-deploy.ts            # deploy IdentityRegistry + AgentActionLog
-node --import tsx scripts/mantle-mint-identity.ts     # mint the agent's ERC-8004 identity (idempotent)
-ETHERSCAN_API_KEY=<key> node --import tsx scripts/mantle-verify.ts       # verify source on Mantlescan
-MANTLE_RECORD_LIVE=1 node --import tsx scripts/mantle-verify-record.ts   # record real decisions on-chain
-```
-
-Mantle writes are gated by `MANTLE_RECORD_LIVE` (default off → simulate, no gas).
+Mantle contracts: `scripts/mantle-deploy.ts` → `mantle-mint-identity.ts` → `mantle-verify.ts`
+(deploy → mint the ERC-8004 identity → verify source on Mantlescan).
 
 ---
 
-## Repo guide (branch: `byreal-integration`)
+## Repo guide
 
-- `scripts/agent-autonomy.ts` — the autonomous agent loop (Claude on Bedrock + governed tools).
-- `src/integrations/byreal/client.ts` — `ByrealClient` wrapping `byreal-cli` (quote / build-unsigned / positions).
-- `src/integrations/ows/client.ts` — the OWS vault: `signAndBroadcastSolanaTx` (Solana) + `signEvmHash` (Mantle).
-- `src/integrations/mantle/` — Mantle layer: viem account bridge, recorder, agent card, deployment store.
-- `contracts/` — ERC-8004 `IdentityRegistry` + `AgentActionLog` (Solidity, deployed + verified).
-- `src/app/requestAssetSwap.ts`, `src/app/requestLiquidityAction.ts` — governed `asset.swap` / `asset.liquidity` (+ `mantleRecorder`).
-- `src/policies/compileAgentPolicy.ts` — `evaluateSwapRequest` / `evaluateLiquidityRequest` policy gates.
-- `scripts/mantle-*.ts` — deploy / mint / verify / record on Mantle.
-- [`byrealintegration.md`](./byrealintegration.md) — the full integration plan (§9 = Mantle layer).
+| Path | What |
+|---|---|
+| `src/integrations/byreal/` | `ByrealClient` — typed wrapper over `byreal-cli` (quote / build-unsigned / positions). |
+| `src/integrations/ows/` | The OWS vault: `signAndBroadcastSolanaTx` (Solana) + `signEvmHash` (Mantle). |
+| `src/integrations/mantle/` | viem account bridge, decision recorder, agent card, deployment store. |
+| `contracts/` | ERC-8004 `IdentityRegistry` + `AgentActionLog` (Solidity, deployed + verified). |
+| `src/app/requestAssetSwap.ts`, `requestLiquidityAction.ts` | Governed `asset.swap` / `asset.liquidity` (+ `mantleRecorder`). |
+| `src/policies/compileAgentPolicy.ts` | The policy gate (limits, vetted pools, slippage cap, trust tiers). |
+| `src/mcp/byrealMcpServer.ts` | Local MCP bridge so Claude Code can drive the governed tools. |
+| `scripts/` | `agent-autonomy`, `mantle-*` (deploy/mint/verify/record), live runs, verification. |
 
 PalmOS owns policy, custody, approvals, settlement, and audit; the agent brain always stays outside
-it. The agent reaches PalmOS via the published [`@getpalmos/agent`](https://www.npmjs.com/package/@getpalmos/agent)
-SDK. More at [getpalmos.xyz](https://www.getpalmos.xyz).
+it, reaching PalmOS via the published [`@getpalmos/agent`](https://www.npmjs.com/package/@getpalmos/agent)
+SDK. Full docs at **[getpalmos.xyz/docs](https://www.getpalmos.xyz/docs)**.
 
 ---
 
-## Status
-
-Live and proven end-to-end on **both chains**: governed Byreal swaps settle on Solana mainnet
-(including a real agent-decided swap), out-of-policy attempts are denied, and the agent's ERC-8004
-identity + decision log (including denied records) are deployed and **source-verified** on Mantle
-Sepolia. Backend `tsc` + tests green; dashboard surfaces both. Storage in the demo is file-backed
-(ephemeral); PalmOS also supports Postgres.
+*Built for the Mantle "Turing Test" Hackathon — Byreal "Agentic Wallets & Economy" track. The
+rubric-by-rubric write-up + full proof appendix is in [SUBMISSION.md](./SUBMISSION.md).*
