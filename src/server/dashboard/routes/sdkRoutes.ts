@@ -44,6 +44,7 @@ import {
   buildSdkWalletContext,
   isSdkToolName,
   readSdkLiquidityRequestInput,
+  readSdkListPoolsInput,
   readSdkListPositionsInput,
   readSdkPolicyCheckInput,
   readSdkQuoteRequestInput,
@@ -830,6 +831,60 @@ async function executeSdkAssetSwapRequest(input: {
   })
 }
 
+async function executeSdkListByrealPoolsRequest(input: {
+  req: express.Request
+  res: express.Response
+  context: DashboardRouteContext
+  auth: SdkAuthenticatedAgent
+}): Promise<void> {
+  const { req, res, context, auth } = input
+  const body = readSdkListPoolsInput(req.body)
+  const byreal = createByrealClient({
+    apiUrl: context.env.BYREAL_API_URL,
+    rpcUrl: context.env.SOLANA_RPC_URL,
+    bin: context.env.BYREAL_CLI_BIN,
+  })
+  try {
+    const pools = await byreal.listPools({
+      sortField: body.sortField ?? 'tvl',
+      sortType: 'desc',
+      pageSize: 50,
+    })
+    const allowedPools = auth.agent.policyConfig.allowedPools
+    const policyAllowlistsPools = Boolean(allowedPools && allowedPools.length > 0)
+    const q = body.query?.toLowerCase()
+    const shaped = pools
+      .map((p) => ({
+        id: p.id,
+        pair: p.pair,
+        tokenA: { mint: p.token_a?.mint, symbol: p.token_a?.symbol, decimals: p.token_a?.decimals },
+        tokenB: { mint: p.token_b?.mint, symbol: p.token_b?.symbol, decimals: p.token_b?.decimals },
+        currentPrice: p.current_price,
+        tvlUsd: p.tvl_usd,
+        feeRateBps: p.fee_rate_bps,
+        apr: p.total_apr ?? p.apr,
+        allowedByPolicy: !policyAllowlistsPools || allowedPools!.includes(p.id),
+      }))
+      .filter((p) => {
+        if (body.allowedOnly && !p.allowedByPolicy) return false
+        if (!q) return true
+        return (
+          p.pair?.toLowerCase().includes(q) ||
+          p.tokenA.symbol?.toLowerCase().includes(q) ||
+          p.tokenB.symbol?.toLowerCase().includes(q) ||
+          p.tokenA.mint?.toLowerCase() === q ||
+          p.tokenB.mint?.toLowerCase() === q
+        )
+      })
+      .slice(0, body.limit && body.limit > 0 ? body.limit : 20)
+    res.json({ ok: true, agentId: auth.agent.agentId, policyAllowlistsPools, pools: shaped })
+  } catch (error) {
+    context.operationalMetrics.increment('sdk.internal_failures')
+    console.error('[DashboardApi] Byreal pools list failed', error)
+    sendDashboardInternalError(res, 'Unable to list Byreal pools.')
+  }
+}
+
 async function executeSdkListByrealPositionsRequest(input: {
   req: express.Request
   res: express.Response
@@ -887,8 +942,12 @@ async function executeSdkLiquidityActionRequest(input: {
   // Op-specific required fields.
   let missing: string | undefined
   if (body.op === 'open') {
-    if (!body.pool || !body.priceLower || !body.priceUpper) {
-      missing = 'open requires pool, priceLower, and priceUpper.'
+    const hasExplicitRange = Boolean(body.priceLower && body.priceUpper)
+    const hasRelativeRange = body.rangePercent != null && body.rangePercent > 0
+    if (!body.pool) {
+      missing = 'open requires pool.'
+    } else if (!hasExplicitRange && !hasRelativeRange) {
+      missing = 'open requires priceLower and priceUpper, or rangePercent.'
     } else if (!body.base || !body.baseAssetSymbol) {
       missing = 'open requires base and baseAssetSymbol.'
     } else if (!body.amount && !body.amountUsd) {
@@ -959,6 +1018,44 @@ async function executeSdkLiquidityActionRequest(input: {
     env: context.env,
   })
 
+  // Self-sufficiency: accept a relative range (rangePercent) instead of absolute bounds, so an agent
+  // can open/increase without knowing the live price. We read the pool price and compute the bounds.
+  let priceLower = body.priceLower
+  let priceUpper = body.priceUpper
+  if (
+    body.rangePercent != null &&
+    body.rangePercent > 0 &&
+    (body.op === 'open' || body.op === 'increase') &&
+    (!priceLower || !priceUpper)
+  ) {
+    if (!body.pool) {
+      sendDashboardApiError(res, 400, {
+        code: 'invalid_request',
+        message: 'pool is required when using rangePercent.',
+      })
+      return
+    }
+    try {
+      const pools = await byreal.listPools({ sortField: 'tvl', sortType: 'desc', pageSize: 50 })
+      const price = Number(pools.find((p) => p.id === body.pool)?.current_price)
+      if (!Number.isFinite(price)) {
+        sendDashboardApiError(res, 422, {
+          code: 'invalid_request',
+          message: `Could not read a current price for pool ${body.pool}.`,
+        })
+        return
+      }
+      const f = body.rangePercent / 100
+      priceLower = (price * (1 - f)).toFixed(6)
+      priceUpper = (price * (1 + f)).toFixed(6)
+    } catch (error) {
+      context.operationalMetrics.increment('sdk.internal_failures')
+      console.error('[DashboardApi] rangePercent price lookup failed', error)
+      sendDashboardInternalError(res, 'Unable to read pool price for rangePercent.')
+      return
+    }
+  }
+
   const result = await requestLiquidityAction(
     {
       agentRegistry: context.workspace.agentRegistry,
@@ -978,8 +1075,8 @@ async function executeSdkLiquidityActionRequest(input: {
       agentId: auth.agent.agentId,
       op: body.op,
       pool: body.pool,
-      priceLower: body.priceLower,
-      priceUpper: body.priceUpper,
+      priceLower,
+      priceUpper,
       nftMint: body.nftMint,
       base: body.base,
       baseAssetSymbol: body.baseAssetSymbol,
@@ -1195,6 +1292,11 @@ export function registerSdkRoutes(
 
       if (toolName === 'request_asset_swap') {
         await executeSdkAssetSwapRequest({ req, res, context, auth })
+        return
+      }
+
+      if (toolName === 'list_byreal_pools') {
+        await executeSdkListByrealPoolsRequest({ req, res, context, auth })
         return
       }
 

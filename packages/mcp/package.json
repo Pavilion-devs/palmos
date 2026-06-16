@@ -1,7 +1,7 @@
 {
   "name": "@getpalmos/mcp",
-  "version": "0.1.0",
-  "description": "Model Context Protocol server for PalmOS. Gives Claude Code, Codex, and other MCP agents governed PUSD payment tools.",
+  "version": "0.2.0",
+  "description": "Model Context Protocol server for PalmOS — governed Byreal swaps, CLMM liquidity, and agent-wallet actions for Claude Code, Codex, and other MCP clients.",
   "type": "module",
   "license": "MIT",
   "author": "PalmOS",
@@ -44,16 +44,16 @@
     "mcp",
     "model-context-protocol",
     "agent",
-    "pusd",
+    "byreal",
     "solana",
-    "payments",
+    "defi",
+    "liquidity",
+    "swap",
     "claude",
     "codex"
   ],
   "dependencies": {
-    "@getpalmos/agent": "^0.1.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "3.25.76"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.2"

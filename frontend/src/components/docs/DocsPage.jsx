@@ -82,8 +82,10 @@ function SearchOverlay({ open, onClose }) {
 
   useEffect(() => {
     if (!open) return
-    setQ('')
-    const t = window.setTimeout(() => inputRef.current?.focus(), 0)
+    const t = window.setTimeout(() => {
+      setQ('')
+      inputRef.current?.focus()
+    }, 0)
     return () => window.clearTimeout(t)
   }, [open])
 

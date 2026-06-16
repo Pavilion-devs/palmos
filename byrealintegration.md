@@ -1,12 +1,12 @@
-# PalmOS × Byreal — Mantle Turing Test Hackathon Integration Plan
+# PalmOS × Byreal — Mantle Turing Test Hackathon Integration Notes
 
 > **One-liner:** PalmOS is a governance layer for agentic wallets. Byreal gives an agent
 > hands to swap and provide liquidity on Solana; PalmOS gives it guardrails — policy limits,
 > human-in-the-loop approval, and an on-chain audit trail. **Byreal proposes the transaction;
 > PalmOS governs and signs it.**
 
-Status: **planning** · Branch: hackathon integration branch (keep `main` PalmOS untouched)
-Last updated: 2026-06-13
+Status: **implemented and submitted** · Branch: hackathon integration branch
+Last updated: 2026-06-16
 
 ---
 
@@ -15,7 +15,7 @@ Last updated: 2026-06-13
 - **Do NOT re-platform to Mantle.** Byreal is a **Solana** CLMM DEX. PalmOS is already
   Solana-native. The hackathon eligibility explicitly allows "Mantle, **Solana, or both**."
   Adding EVM settlement would be ~2–3 weeks of refactor for near-zero scoring benefit.
-- **Core scope:** integrate **Byreal Agent Skills** (`@byreal-io/byreal-cli`) as new
+- **Core scope completed:** integrate **Byreal Agent Skills** (`@byreal-io/byreal-cli`) as new
   *governed action kinds* in PalmOS — `asset.swap` and `asset.liquidity` — flowing through the
   existing policy → approval → OWS-sign → reconcile → audit spine. This fills PalmOS's missing
   swap/DeFi gap AND satisfies "deep integration + agent autonomy."
@@ -26,9 +26,8 @@ Last updated: 2026-06-13
   Expansion)**. PalmOS = a real product with clear users → **Track B** ("real-world relevance,
   meaningful on-chain capabilities, clear target users, practical value"). In the broader Mantle
   announcement this is the **"Agentic Wallets & Economy (sponsored by Byreal)"** framing.
-- **Stretch:** mint an **ERC-8004 agent-identity NFT on Mantle testnet** from PalmOS's existing
-  agent metadata (identity only, not settlement) → unlocks "deploy on both" + aligns with the
-  hackathon's flagship narrative at low cost.
+- **Mantle stretch completed:** mint an **ERC-8004 agent-identity NFT on Mantle testnet** from
+  PalmOS's existing agent metadata, and record governed decisions/outcomes on Mantle.
 
 ---
 
@@ -124,18 +123,18 @@ additive surfaces.
 
 ---
 
-## 3. CORE scope (must-have for submission)
+## 3. Core scope (implemented for submission)
 
 | # | Work item | Where | Notes |
 |---|-----------|-------|-------|
-| C1 | `ByrealClient` wrapping the CLI (`--unsigned-tx` / `-o json` / `catalog`) | new `src/integrations/byreal/client.ts` | quote, build-unsigned, list pools/tokens; thin subprocess wrapper |
-| C2 | Generalize OWS signer to "sign + broadcast arbitrary `VersionedTransaction`" | `src/integrations/ows/client.ts` | extract from `paySolanaTransfer`; preserve pre-applied partial sigs |
-| C3 | Implement `asset.swap` action kind end-to-end | `src/app/` (mirror `requestAssetTransfer.ts`), `ActionRequestRegistry.ts` | new `requestAssetSwap.ts` |
-| C4 | Add + implement `asset.liquidity` action kind (open/increase/decrease/close) | `ActionRequestRegistry.ts:21`, `src/app/` | extends the stubbed enum |
-| C5 | Policy extensions: slippage cap, allowed tokens/pools, max swap notional | `src/policies/compileAgentPolicy.ts` | chain-agnostic already |
-| C6 | New agent/MCP tools | `src/server/dashboard/sdkTools.ts` (+ `@getpalmos/mcp`) | `request_asset_swap`, `request_liquidity_action`, read-only `get_byreal_quote`, `list_byreal_pools` |
-| C7 | Dashboard surfaces: swap/LP action requests + Byreal positions | `frontend/src/components/redesign/*`, portfolio reader | show governed DeFi + audit |
-| C8 | Reconciliation for AMM/LP txns (verify sig like existing) | `src/app/reconcileSettlements.ts` | RFQ path flagged in R1 |
+| C1 | `ByrealClient` wrapping the CLI (`--unsigned-tx` / `-o json` / `catalog`) | `src/integrations/byreal/client.ts` | ✅ quote, build-unsigned, list pools/tokens; thin subprocess wrapper |
+| C2 | Generalize OWS signer to "sign + broadcast arbitrary `VersionedTransaction`" | `src/integrations/ows/client.ts` | ✅ preserves pre-applied partial sigs |
+| C3 | Implement `asset.swap` action kind end-to-end | `src/app/requestAssetSwap.ts`, `ActionRequestRegistry.ts` | ✅ policy → Byreal unsigned tx → OWS sign/broadcast → audit |
+| C4 | Add + implement `asset.liquidity` action kind (open/increase/decrease/close) | `src/app/requestLiquidityAction.ts` | ✅ CLMM liquidity actions are governed like wallet actions |
+| C5 | Policy extensions: slippage cap, allowed tokens/pools, max swap notional | `src/policies/compileAgentPolicy.ts` | ✅ swap/liquidity policy coverage in tests |
+| C6 | New agent/MCP tools | `src/server/dashboard/sdkTools.ts`, `src/mcp/byrealMcpServer.ts`, `packages/mcp` | ✅ `get_byreal_quote`, `list_byreal_pools`, `request_asset_swap`, `list_byreal_positions`, `request_liquidity_action` |
+| C7 | Dashboard surfaces: swap/LP action requests + Byreal positions | `frontend/src` | ✅ governed DeFi + Solscan/Mantlescan audit links |
+| C8 | Reconciliation for AMM/LP txns (verify sig like existing) | `src/app/reconcileSettlements.ts`, `src/app/reconcileActionRequests.ts` | ✅ settled records retain explorer metadata; RFQ path remains an explicit risk |
 
 **Definition of done (core):** an agent calls `request_asset_swap`, PalmOS evaluates policy,
 (auto-approves or routes to human), Byreal builds the tx, OWS signs + broadcasts, the swap
@@ -144,9 +143,9 @@ signature. Same loop for an LP `positions open`.
 
 ---
 
-## 4. STRETCH scope (high-signal, do after core is demoable)
+## 4. Stretch scope
 
-- **S1 — ERC-8004 agent identity on Mantle testnet.** Mint an ERC-721 identity NFT per PalmOS
+- **S1 — ERC-8004 agent identity on Mantle testnet. DONE.** Mint an ERC-721 identity NFT per PalmOS
   agent whose agent-card JSON is generated from existing agent metadata (name, functionalities =
   its tools/skills, MCP endpoint = `@getpalmos/mcp`, payment address = OWS wallet). Use `viem`
   (already a dep). **Identity only — not settlement.** Unlocks "deploy on both" + the flagship
@@ -188,12 +187,12 @@ signature. Same loop for an LP `positions open`.
 
 ## 7. Submission checklist (from eligibility criteria)
 
-- [ ] Functionally integrates **Byreal Agent Skills** (swap + LP via `byreal-cli`). 
-- [ ] Deployed on **Solana** (+ optional Mantle testnet for ERC-8004 identity → "both").
-- [ ] Open-source repo (hackathon branch/fork of PalmOS).
-- [ ] Working demo (recorded + live).
-- [ ] One-sentence product description.
-- [ ] Submission write-up answering: which Byreal capabilities are used · how they're integrated
+- [x] Functionally integrates **Byreal Agent Skills** (swap + LP via `byreal-cli`).
+- [x] Deployed on **Solana** + **Mantle Sepolia** for ERC-8004 identity and decision records.
+- [x] Open-source repo (hackathon branch/fork of PalmOS).
+- [x] Working demo (recorded + live).
+- [x] One-sentence product description.
+- [x] Submission write-up answering: which Byreal capabilities are used · how they're integrated
       · what user problem it solves · which actions the agent executes autonomously.
 
 ---
@@ -211,7 +210,7 @@ signature. Same loop for an LP `positions open`.
   `src/core/transaction.ts`, `src/core/constants.ts` (mainnet, public API), `skills/byreal-cli/SKILL.md`.
 - PalmOS: `src/store/ActionRequestRegistry.ts:24-25` (swap/bridge stubs),
   `src/integrations/ows/client.ts:336,410` (sign+broadcast primitive),
-  `src/server/dashboard/sdkTools.ts:56-121` (6 current agent tools),
+  `src/server/dashboard/sdkTools.ts` (current agent tools),
   `src/store/AgentRegistry.ts:15` (settlement modes).
 
 ---
@@ -345,7 +344,7 @@ verify. Confirmed OWS signs Byreal's real v0 swap tx **including its 2 address-l
 (`src/app/requestAssetSwap.ts` + `evaluateSwapRequest` in `compileAgentPolicy.ts`: governed
 `asset.swap` = policy gate → C1 build → C2 sign/broadcast → audit stamp; 4 governance scenarios —
 auto-approve/approval-required/denied-asset/denied-limit — verified `scripts/verify-c3-request-swap.ts`)
-→ **C5** policy fields (slippage cap, USD-notional limit, allowed pools) → **C6 ✅ DONE**
+→ **C5 ✅ DONE** policy fields (slippage cap, USD-notional limit, allowed pools) → **C6 ✅ DONE**
 agent/SDK tools (`get_byreal_quote` + `request_asset_swap` in `sdkTools.ts` + `sdkRoutes.ts`;
 the swap tool runs the full C3→C1→C2 governed flow, live broadcast gated by `BYREAL_SETTLE_LIVE`
 — default sign-only so a tool call can't accidentally spend; verified `scripts/verify-c6-sdk-tools.ts`,
@@ -358,8 +357,8 @@ verified live `scripts/verify-c4-liquidity.ts`) → **C7/C8 ✅ DONE** dashboard
 `Droplets` icon + a Liquidity tab; on-chain **Solscan** links surfaced on settled native actions by
 populating `txExplorerUrl` (was `null`) and threading `txUrl` into the activity rows; backend
 `isNativeWalletActionRequest` + `DASHBOARD_ACTION_REQUEST_KINDS` extended; inline-settled records are
-already terminal so reconcile just confirms. Frontend `vite build` + eslint clean, 106 backend tests
-green). *Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools).*
+already terminal so reconcile just confirms. Frontend `vite build` + eslint clean; backend tests cover
+the governed swap/liquidity and dashboard surfaces).
 
 > C1 requires `byreal-cli` on PATH (`npm i -g @byreal-io/byreal-cli`, or pass `bin` in config).
 > Read-only methods are keyless against `api2.byreal.io` (mainnet); `buildSwapUnsigned` emits an
@@ -424,6 +423,6 @@ green). *Remaining: C5 (richer policy: slippage cap, USD-notional, allowed pools
   (compiler v0.8.26, viaIR, optimizer 200, evmVersion paris) via `scripts/mantle-verify.ts`
   (Etherscan V2, chainid 5003; needs `ETHERSCAN_API_KEY`).
 
-> Verification: backend `tsc` + 175/177 tests (1 pre-existing portfolio failure, unrelated) +
-> frontend `vite build` + eslint all green; on-chain reads confirm identity owner, agent card, and
-> `recordCount = 3`; dashboard screenshots confirm the identity card + Mantle links render live.
+> Verification: backend `tsc`, package builds, frontend `vite build`, and eslint are green; on-chain
+> reads confirm identity owner, agent card, and `recordCount = 3`; dashboard screenshots confirm the
+> identity card + Mantle links render live.

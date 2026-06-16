@@ -1,0 +1,20 @@
+# PalmOS treasury agent — brain failover (TrueFoundry routing config).
+# Scoped to metadata agent=palmos-treasury so it NEVER affects other `halo` tenant traffic.
+# Primary: Bedrock Sonnet 4.6. On 429/500/503 the gateway fails over to Anthropic-direct Sonnet —
+# transparent to the agent (it keeps requesting the same model). "The brain has no single point of failure."
+name: palmos-treasury-sonnet-failover
+type: gateway-load-balancing-config
+rules:
+  - id: palmos-sonnet-failover
+    type: priority-based-routing
+    when:
+      models:
+        - aws-bedrock/us.anthropic.claude-sonnet-4-6
+      metadata:
+        agent: palmos-treasury
+    load_balance_targets:
+      - target: aws-bedrock/us.anthropic.claude-sonnet-4-6
+        priority: 0
+        fallback_status_codes: ["429", "500", "503"]
+      - target: anthropic/claude-sonnet-4-6
+        priority: 1

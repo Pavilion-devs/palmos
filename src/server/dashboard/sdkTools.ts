@@ -13,6 +13,7 @@ export const SDK_TOOL_NAMES = [
   'get_byreal_quote',
   'request_asset_swap',
   'list_byreal_positions',
+  'list_byreal_pools',
   'request_liquidity_action',
   'check_policy',
   'get_agent_status',
@@ -156,9 +157,34 @@ export const SDK_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'list_byreal_pools',
+    description:
+      "List Byreal CLMM pools on Solana (read-only, keyless). Each pool returns its id, both token mints + symbols + decimals, current_price, tvlUsd, feeRateBps, apr, and allowedByPolicy — whether THIS agent's policy permits providing liquidity in it. Use this to discover a pool, its token mints, and its live price (e.g. to size a range) directly — you never need to look these up anywhere else.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Optional case-insensitive filter on the pair or a token symbol/mint, e.g. "SOL/USDC" or "USDC".',
+        },
+        sortField: {
+          type: 'string',
+          enum: ['tvl', 'volumeUsd24h', 'feeUsd24h', 'apr24h'],
+          description: 'Sort key (default tvl).',
+        },
+        allowedOnly: {
+          type: 'boolean',
+          description: 'When true, return only pools this agent is allowed to provide liquidity in.',
+        },
+        limit: { type: 'number', description: 'Max pools to return (default 20).' },
+      },
+    },
+  },
+  {
     name: 'request_liquidity_action',
     description:
-      'Request a governed Byreal CLMM liquidity action on Solana through PalmOS: open, increase, decrease, or close a position. Enforced against the agent policy (deposits are limited like a spend; withdrawals return the agent\'s own funds) and settled via the OWS vault.',
+      "Request a governed Byreal CLMM liquidity action on Solana through PalmOS: open, increase, decrease, or close a position. Enforced against the agent policy (deposits are limited like a spend; withdrawals return the agent's own funds) and settled via the OWS vault. For open/increase, pass rangePercent (e.g. 12) to set a ±% range around the live price automatically — no price lookup needed — or pass explicit priceLower/priceUpper. Use list_byreal_pools to find the pool and its mints.",
     inputSchema: {
       type: 'object',
       required: ['op'],
@@ -166,8 +192,13 @@ export const SDK_TOOL_DEFINITIONS = [
       properties: {
         op: { type: 'string', enum: ['open', 'increase', 'decrease', 'close'] },
         pool: { type: 'string' },
-        priceLower: { type: 'string' },
-        priceUpper: { type: 'string' },
+        priceLower: { type: 'string', description: 'Absolute lower price bound (open/increase). Omit if you pass rangePercent.' },
+        priceUpper: { type: 'string', description: 'Absolute upper price bound (open/increase). Omit if you pass rangePercent.' },
+        rangePercent: {
+          type: 'number',
+          description:
+            'Open/increase: a concentrated range of ±this percent around the live pool price, computed server-side. Pass this INSTEAD of priceLower/priceUpper so you never need to know the current price.',
+        },
         nftMint: { type: 'string' },
         base: {
           type: 'string',
@@ -379,6 +410,7 @@ export type SdkLiquidityRequestInput = {
   pool?: string
   priceLower?: string
   priceUpper?: string
+  rangePercent?: number
   nftMint?: string
   base?: string
   baseAssetSymbol?: string
@@ -400,6 +432,7 @@ export function readSdkLiquidityRequestInput(value: unknown): SdkLiquidityReques
     pool: readMaybeString(input.pool),
     priceLower: readMaybeString(input.priceLower),
     priceUpper: readMaybeString(input.priceUpper),
+    rangePercent: readMaybeNumber(input.rangePercent),
     nftMint: readMaybeString(input.nftMint),
     base: readMaybeString(input.base),
     baseAssetSymbol: readMaybeString(input.baseAssetSymbol),
@@ -426,6 +459,30 @@ export function readSdkListPositionsInput(value: unknown): SdkListPositionsInput
   return {
     pool: readMaybeString(input.pool),
     status: statusNum === 1 ? 1 : statusNum === 0 ? 0 : undefined,
+  }
+}
+
+export type SdkListPoolsInput = {
+  query?: string
+  sortField?: 'tvl' | 'volumeUsd24h' | 'feeUsd24h' | 'apr24h'
+  allowedOnly?: boolean
+  limit?: number
+}
+
+export function readSdkListPoolsInput(value: unknown): SdkListPoolsInput {
+  const input = readSdkToolInput(value)
+  const sf = readMaybeString(input.sortField)
+  const sortField =
+    sf === 'volumeUsd24h' || sf === 'feeUsd24h' || sf === 'apr24h'
+      ? sf
+      : sf === 'tvl'
+        ? 'tvl'
+        : undefined
+  return {
+    query: readMaybeString(input.query),
+    sortField,
+    allowedOnly: readBoolean(input.allowedOnly),
+    limit: readMaybeNumber(input.limit),
   }
 }
 
