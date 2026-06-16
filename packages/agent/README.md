@@ -1,10 +1,23 @@
 # @getpalmos/agent
 
-PalmOS SDK client for external agents that need governed PUSD payments.
+PalmOS SDK client + CLI for external agents. PalmOS lets an agent run outside the dashboard while
+routing every on-chain action through policy, approvals, vault custody, and an on-chain audit trail.
 
-PalmOS lets an agent run outside the PalmOS dashboard while routing paid actions through policy, approvals, PUSD settlement, and audit records.
+## Connect an agent (CLI)
 
-## Install
+Create an agent in the [PalmOS dashboard](https://getpalmos.xyz), then bring it online from a terminal —
+no install needed:
+
+```bash
+npx @getpalmos/agent connect
+```
+
+It prompts for your agent token, authenticates it (which connects it on the dashboard), and lists the
+governed tools it can use. The agent holds no keys — every action runs through PalmOS.
+
+> Env: `PALMOS_AGENT_TOKEN` (skip the prompt) · `PALMOS_API_URL` (point at a self-hosted backend).
+
+## Install (SDK)
 
 ```bash
 npm install @getpalmos/agent

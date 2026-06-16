@@ -142,10 +142,9 @@ export function selectControlRows(agents = []) {
       name: snap?.agent?.displayName || 'Agent',
       perTx: pc.maxPerTransaction ? `${formatTokenAmount(pc.maxPerTransaction)} ${asset}` : '—',
       daily: pc.dailyLimit ? `${formatTokenAmount(pc.dailyLimit)} ${asset}` : '—',
-      allowed: [
-        ...(pc.allowedChains ?? []).map(chainLabel),
-        ...(pc.allowedAssets ?? []),
-      ],
+      // Assets only — the chain (Solana / devnet) is implied by the asset, so we
+      // don't surface redundant chain chips. Real per-agent policy assets.
+      allowed: [...(pc.allowedAssets ?? [])],
       approval: pc.autoApproveUnder ? `> ${formatTokenAmount(pc.autoApproveUnder)} ${asset}` : '—',
       privacy: privacyOn(snap?.agent),
     }

@@ -71,7 +71,7 @@ export function ActivityPage() {
           </div>
         </div>
 
-        <div className="mt-6 hidden grid-cols-[2.2fr_0.9fr_1fr_0.9fr_auto] items-center gap-4 px-2 pb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground lg:grid">
+        <div className="mt-6 hidden grid-cols-[minmax(0,2.2fr)_0.9fr_1fr_0.9fr_184px] items-center gap-4 px-2 pb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground lg:grid">
           <span>Operation</span>
           <span>Type</span>
           <span>Amount</span>
@@ -93,11 +93,11 @@ export function ActivityPage() {
             return (
               <div
                 key={o.id ?? `${o.title}-${i}`}
-                className={`grid grid-cols-1 items-center gap-4 px-2 py-4 lg:grid-cols-[2.2fr_0.9fr_1fr_0.9fr_auto] ${
+                className={`grid grid-cols-1 items-center gap-4 px-2 py-4 lg:grid-cols-[minmax(0,2.2fr)_0.9fr_1fr_0.9fr_184px] ${
                   i !== 0 ? 'border-t border-hairline' : ''
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-panel-2 text-foreground">
                     <Icon className="size-5" strokeWidth={2} aria-hidden="true" />
                   </div>
@@ -111,7 +111,7 @@ export function ActivityPage() {
                     {o.type}
                   </span>
                 </div>
-                <div className="font-mono text-sm text-foreground">{o.amount}</div>
+                <div className="whitespace-nowrap font-mono text-sm text-foreground">{o.amount}</div>
                 <div>
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${statusStyles[o.tone] ?? statusStyles.pending}`}>
                     <span className="size-1.5 rounded-full bg-current" />

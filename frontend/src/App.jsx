@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import RedesignDashboard from './components/redesign/RedesignDashboard'
+import DocsPage from './components/docs/DocsPage'
 
 import LandingNavbar from './components/landing/LandingNavbar'
 import LandingHero from './components/landing/LandingHero'
@@ -54,6 +55,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/docs" element={<DocsPage />} />
         {/* The SIWS-gated operator dashboard. RedesignDashboard owns the nested
             /dashboard/* routes (Overview, Wallets, Activity, …, Connect). */}
         <Route path="/dashboard/*" element={<RedesignDashboard />} />
