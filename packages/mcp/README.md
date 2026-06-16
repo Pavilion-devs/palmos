@@ -1,23 +1,32 @@
 # @getpalmos/mcp
 
-Model Context Protocol (MCP) server for PalmOS. It gives Claude Code, Codex, and
-any other MCP-capable agent a set of **governed payment tools** — the agent can
-discover paid services, check policy, and request payments, while PalmOS enforces
-budget, allowlist, approval, settlement, and audit rules server-side. The agent
-never holds a wallet key.
+Model Context Protocol (MCP) server for PalmOS. It gives Claude Code, Codex, and any other
+MCP-capable agent PalmOS's **governed agent-wallet tools** — Byreal swaps, concentrated (CLMM)
+liquidity, pool and position discovery, wallet context, and policy checks — while PalmOS enforces
+policy, custody, settlement, and an on-chain audit trail server-side. The agent never holds a key.
+
+The bridge is generic: it exposes whatever governed tools your PalmOS backend offers (read live from
+`/api/sdk/v1/tools`), so new skills appear automatically without upgrading this package.
 
 ## Tools
 
+Exact tools depend on your backend (the server lists them on connect). A typical Byreal-enabled
+PalmOS backend exposes:
+
 | Tool | Purpose |
 | --- | --- |
-| `palmos_list_services` | List the paid services this agent is allowed to call. |
-| `palmos_check_policy` | Preview whether a payment would be allowed / approval-gated / denied (no spend). |
-| `palmos_get_agent_status` | Report the agent's PalmOS identity, trust tier, and settlement mode. |
-| `palmos_pay` | Execute a governed paid-service call. |
+| `get_wallet_context` | The agent's balances, portfolio, and the policy controls it must act within. |
+| `list_byreal_pools` | Discover Byreal CLMM pools — ids, token mints, live price, and which are policy-allowed. |
+| `get_byreal_quote` | A live Byreal swap quote (read-only). |
+| `request_asset_swap` | A governed Byreal swap (policy-checked, vault-signed, settled). |
+| `list_byreal_positions` | The agent's CLMM liquidity positions. |
+| `request_liquidity_action` | Governed CLMM liquidity: open / increase / decrease / close. Pass `rangePercent` for an automatic ± range. |
+| `check_policy` | Preview whether an action is allowed / approval-gated / denied (no spend). |
+| `get_agent_status` | The agent's PalmOS identity, trust tier, and settlement mode. |
 
-`palmos_pay` is the only tool that can move money, and every call is still
-gated by PalmOS policy: small allowed payments execute, higher-value ones become
-approval-pending for an operator, and disallowed services are blocked.
+Every governed action is gated by PalmOS policy: within the auto-approve threshold it settles, a
+larger-but-allowed action becomes approval-pending for an operator, and an off-policy action is
+blocked. The agent reads the governed outcome and reasons about it.
 
 ## Prerequisites
 
@@ -89,12 +98,12 @@ Build it first with `npm run build` (from `packages/mcp`) or
 
 Once configured, ask the agent naturally, e.g.:
 
-> "List my PalmOS services, check the policy for `local.pusd.spot_price`, then
-> pay for a BTC/USD spot price."
+> "Show me the SOL/USDC Byreal pools I'm allowed to use, then open a 0.05 USDC liquidity
+> position with a ±12% range."
 
-The agent will call `palmos_list_services` → `palmos_check_policy` → `palmos_pay`.
-PalmOS records every outcome (executed, approval-pending, blocked) with an audit
-trail in the dashboard.
+The agent calls `list_byreal_pools` → `request_liquidity_action`. PalmOS checks the policy, the OWS
+vault signs, the position settles on Byreal, and the decision is logged on-chain — every outcome
+(executed, approval-pending, blocked) shows up in the dashboard with an audit trail.
 
 ## Token storage
 

@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PalmOS — Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#f7f7f5; --card:#ffffff; --border:#e7e7e3; --border-soft:#efefea;
+    --green:#14593a; --green-bright:#2ea86b; --green-accent:#123d29;
+    --green-light:#cfe8d9; --green-pale:#e8f3ec;
+    --ink:#0d1a12; --body:#5e6b65; --muted:#9aa39f;
+    --amber:#e89c2a; --rose:#e26a7c; --slate:#6b7a86; --slate-pale:#eef1f3;
+    --shadow:0 1px 2px rgba(13,26,18,.04), 0 10px 30px rgba(13,26,18,.06);
+    --shadow-sm:0 1px 2px rgba(13,26,18,.05);
+    --r:16px; --r-sm:11px;
+    --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--canvas); color:var(--ink);
+    font-family:'Geist',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.45; overflow-x:hidden;
+  }
+  /* responsive: the diagram keeps its fixed 1900px design size; JS scales it to fit any viewport */
+  .fit{width:100%; overflow:hidden;}
+  .diagram{position:relative; width:2160px; padding:52px 56px 44px;
+    transform-origin:top left; will-change:transform; visibility:hidden;}
+  .icon{width:22px;height:22px;flex:none;stroke-width:1.6;}
+  .icon-sm{width:16px;height:16px;flex:none;stroke-width:1.7;}
+
+  /* ---------- masthead ---------- */
+  .masthead{display:flex;flex-direction:column;align-items:flex-start;gap:13px;margin-bottom:30px;}
+  .brandlogo{height:60px;width:auto;border-radius:13px;display:block;box-shadow:var(--shadow);}
+  .brand h1{font-size:40px;font-weight:800;letter-spacing:-.02em;margin:2px 0 2px;}
+  .brand .sub{font-size:16px;color:var(--body);font-weight:500;margin-bottom:10px;}
+  .brand .rule{width:108px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--green-bright),var(--green));margin:0 0 9px;}
+  .brand .kick{font-size:13.5px;color:var(--green-accent);font-weight:600;letter-spacing:.005em;}
+  .brand .kick b{color:var(--muted);font-weight:500;padding:0 8px;}
+
+  /* ---------- stage grid ---------- */
+  .stage{display:grid;grid-template-columns:266px minmax(560px,1fr) 430px;gap:168px;align-items:start;}
+  .col{display:flex;flex-direction:column;gap:26px;}
+  .label-eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;}
+
+  /* ---------- generic card ---------- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);}
+  .chip-ico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;}
+  .chip-ico.logo{background:#fff;border:1px solid var(--border);}
+  .chip-ico.logo img{width:25px;height:25px;object-fit:contain;}
+  .chip-ico.logo .logo-sol{width:24px;height:auto;}
+  .bmark{width:15px;height:15px;object-fit:contain;flex:none;}
+
+  /* ---------- actor cards ---------- */
+  .actor{padding:18px 18px 16px;}
+  .actor .top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .actor h3{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0;}
+  .actor p{font-size:13px;color:var(--body);margin:0 0 13px;}
+  .pill{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:9px;padding:9px 12px;
+    font-size:13px;font-weight:500;color:var(--ink);margin-top:8px;background:#fff;}
+  .pill .icon-sm{color:var(--muted);}
+  .actor.op .chip-ico{background:var(--green-pale);color:var(--green);}
+  .actor.op h3{color:var(--green);}
+  .actor.ag .chip-ico{background:#e6f0ea;color:var(--green-accent);}
+  .actor.ag h3{color:var(--green-accent);}
+  .actor.au .chip-ico{background:var(--slate-pale);color:var(--slate);}
+  .actor.au h3{color:var(--slate);}
+  .pathtag{font-size:12px;font-weight:600;color:var(--muted);margin-top:13px;display:flex;align-items:center;gap:7px;}
+  .pathtag svg{width:15px;height:15px;color:var(--green-bright);}
+
+  /* ---------- center browser ---------- */
+  .browser{background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;}
+  .bbar{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--border-soft);background:#fbfbfa;}
+  .bbar .nav{display:flex;gap:6px;color:var(--muted);}
+  .url{flex:1;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--border);border-radius:999px;
+    padding:7px 15px;color:var(--body);font-size:13px;font-weight:500;}
+  .url .icon-sm{color:var(--green-bright);}
+  .bbar .tools{display:flex;gap:10px;color:var(--muted);}
+  .bgrid{padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .panel{border:1px solid var(--border-soft);border-radius:13px;padding:15px;background:#fff;}
+  .panel .ph{display:flex;align-items:center;gap:10px;margin-bottom:13px;}
+  .panel .ph .chip-ico{width:32px;height:32px;border-radius:9px;background:var(--green-pale);color:var(--green);}
+  .panel .ph .icon{width:18px;height:18px;}
+  .panel h4{font-size:13.5px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .panel .tag{font-size:10.5px;font-weight:600;color:var(--green);background:var(--green-pale);
+    border-radius:6px;padding:2px 7px;margin-left:auto;letter-spacing:.04em;}
+
+  .idrow{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
+  .ava{width:30px;height:30px;border-radius:9px;background:linear-gradient(150deg,#2ea86b,#14593a);}
+  .idrow .nm{font-weight:700;font-size:14px;}
+  .badge{font-size:10px;font-weight:700;color:#fff;background:var(--green);border-radius:999px;padding:2px 8px;margin-left:2px;}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px;}
+  .ch{font-size:11px;font-weight:600;color:var(--green-accent);background:var(--green-pale);border-radius:7px;padding:3px 9px;}
+  .addr{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--body);margin-bottom:5px;}
+  .addr .k{font-family:'Geist';font-weight:600;color:var(--muted);width:48px;font-size:11px;}
+  .linkrow{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--green-bright);margin-top:9px;}
+
+  .pstat{display:flex;gap:8px;margin-bottom:12px;}
+  .pstat .s{flex:1;border:1px solid var(--border-soft);border-radius:9px;padding:8px 9px;}
+  .pstat .s .v{font-weight:700;font-size:14px;}
+  .pstat .s .l{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.02em;}
+  .dec{display:flex;align-items:center;gap:9px;border-radius:9px;padding:9px 11px;font-size:12px;font-weight:600;margin-top:7px;}
+  .dec .icon-sm{flex:none;}
+  .dec .meta{color:var(--body);font-weight:500;margin-left:auto;font-family:var(--mono);font-size:10.5px;}
+  .dec.ok{background:var(--green-pale);color:var(--green);}
+  .dec.no{background:#fdeef1;color:var(--rose);}
+
+  .treas .val{font-size:24px;font-weight:800;letter-spacing:-.02em;}
+  .treas .val span{font-size:13px;color:var(--muted);font-weight:600;}
+  .donutrow{display:flex;align-items:center;gap:14px;margin:10px 0 4px;}
+  .donut{width:62px;height:62px;border-radius:50%;flex:none;
+    background:conic-gradient(var(--green-bright) 0 29%, var(--green-light) 29% 100%);
+    display:flex;align-items:center;justify-content:center;}
+  .donut::after{content:"";width:40px;height:40px;border-radius:50%;background:#fff;}
+  .leg{font-size:12px;}
+  .leg .li{display:flex;align-items:center;gap:8px;margin-bottom:5px;color:var(--body);}
+  .leg .dot{width:9px;height:9px;border-radius:3px;flex:none;}
+  .leg b{color:var(--ink);font-weight:700;}
+  .hint{font-size:11px;color:var(--amber);font-weight:600;margin-top:8px;display:flex;align-items:center;gap:6px;}
+
+  .feed{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border-soft);font-size:12px;}
+  .feed:first-of-type{border-top:0;}
+  .sdot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .feed .ft{font-weight:600;color:var(--ink);}
+  .feed .fl{margin-left:auto;display:flex;align-items:center;gap:5px;font-weight:600;font-size:11px;color:var(--green-bright);}
+  .feed .fl.mut{color:var(--muted);}
+
+  /* ---------- callouts ---------- */
+  .callouts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+  .callout{border:1.5px dashed var(--border);border-radius:14px;padding:15px 16px;background:#fcfcfb;}
+  .callout .top{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .callout .chip-ico{width:32px;height:32px;border-radius:9px;background:var(--green-pale);color:var(--green);}
+  .callout h4{font-size:13px;font-weight:700;margin:0;}
+  .callout p{font-size:12px;color:var(--body);margin:0;}
+  .callout p b{color:var(--green-accent);font-weight:600;}
+  .callout.alt{border-color:#dfe6ea;background:#fafbfc;}
+  .callout.alt .chip-ico{background:var(--slate-pale);color:var(--slate);}
+
+  /* ---------- backends ---------- */
+  .backend-wrap{display:flex;align-items:center;gap:18px;}
+  .backend{flex:1;padding:17px 18px 15px;}
+  .backend .top{display:flex;align-items:center;gap:11px;margin-bottom:12px;}
+  .backend h3{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .backend ul{list-style:none;margin:0;padding:0;}
+  .backend li{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--body);padding:4px 0;}
+  .backend li .icon-sm{color:var(--muted);width:14px;height:14px;}
+  .backend.sol .chip-ico{background:var(--green-pale);color:var(--green-bright);}
+  .backend.man .chip-ico{background:#e6efe9;color:var(--green-accent);}
+  .backend.bed .chip-ico{background:var(--slate-pale);color:var(--slate);}
+  .sat{width:96px;flex:none;border:1.4px dashed var(--border);border-radius:13px;padding:13px 10px;text-align:center;
+    color:var(--muted);background:#fcfcfb;}
+  .sat .chip-ico{width:34px;height:34px;border-radius:9px;margin:0 auto 8px;background:#f2f3f1;color:var(--slate);}
+  .sat span{font-size:10.5px;font-weight:600;line-height:1.25;display:block;color:var(--body);}
+  .railtag{font-size:12px;font-weight:600;color:var(--muted);}
+
+  /* ---------- bottom strip ---------- */
+  .strip{margin-top:40px;background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);
+    padding:18px 22px;display:flex;align-items:center;gap:10px;}
+  .strip .lead{font-size:13px;font-weight:700;color:var(--ink);width:120px;line-height:1.25;flex:none;}
+  .tiles{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;flex:1;}
+  .tile{display:flex;flex-direction:column;align-items:center;gap:7px;padding:6px 12px;border-radius:10px;min-width:74px;}
+  .tile .tico{width:34px;height:34px;border-radius:9px;background:var(--green-pale);color:var(--green);display:flex;align-items:center;justify-content:center;}
+  .tile span{font-size:11px;font-weight:600;color:var(--body);white-space:nowrap;}
+  .tile.gov .tico{background:#f1f4f2;color:var(--slate);}
+  .vrule{width:1px;height:48px;background:var(--border);margin:0 8px;flex:none;}
+
+  /* ---------- footer legend ---------- */
+  .footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:26px;gap:30px;}
+  .legend{display:flex;gap:26px;flex-wrap:wrap;}
+  .lg{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--body);font-weight:500;}
+  .lg .ln{width:30px;height:3px;border-radius:2px;flex:none;}
+  .lg b{color:var(--ink);font-weight:700;}
+  .note{max-width:430px;text-align:right;font-size:12px;color:var(--muted);line-height:1.5;}
+  .note b{color:var(--green-accent);font-weight:600;}
+
+  /* ---------- connector wires ---------- */
+  .masthead,.stage,.strip,.footer{position:relative;z-index:2;}
+  .wires{position:absolute;left:0;top:0;z-index:1;overflow:visible;pointer-events:none;}
+  .wlabel{position:absolute;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--border-soft);
+    border-radius:9px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--body);white-space:nowrap;
+    box-shadow:0 1px 3px rgba(13,26,18,.06);z-index:5;}
+</style>
+</head>
+<body>
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-wallet" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2"/><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M16 13h.01"/><circle cx="16" cy="13.3" r="1.3" fill="currentColor" stroke="none"/></g>
+  <g id="i-user" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></g>
+  <g id="i-bot" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="13.5" r="1" fill="currentColor" stroke="none"/></g>
+  <g id="i-eye" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></g>
+  <g id="i-lock" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g>
+  <g id="i-info" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g>
+  <g id="i-menu" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></g>
+  <g id="i-aleft" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></g>
+  <g id="i-aright" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></g>
+  <g id="i-id" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8" cy="11" r="2.2"/><path d="M4.8 16.5a3.5 3.5 0 0 1 6.4 0M14 9.5h4M14 13h4"/></g>
+  <g id="i-shield" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5c0 5-3.7 8.3-7.5 9.4C8.2 19.3 4.5 16 4.5 11V6L12 3Z"/><path d="M8.8 12l2.2 2.2L15.4 9.8"/></g>
+  <g id="i-pie" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9Z"/><path d="M12 3v9h9A9 9 0 0 0 12 3Z"/></g>
+  <g id="i-activity" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></g>
+  <g id="i-key" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><path d="M11.5 12H21M18 12v3M21 12v2.5"/></g>
+  <g id="i-filter" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8.2V20l-4-2.2v-4.6L3 5Z"/></g>
+  <g id="i-sol" fill="currentColor" stroke="none"><path d="M5.4 7.2h12.3a.5.5 0 0 1 .35.85L16.6 9.6a.6.6 0 0 1-.43.18H3.84a.5.5 0 0 1-.35-.85L5 7.4a.6.6 0 0 1 .4-.2Z"/><path d="M5.4 14.2h12.3a.5.5 0 0 1 .35.85L16.6 16.6a.6.6 0 0 1-.43.18H3.84a.5.5 0 0 1-.35-.85L5 14.4a.6.6 0 0 1 .4-.2Z"/><path d="M3.84 10.7h12.33a.6.6 0 0 1 .43.18l1.45 1.55a.5.5 0 0 1-.35.85H5.4a.6.6 0 0 1-.4-.2L3.49 11.55a.5.5 0 0 1 .35-.85Z"/></g>
+  <g id="i-mantle" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 4.3v8.6L12 20.2 4.5 15.9V7.3L12 3Z"/><path d="M9 15V10l3 3 3-3v5"/></g>
+  <g id="i-cloud" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 19a4.5 4.5 0 0 1-.6-8.96A5.5 5.5 0 0 1 17.6 10.2 3.9 3.9 0 0 1 17 19H7.5Z"/><path d="M12 13.2l.8 1.7 1.7.3-1.2 1.2.3 1.7-1.6-.85-1.6.85.3-1.7-1.2-1.2 1.7-.3Z"/></g>
+  <g id="i-swap" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12M14 4l4 4-4 4M18 16H6M10 20l-4-4 4-4"/></g>
+  <g id="i-drop" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 5.7 6 9.8a6 6 0 0 1-12 0c0-4.1 6-9.8 6-9.8Z"/></g>
+  <g id="i-plus" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g>
+  <g id="i-minus" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></g>
+  <g id="i-x" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></g>
+  <g id="i-tag" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.5l8-8H20v8.5l-8 8a1.5 1.5 0 0 1-2.1 0l-6.4-6.4a1.5 1.5 0 0 1 0-2.1Z"/><circle cx="15.5" cy="8.5" r="1.3"/></g>
+  <g id="i-list" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></g>
+  <g id="i-ctx" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h5"/></g>
+  <g id="i-check" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></g>
+  <g id="i-ucheck" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M15.5 12.5l2 2 4-4"/></g>
+  <g id="i-xcirc" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></g>
+  <g id="i-anchor" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V20M5 13a7 7 0 0 0 14 0M5 13H3m16 0h2"/></g>
+  <g id="i-link" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5M10.5 6.5l1-1a3.2 3.2 0 0 1 4.5 4.5l-1 1M13.5 17.5l-1 1a3.2 3.2 0 0 1-4.5-4.5l1-1"/></g>
+  <g id="i-spark" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></g>
+  <g id="i-cube" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 21v-9M4 7.5l8 4.5 8-4.5"/></g>
+  <g id="i-globe" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></g>
+</defs></svg>
+<script>function I(id,c){return '<svg class="'+(c||'icon')+'" viewBox="0 0 24 24"><use href="#'+id+'"/></svg>'}</script>
+
+<div class="fit">
+<div class="diagram">
+  <svg class="wires"><defs>
+    <marker id="mkA" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto"><path d="M0.5 1 L8 4.5 L0.5 8 Z" fill="#2ea86b"/></marker>
+    <marker id="mkB" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto"><path d="M0.5 1 L8 4.5 L0.5 8 Z" fill="#123d29"/></marker>
+    <marker id="mkC" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto"><path d="M0.5 1 L8 4.5 L0.5 8 Z" fill="#6b7a86"/></marker>
+    <marker id="mkD" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0.5 1.2 L7.5 4.5 L0.5 7.8 Z" fill="#c2cac6"/></marker>
+  </defs></svg>
+
+  <!-- masthead -->
+  <header class="masthead">
+    <img class="brandlogo" src="data:image/png;base64,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" alt="PalmOS" />
+    <div class="brand">
+      <div class="sub">Governance layer for agentic wallets</div>
+      <div class="rule"></div>
+      <div class="kick">Policy-bounded by design.<b>·</b>Non-custodial by default.<b>·</b>Audited on two chains.</div>
+    </div>
+  </header>
+
+  <div class="stage">
+
+    <!-- LEFT : actors -->
+    <div class="col col-left">
+      <div class="label-eyebrow">Who connects</div>
+
+      <div class="card actor op">
+        <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-user"/></svg></div><h3>Operator</h3></div>
+        <p>Wallet-authenticated: provisions agents, sets policy, approves &amp; denies.</p>
+        <div class="pill"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-wallet"/></svg>Connect Wallet (SIWS)</div>
+        <div class="pill"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-activity"/></svg>Open Dashboard</div>
+        <div class="pathtag"><svg viewBox="0 0 24 24"><use href="#i-aright"/></svg>Operator Path</div>
+      </div>
+
+      <div class="card actor ag">
+        <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-bot"/></svg></div><h3>AI Agent</h3></div>
+        <p>Autonomous &amp; <b style="color:var(--green-accent)">holds no keys</b> — calls governed tools over HTTP.</p>
+        <div class="pill"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-key"/></svg>Agent Token</div>
+        <div class="pill"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-spark"/></svg>MCP / SDK tools</div>
+        <div class="pathtag"><svg viewBox="0 0 24 24"><use href="#i-aright"/></svg>Agent Path</div>
+      </div>
+
+      <div class="card actor au">
+        <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-eye"/></svg></div><h3>Auditor / Public</h3></div>
+        <p>Walletless — independently verifies the on-chain audit trail.</p>
+        <div class="pill"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-globe"/></svg>Open Solscan / Mantlescan</div>
+        <div class="pathtag"><svg viewBox="0 0 24 24"><use href="#i-aright"/></svg>Verify Path (No Wallet)</div>
+      </div>
+    </div>
+
+    <!-- CENTER : product -->
+    <div class="col col-center">
+      <div class="browser">
+        <div class="bbar">
+          <div class="nav"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-aleft"/></svg><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-aright"/></svg></div>
+          <div class="url"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-lock"/></svg>app.getpalmos.xyz</div>
+          <div class="tools"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-info"/></svg><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-menu"/></svg></div>
+        </div>
+        <div class="bgrid">
+
+          <!-- 1. identity -->
+          <div class="panel">
+            <div class="ph"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-id"/></svg></div><h4>Agent Identity</h4><span class="tag">ERC-8004</span></div>
+            <div class="idrow"><div class="ava"></div><span class="nm">Main</span><span class="badge">NFT #1</span></div>
+            <div class="chips"><span class="ch">Swap</span><span class="ch">Open LP</span><span class="ch">Increase</span><span class="ch">Close</span></div>
+            <div class="addr"><span class="k">Solana</span>Crc86…Xv2Gz</div>
+            <div class="addr"><span class="k">Mantle</span>0x7b85…54Bb</div>
+            <div class="linkrow"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-link"/></svg>Verified on Mantle</div>
+          </div>
+
+          <!-- 2. policy -->
+          <div class="panel">
+            <div class="ph"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-shield"/></svg></div><h4>Policy &amp; Approvals</h4></div>
+            <div class="pstat">
+              <div class="s"><div class="v">0.5</div><div class="l">Max / tx (USDC)</div></div>
+              <div class="s"><div class="v">0.1</div><div class="l">Auto-approve &lt;</div></div>
+              <div class="s"><div class="v">SOL·USDC</div><div class="l">Allowed</div></div>
+            </div>
+            <div class="dec ok"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-check"/></svg>Swap 0.1 USDC → SOL<span class="meta">auto-approved</span></div>
+            <div class="dec no"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-xcirc"/></svg>Swap 2.5 USDC → SOL<span class="meta">denied · over-limit</span></div>
+          </div>
+
+          <!-- 3. treasury -->
+          <div class="panel treas">
+            <div class="ph"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-pie"/></svg></div><h4>Treasury</h4></div>
+            <div class="val">$6.99 <span>total value</span></div>
+            <div class="donutrow">
+              <div class="donut"></div>
+              <div class="leg">
+                <div class="li"><span class="dot" style="background:var(--green-bright)"></span><b>29%</b>&nbsp;SOL · $2.04</div>
+                <div class="li"><span class="dot" style="background:var(--green-light)"></span><b>71%</b>&nbsp;USDC · $4.95</div>
+              </div>
+            </div>
+            <div class="hint"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-spark"/></svg>Off target → agent rebalances</div>
+          </div>
+
+          <!-- 4. activity -->
+          <div class="panel">
+            <div class="ph"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-activity"/></svg></div><h4>Governed Activity</h4></div>
+            <div class="feed"><span class="sdot" style="background:var(--green-bright)"></span><span class="ft">Swap executed</span><span class="fl"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-link"/></svg>Solscan</span></div>
+            <div class="feed"><span class="sdot" style="background:var(--green)"></span><span class="ft">Decision recorded</span><span class="fl"><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-link"/></svg>Mantle</span></div>
+            <div class="feed"><span class="sdot" style="background:var(--amber)"></span><span class="ft">Approval pending</span><span class="fl mut">human review</span></div>
+            <div class="feed"><span class="sdot" style="background:var(--rose)"></span><span class="ft">Swap denied</span><span class="fl mut">policy.limit</span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- callouts -->
+      <div class="callouts">
+        <div class="callout">
+          <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-key"/></svg></div><h4>Non-custodial vault (OWS)</h4></div>
+          <p>The agent holds <b>no private keys</b>. One OWS vault signs <b>both chains</b> — Solana ed25519 + Mantle secp256k1.</p>
+        </div>
+        <div class="callout alt">
+          <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-filter"/></svg></div><h4>Policy gate</h4></div>
+          <p>Every action is evaluated <b>before settlement</b>: auto-approve · human approval · denied. The agent <b>cannot bypass</b> it.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT : backends -->
+    <div class="col col-right">
+      <div class="label-eyebrow">Execution &amp; settlement rails</div>
+
+      <div class="backend-wrap">
+        <div class="card backend sol">
+          <div class="top"><div class="chip-ico logo"><svg class="logo-sol" viewBox="0 0 398 312"><defs><linearGradient id="solg" x1="360" y1="-37" x2="141" y2="376" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs><path fill="url(#solg)" d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z"/><path fill="url(#solg)" d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"/><path fill="url(#solg)" d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"/></svg></div><h3>Solana mainnet</h3></div>
+          <ul>
+            <li><img class="bmark" src="data:image/png;base64,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" alt="Byreal"/>Byreal AMM swaps</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-drop"/></svg>CLMM LP · open / inc / dec / close</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-key"/></svg>OWS vault signature</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-link"/></svg>Mainnet settlement · Solscan</li>
+          </ul>
+        </div>
+        <div class="sat"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-cube"/></svg></div><span>Byreal DeFi execution</span></div>
+      </div>
+
+      <div class="backend-wrap">
+        <div class="card backend man">
+          <div class="top"><div class="chip-ico logo"><img src="data:image/png;base64,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" alt="Mantle"/></div><h3>Mantle Sepolia</h3></div>
+          <ul>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-id"/></svg>ERC-8004 IdentityRegistry</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-anchor"/></svg>AgentActionLog · decision log</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-xcirc"/></svg>Denied records (governance proof)</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-link"/></svg>Cross-chain Solana signature</li>
+          </ul>
+        </div>
+        <div class="sat"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-anchor"/></svg></div><span>Identity + on-chain audit</span></div>
+      </div>
+
+      <div class="backend-wrap">
+        <div class="card backend bed">
+          <div class="top"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-cloud"/></svg></div><h3>Bedrock + PalmOS API</h3></div>
+          <ul>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-spark"/></svg>Claude Sonnet 4.6 — the brain</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-bot"/></svg>Manual tool-use loop</li>
+            <li><svg class="icon-sm" viewBox="0 0 24 24"><use href="#i-shield"/></svg>Governance spine: policy → sign → broadcast → audit</li>
+          </ul>
+        </div>
+        <div class="sat"><div class="chip-ico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-spark"/></svg></div><span>Agent brain + governance</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- bottom strip -->
+  <div class="strip">
+    <div class="lead">Governed actions</div>
+    <div class="tiles">
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-swap"/></svg></div><span>Swap</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-drop"/></svg></div><span>Open LP</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div><span>Increase</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-minus"/></svg></div><span>Decrease</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></div><span>Close</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-tag"/></svg></div><span>Quote</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-list"/></svg></div><span>Positions</span></div>
+      <div class="tile"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-ctx"/></svg></div><span>Wallet ctx</span></div>
+      <div class="vrule"></div>
+      <div class="tile gov"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-check"/></svg></div><span>Auto-approve</span></div>
+      <div class="tile gov"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-ucheck"/></svg></div><span>Human approval</span></div>
+      <div class="tile gov"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-xcirc"/></svg></div><span>Denied</span></div>
+      <div class="tile gov"><div class="tico"><svg class="icon" viewBox="0 0 24 24"><use href="#i-anchor"/></svg></div><span>On-chain audit</span></div>
+    </div>
+  </div>
+
+  <!-- footer legend -->
+  <div class="footer">
+    <div class="legend">
+      <div class="lg"><span class="ln" style="background:var(--green-bright)"></span><b>Solana</b>&nbsp;= execution (Byreal)</div>
+      <div class="lg"><span class="ln" style="background:var(--green-accent)"></span><b>Mantle</b>&nbsp;= identity + decision log</div>
+      <div class="lg"><span class="ln" style="background:var(--slate)"></span><b>Bedrock / API</b>&nbsp;= brain + governance</div>
+    </div>
+    <div class="note">PalmOS is the brakes <b>and</b> the black box: Byreal gives the agent hands; <b>PalmOS governs and signs</b>, then records every decision — including the ones it blocked.</div>
+  </div>
+
+</div>
+</div>
+
+<script>
+(async () => {
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch(e){} }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    draw(); fit(); document.querySelector('.diagram').style.visibility = 'visible'
+  }))
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(fit, 80) })
+
+  // Scale-to-fit: never upscale past 1; center when the viewport is wider than the design.
+  function fit() {
+    const diagram = document.querySelector('.diagram')
+    const wrap = document.querySelector('.fit')
+    const vw = document.documentElement.clientWidth
+    const s = Math.min(1, vw / 2160)
+    diagram.style.transform = 'scale(' + s + ')'
+    diagram.style.marginLeft = s === 1 ? Math.max(0, (vw - 2160) / 2) + 'px' : '0'
+    wrap.style.height = (diagram.offsetHeight * s) + 'px'
+  }
+
+  function draw() {
+    const diagram = document.querySelector('.diagram')
+    const svg = document.querySelector('.wires')
+    const SVGNS = 'http://www.w3.org/2000/svg'
+    const W = diagram.clientWidth, H = diagram.scrollHeight
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+    svg.setAttribute('width', W); svg.setAttribute('height', H)
+    const D = diagram.getBoundingClientRect()
+    const box = el => { const r = el.getBoundingClientRect(); return {
+      l:r.left-D.left, t:r.top-D.top, r:r.right-D.left, b:r.bottom-D.top,
+      cx:r.left-D.left+r.width/2, cy:r.top-D.top+r.height/2 } }
+
+    function wire(sx, sy, ex, ey, marker, dashed) {
+      const dx = Math.max(36, Math.abs(ex - sx) * 0.5)
+      const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${ex - dx} ${ey}, ${ex} ${ey}`
+      const p = document.createElementNS(SVGNS, 'path')
+      p.setAttribute('d', d); p.setAttribute('fill', 'none')
+      p.setAttribute('stroke', dashed ? '#c2cac6' : ({mkA:'#2ea86b',mkB:'#123d29',mkC:'#6b7a86'}[marker]))
+      p.setAttribute('stroke-width', dashed ? '1.9' : '2.6')
+      if (dashed) p.setAttribute('stroke-dasharray', '5 5')
+      p.setAttribute('stroke-linecap', 'round')
+      p.setAttribute('marker-end', `url(#${marker})`)
+      svg.appendChild(p)
+    }
+    function label(x, y, text) {
+      const el = document.createElement('div')
+      el.className = 'wlabel'; el.textContent = text
+      el.style.left = x + 'px'; el.style.top = y + 'px'
+      diagram.appendChild(el)
+    }
+
+    const browser = box(document.querySelector('.browser'))
+    const actors = [...document.querySelectorAll('.col-left .actor')]
+    const aMark = ['mkA', 'mkB', 'mkC']
+    const aLab = ['Operator Path', 'Agent Path', 'Verify Path']
+    actors.forEach((a, i) => {
+      const s = box(a), sy = s.cy
+      const ex = browser.l - 7, ey = Math.min(Math.max(sy, browser.t + 24), browser.b - 24)
+      wire(s.r + 5, sy, ex, ey, aMark[i], false)
+      label((s.r + 5 + ex) / 2, (sy + ey) / 2 - 16, aLab[i])
+    })
+
+    const backs = [...document.querySelectorAll('.col-right .backend')]
+    const bMark = ['mkA', 'mkB', 'mkC']
+    const bLab = ['Governed swaps', 'Decisions + identity', 'Reasoning + tools']
+    backs.forEach((bk, i) => {
+      const t = box(bk)
+      const sy = Math.min(Math.max(t.cy, browser.t + 24), browser.b - 24)
+      wire(browser.r + 5, sy, t.l - 7, t.cy, bMark[i], false)
+      label((browser.r + 5 + t.l) / 2, (sy + t.cy) / 2 - 16, bLab[i])
+    })
+
+    document.querySelectorAll('.callouts .callout').forEach(c => {
+      const t = box(c)
+      wire(t.cx, browser.b + 4, t.cx, t.t - 6, 'mkD', true)
+    })
+
+    const sats = [...document.querySelectorAll('.col-right .sat')]
+    backs.forEach((bk, i) => {
+      if (!sats[i]) return
+      const s = box(bk), t = box(sats[i])
+      wire(s.r + 4, s.cy, t.l - 6, t.cy, 'mkD', true)
+    })
+  }
+})()
+</script>
+</body>
+</html>

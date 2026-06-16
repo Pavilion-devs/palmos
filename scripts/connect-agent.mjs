@@ -5,8 +5,8 @@
 //
 //   node scripts/connect-agent.mjs
 //
-// Backend defaults to the hosted API (https://api.getpalmos.xyz). To point at a self-hosted backend,
-// set PALMOS_API_URL (then it won't ask). A token in PALMOS_AGENT_TOKEN skips the prompt too.
+// Backend defaults to the local backend (http://localhost:4030) — just press Enter at the prompt.
+// Override with PALMOS_API_URL (then it won't ask). A token in PALMOS_AGENT_TOKEN skips that prompt too.
 
 import readline from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
@@ -31,10 +31,11 @@ if (!token) {
   process.exit(1)
 }
 
+const DEFAULT_API = 'http://localhost:4030'
 let API = process.env.PALMOS_API_URL?.trim()
 if (!API) {
-  const ans = (await rl.question(`  ${C.cyan}Backend${C.reset} ${C.dim}[https://api.getpalmos.xyz]${C.reset} › `)).trim()
-  API = ans || 'https://api.getpalmos.xyz'
+  const ans = (await rl.question(`  ${C.cyan}Backend${C.reset} ${C.dim}[${DEFAULT_API}]${C.reset} › `)).trim()
+  API = ans || DEFAULT_API
 }
 API = API.replace(/\/$/, '')
 rl.close()

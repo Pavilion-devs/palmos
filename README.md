@@ -89,7 +89,10 @@ Governed wallet [`Crc86vh…RXv2Gz`](https://solscan.io/account/Crc86vhXFrYBwN5r
 | What | Outcome | Proof |
 |---|---|---|
 | Agent-decided swap (LLM chose size + direction), 0.1 USDC → ~0.001409 SOL | ✅ executed | [`bwWUdd…MJLcbX`](https://solscan.io/tx/bwWUddCjbY5WwJenGTQGd7iiA7VkcqcBLhMCYhgg8e7LSxsgqSX2usxzvJRNgG15rW5FdCApd3ajjyLv2MJLcbX) |
+| Governed CLMM LP open, 0.05 USDC into SOL/USDC | ✅ executed | [`3yuyFL…eBfUo`](https://solscan.io/tx/3yuyFLxbDnuJpvUTLXtZZe7WXbuLGRP8WiLwCTxucryUKjttVwYgBbUyERsHxcCEqBjKmw2vqQ9ZQqBijQ7eBfUo) |
 | First governed swap (custody/flow proof), 0.05 USDC → ~0.000701 SOL | ✅ executed | [`2Ndsfi…6JzG4wR`](https://solscan.io/tx/2Ndsfiert66StuxV95WXEkTuuZuELnZLHnEiey9dJxspjqAtjvhSXPPcT7N2MQtd1bSv9jgf16UGHqnuc6JzG4wR) |
+| **Agent self-funded its own gas** — governed USDC→SOL swap, 1.8 USDC → ~0.0245 SOL | ✅ executed | [`5KZTAm…Awod9`](https://solscan.io/tx/5KZTAmg1YHdzu2wunYYmRprdkdmgj6q413ShzxnGxYfhAN9yndzHXcYgsEHLMZSto6ccc3o4eDeiXGKhYPxAwod9) |
+| **Governed CLMM LP open via `rangePercent`** (server-computed ±12% range), 0.05 USDC | ✅ executed | [`4oCb6W…t9mtbZ`](https://solscan.io/tx/4oCb6W9qYSdrw4Lj1JbW1DJwu6RfjTBDbS2aq6sdP8LqFi6WYuqnWHNddkMW6DKMssa9vmTSBEvBi58RuCt9mtbZ) |
 | Out-of-policy attempt, 2.5 USDC → SOL | 🛑 denied by policy | `policy.swap_amount_exceeds_limit` (never broadcast) |
 
 **Mantle Sepolia — identity + decision log.**
@@ -102,6 +105,8 @@ OWS EVM vault [`0x7b8534…5c54Bb`](https://sepolia.mantlescan.xyz/address/0x7b8
 | Agent **identity NFT #1** — agent card on-chain (Byreal skills + Solana payment address) | [`nft/…/1`](https://sepolia.mantlescan.xyz/nft/0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c/1) |
 | Governed swap **DENIED**, recorded on-chain | [tx `0xc689e1…c6863d`](https://sepolia.mantlescan.xyz/tx/0xc689e1bc1b14c4c4d852f7009594ac90ac4e5a9cc025f7ad1cd12e885ac6863d) |
 | Governed swap **executed**, recorded on-chain | [tx `0x246f45…7dbc12`](https://sepolia.mantlescan.xyz/tx/0x246f4552dad71b3a2466942fa5d48f4bc4a5d864372515a0db7c7c1c087dbc12) |
+| Governed CLMM LP **executed**, recorded on-chain | [tx `0x06480c…596df7`](https://sepolia.mantlescan.xyz/tx/0x06480c33dfb4be6b97692acebd746bff68ae98dfa9e9426b080c4c4b4d596df7) |
+| Governed CLMM LP via **`rangePercent`** executed, recorded on-chain | [tx `0xa96fcf…45ccc60`](https://sepolia.mantlescan.xyz/tx/0xa96fcf50544e708bf059b4f3ef32d3a0b026f1a2809abbb000bdbf52b45ccc60) |
 
 Both Solana swaps route through Byreal's AMM; the OWS vault adds the owner signature to Byreal's
 unsigned transaction (including its address-lookup-tables) and broadcasts via Helius. The same
@@ -184,7 +189,7 @@ Prerequisites: Node 22+, npm, and `byreal-cli` on PATH (`npm i -g @byreal-io/byr
 
 ```bash
 npm install && (cd frontend && npm install)
-cp .env.example .env      # then set AGENT_SPEND_OS_BASE_DIR (persistent), HELIUS_API_KEY, etc.
+cp .env.example .env      # then set AGENT_SPEND_OS_BASE_DIR (persistent) and PUSD_SOLANA_RPC_URL/SOLANA_RPC_URL.
 
 # governed backend + dashboard (sign-only by default — nothing spends)
 npm run dashboard:api                  # SDK + dashboard API on :4030

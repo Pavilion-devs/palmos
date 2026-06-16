@@ -138,13 +138,18 @@ export type ResolvedAgentTransferPolicy = {
   maxPerTransfer: string | undefined
 }
 
-function parsePolicyAmount(amount: string | undefined): bigint | undefined {
+function parsePolicyAmount(amount: string | number | undefined): bigint | undefined {
   if (amount == null) {
     return undefined
   }
 
+  // Policy amounts are contractually strings, but stored agent records sometimes carry a numeric
+  // autoApproveUnder (e.g. 2 instead of "2"). parsePusdAmountToBaseUnits calls .trim() and would
+  // throw on a number — which silently turned EVERY swap into policy.invalid_amount. Coerce here.
+  const asString = typeof amount === 'number' ? String(amount) : amount
+
   try {
-    return parsePusdAmountToBaseUnits(amount)
+    return parsePusdAmountToBaseUnits(asString)
   } catch {
     return undefined
   }

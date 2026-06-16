@@ -29,7 +29,7 @@ Mantle = identity + decision log).
 
 | Criterion | How we hit it | Proof |
 |---|---|---|
-| **Integration depth** | Byreal Agent Skills as governed action kinds — swap + LP (open/increase/decrease/close) — through the full policy → sign → broadcast → audit spine, with real mainnet settlement. | [agent-decided swap](https://solscan.io/tx/bwWUddCjbY5WwJenGTQGd7iiA7VkcqcBLhMCYhgg8e7LSxsgqSX2usxzvJRNgG15rW5FdCApd3ajjyLv2MJLcbX) |
+| **Integration depth** | Byreal Agent Skills as governed action kinds — swap + LP (open/increase/decrease/close) — through the full policy → sign → broadcast → audit spine, with real mainnet settlement. **Newest end-to-end run:** the agent self-funded its own gas (USDC→SOL), then opened a CLMM position via server-computed `rangePercent` — both settled live and recorded on Mantle. | [agent swap](https://solscan.io/tx/bwWUddCjbY5WwJenGTQGd7iiA7VkcqcBLhMCYhgg8e7LSxsgqSX2usxzvJRNgG15rW5FdCApd3ajjyLv2MJLcbX) · [self-funded gas](https://solscan.io/tx/5KZTAmg1YHdzu2wunYYmRprdkdmgj6q413ShzxnGxYfhAN9yndzHXcYgsEHLMZSto6ccc3o4eDeiXGKhYPxAwod9) · [`rangePercent` LP](https://solscan.io/tx/4oCb6W9qYSdrw4Lj1JbW1DJwu6RfjTBDbS2aq6sdP8LqFi6WYuqnWHNddkMW6DKMssa9vmTSBEvBi58RuCt9mtbZ) · [Mantle record](https://sepolia.mantlescan.xyz/tx/0xa96fcf50544e708bf059b4f3ef32d3a0b026f1a2809abbb000bdbf52b45ccc60) |
 | **Agent autonomy** | Claude Sonnet 4.6 (on Bedrock) decides whether/how much to trade and acts via the SDK; PalmOS governs the outcome. | `scripts/agent-autonomy.ts` |
 | **Use-case** | Policy-bounded autonomous DeFi treasury management — a real product with real users (teams/funds deploying agents). | — |
 | **Verifiability** | Every "it works" claim carries a clickable Solscan/Mantlescan proof; both contracts source-verified; vault custody is non-drainable (agent holds no keys on either chain). | this appendix |
@@ -85,6 +85,7 @@ the limit or off-policy is **denied**. The agent cannot bypass any of this.
 **Solana mainnet — Byreal execution**
 - Governed agent wallet: [`Crc86vhXFrYBwN5rwccX9sVKixcnHFHuWkPkJyRXv2Gz`](https://solscan.io/account/Crc86vhXFrYBwN5rwccX9sVKixcnHFHuWkPkJyRXv2Gz)
 - Agent-decided swap (executed): [`bwWUdd…MJLcbX`](https://solscan.io/tx/bwWUddCjbY5WwJenGTQGd7iiA7VkcqcBLhMCYhgg8e7LSxsgqSX2usxzvJRNgG15rW5FdCApd3ajjyLv2MJLcbX)
+- Governed CLMM LP open (executed): [`3yuyFL…eBfUo`](https://solscan.io/tx/3yuyFLxbDnuJpvUTLXtZZe7WXbuLGRP8WiLwCTxucryUKjttVwYgBbUyERsHxcCEqBjKmw2vqQ9ZQqBijQ7eBfUo)
 - First governed swap (executed): [`2Ndsfi…6JzG4wR`](https://solscan.io/tx/2Ndsfiert66StuxV95WXEkTuuZuELnZLHnEiey9dJxspjqAtjvhSXPPcT7N2MQtd1bSv9jgf16UGHqnuc6JzG4wR)
 - Out-of-policy attempt: denied (`policy.swap_amount_exceeds_limit`, never broadcast)
 
@@ -94,6 +95,7 @@ the limit or off-policy is **denied**. The agent cannot bypass any of this.
 - AgentActionLog (decision log, verified): [`0x1c1099805e5ca8182569c3a4110de36a6c581922`](https://sepolia.mantlescan.xyz/address/0x1c1099805e5ca8182569c3a4110de36a6c581922)
 - Agent identity NFT #1: [`/nft/…/1`](https://sepolia.mantlescan.xyz/nft/0xcdaf244b315bc8af1249e6689a2f9f6d8d41302c/1)
 - Decision recorded — executed: [`0x246f45…7dbc12`](https://sepolia.mantlescan.xyz/tx/0x246f4552dad71b3a2466942fa5d48f4bc4a5d864372515a0db7c7c1c087dbc12)
+- Decision recorded — CLMM LP executed: [`0x06480c…596df7`](https://sepolia.mantlescan.xyz/tx/0x06480c33dfb4be6b97692acebd746bff68ae98dfa9e9426b080c4c4b4d596df7)
 - Decision recorded — **denied** (governed swap stopped by policy): [`0xc689e1…c6863d`](https://sepolia.mantlescan.xyz/tx/0xc689e1bc1b14c4c4d852f7009594ac90ac4e5a9cc025f7ad1cd12e885ac6863d)
 
 *Solana = execution; Mantle = identity + audit; one OWS vault signs both.*

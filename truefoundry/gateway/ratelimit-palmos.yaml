@@ -1,0 +1,19 @@
+# PalmOS treasury agent — request budget (TrueFoundry rate-limiting config).
+# default.limit_to: -1 → UNLIMITED for everything else in the `halo` tenant (halo project untouched).
+# Only the agent=palmos-treasury rule is capped. "The agent's mind is on a hard budget, enforced at
+# the gateway — not on the honor system." Mirrors how PalmOS caps the agent's money.
+#
+# 20/min is safe for normal demo runs (~5 calls each). To FILM the throttle beat, drop limit_to to ~2
+# and run the agent — the gateway returns HTTP 429 and the agent reports "mind throttled".
+name: palmos-treasury-budget
+type: gateway-rate-limiting-config
+default:
+  unit: requests_per_minute
+  limit_to: -1
+rules:
+  - id: palmos-treasury-throttle
+    when:
+      metadata:
+        agent: palmos-treasury
+    unit: requests_per_minute
+    limit_to: 20

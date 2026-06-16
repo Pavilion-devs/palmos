@@ -25,7 +25,10 @@ export function useWorkspace() {
   }, [])
 
   useEffect(() => {
-    void refresh()
+    const t = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+    return () => window.clearTimeout(t)
   }, [refresh])
 
   return { workspace, status, refresh }

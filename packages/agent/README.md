@@ -104,7 +104,7 @@ const payment = await palmos.requestPaidService({
 })
 ```
 
-These map to `list_services`, `get_agent_status`, `check_policy`, and `request_paid_service` on the PalmOS SDK API.
+These map to `list_services`, `get_agent_status`, `check_policy`, and `request_paid_service` on the PalmOS SDK API. Byreal-enabled backends also expose tools such as `get_byreal_quote`, `list_byreal_pools`, `request_asset_swap`, `list_byreal_positions`, and `request_liquidity_action`; call them with `palmos.callTool(...)`.
 
 ## Privacy Mode
 
