@@ -14,7 +14,7 @@ human-in-the-loop approval for larger moves, vault custody the agent **cannot dr
 on-chain audit trail. Its on-chain **identity (ERC-8004)** and a tamper-proof **decision/outcome
 log** live on **Mantle**, signed by the *same* vault that signs its Solana trades.
 
-**[▶︎ Live Demo](https://youtu.be/inojv7Dfc7A)**  ·  **[🌐 Live App](https://getpalmos.xyz)**  ·  **[📖 Documentation](https://www.getpalmos.xyz/docs)**  ·  **[🏗 Architecture](https://www.getpalmos.xyz/architecture)**
+**[▶︎ Live Demo](https://youtu.be/inojv7Dfc7A)**  ·  **[🌐 Live App](https://getpalmos.xyz)**  ·  **[📖 Documentation](https://www.getpalmos.xyz/docs)**  ·  **[🏗 Architecture](https://www.getpalmos.xyz/architecture)**  ·  **[𝕏 Post](https://x.com/palmos_xyz/status/2066643994382078450)**
 
 ---
 
