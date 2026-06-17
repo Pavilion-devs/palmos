@@ -87,3 +87,13 @@ video/
 pusd-vision-banner/
 assets/logos/
 assets/pusdbanner.png
+
+# Local-only: planning docs, tooling, pitch/video scripts (kept locally, not shipped to the production repo)
+byrealintegration.md
+architecture.md
+docs.md
+palmos-architecture.html
+truefoundry-video-script.md
+truefoundry/
+scripts/clip.mjs
+scripts/shot-arch.mjs
