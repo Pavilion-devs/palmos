@@ -30,7 +30,7 @@ export default function DocsContent() {
           <B>Governance for agentic wallets.</B> PalmOS lets an autonomous AI
           agent move real money on-chain — but only within policy, with
           human-in-the-loop approval for larger moves, vault custody the agent
-          can&apos;t drain, and an on-chain audit trail of every decision.
+          can&apos;t drain, and an audit trail for every governed decision.
         </p>
 
         <SubHeading id="the-problem">The problem</SubHeading>
@@ -55,8 +55,8 @@ export default function DocsContent() {
             agent can only <i>ask</i> PalmOS to act, and PalmOS signs.
           </li>
           <li>
-            <B>An on-chain audit trail</B> — every governed decision and its
-            outcome (including <i>denied</i> ones) is recorded on-chain.
+            <B>An on-chain audit trail</B> — live deployments record governed
+            decisions and outcomes on Mantle, including <i>denied</i> ones.
           </li>
         </UL>
 
@@ -84,10 +84,10 @@ export default function DocsContent() {
             <B>ERC-8004 identity</B> and a <B>decision/outcome log</B> live here.
           </li>
           <li>
-            <B>One OWS vault</B> signs <i>both</i> chains — the same key that
-            signs a Byreal swap on Solana also owns the agent&apos;s Mantle
-            identity and signs every decision record. The identity, the action,
-            and the audit record are cryptographically the same actor.
+            <B>One OWS vault</B> signs <i>both</i> chains — its Solana key signs
+            Byreal transactions, and its EVM key owns the agent&apos;s Mantle
+            identity and signs decision records. The identity, the action, and
+            the audit record are controlled by the same vault.
           </li>
         </UL>
         <p>
@@ -202,7 +202,8 @@ export default function DocsContent() {
             — <Code>asset.liquidity</Code>.
           </li>
           <li>
-            <B>Read-only</B> quotes, pools, tokens, position listing (keyless).
+            <B>Read-only</B> quotes, pool discovery, and position listing
+            (keyless).
           </li>
         </UL>
 
@@ -221,6 +222,10 @@ export default function DocsContent() {
           head={['Tool', 'Purpose']}
           rows={[
             [<Code key="c">get_byreal_quote</Code>, 'Quote a swap (read-only).'],
+            [
+              <Code key="c">list_byreal_pools</Code>,
+              'Discover Byreal CLMM pools, token mints, live price, and policy allowlist status.',
+            ],
             [<Code key="c">request_asset_swap</Code>, 'Governed AMM swap.'],
             [
               <Code key="c">request_liquidity_action</Code>,
@@ -357,11 +362,29 @@ POST /api/sdk/v1/tools/:toolName  # invoke one (bearer-authenticated)`}
 
         <SubHeading id="connect-mcp">C. MCP — for Claude Code / MCP clients</SubHeading>
         <p>
-          A small MCP bridge proxies the SDK to MCP, so a live Claude Code session
-          can drive the governed Byreal tools directly. Point it at the API with{' '}
-          <Code>PALMOS_API_URL</Code>, add it to <Code>.mcp.json</Code>, and run:
+          The published <Code>@getpalmos/mcp</Code> server exposes the governed
+          Byreal tools to any MCP client. Add it in one command:
         </p>
-        <CodeBlock title="run the MCP bridge" code={`npm run mcp:byreal`} />
+        <CodeBlock
+          title="Claude Code"
+          code={`claude mcp add palmos --env PALMOS_AGENT_TOKEN=palmos_... -- npx -y @getpalmos/mcp`}
+        />
+        <p>
+          Or drop it into <Code>.mcp.json</Code> (set <Code>PALMOS_API_URL</Code>{' '}
+          to point at a self-hosted backend):
+        </p>
+        <CodeBlock
+          title=".mcp.json"
+          code={`{
+  "mcpServers": {
+    "palmos": {
+      "command": "npx",
+      "args": ["-y", "@getpalmos/mcp"],
+      "env": { "PALMOS_AGENT_TOKEN": "palmos_..." }
+    }
+  }
+}`}
+        />
         <p>PalmOS governs every call the agent makes.</p>
       </Section>
 

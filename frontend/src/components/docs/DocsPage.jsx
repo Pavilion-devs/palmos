@@ -62,7 +62,7 @@ function Topbar({ onOpenSearch }) {
             </kbd>
           </button>
           <a
-            href="https://github.com"
+            href="https://github.com/Pavilion-devs/palmos"
             target="_blank"
             rel="noopener noreferrer"
             className="flex size-8 items-center justify-center border border-white/10 bg-white/5 text-white/45 transition-colors hover:border-white/20 hover:text-white"
