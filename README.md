@@ -208,7 +208,20 @@ Mantle contracts: `scripts/mantle-deploy.ts` → `mantle-mint-identity.ts` → `
 
 PalmOS owns policy, custody, approvals, settlement, and audit; the agent brain always stays outside
 it, reaching PalmOS via the published [`@getpalmos/agent`](https://www.npmjs.com/package/@getpalmos/agent)
-SDK. Full docs at **[getpalmos.xyz/docs](https://www.getpalmos.xyz/docs)**.
+SDK and [`@getpalmos/mcp`](https://www.npmjs.com/package/@getpalmos/mcp) server.
+
+**Connect an agent** — create one in the [dashboard](https://getpalmos.xyz), then from any terminal:
+
+```bash
+# Bring an agent online (paste its token from the "Bring it online" screen)
+npx @getpalmos/agent connect
+
+# Or give a Claude Code / MCP session the governed Byreal tools
+claude mcp add palmos --env PALMOS_AGENT_TOKEN=palmos_... -- npx -y @getpalmos/mcp
+```
+
+The agent holds no keys — every call runs through PalmOS (policy → vault signature → on-chain audit).
+Full docs at **[getpalmos.xyz/docs](https://www.getpalmos.xyz/docs)**.
 
 ---
 
