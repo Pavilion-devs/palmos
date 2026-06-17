@@ -35,19 +35,7 @@ the agent's behavior**.
 
 ## Architecture: one OWS vault, two chains
 
-```
-  Claude (the agent brain)          ┌──────────────── PalmOS governance ─────────────────┐
-        │   tools / HTTP            │   policy gate            OWS vault (one key set)     │
-        ▼                           │   limits · approval ·    ├─ Solana acct → Byreal txns│
-  request_asset_swap ───────────────┤   auto-approve           └─ EVM acct → Mantle txns   │
-  request_liquidity_action          │        │                                             │
-                                    │   allowed → Byreal builds unsigned tx                │
-                                    │            → OWS(Solana) signs → SETTLE on Solana     │
-                                    │   every decision + outcome                           │
-                                    │            → OWS(EVM) signs → RECORD on Mantle        │
-                                    └──────────────────────────────────────────────────────┘
-     SOLANA = execution (Byreal CLMM DEX)        MANTLE = identity (ERC-8004) + decision log
-```
+<p align="center"><img src="./palmos-architecture.png" alt="PalmOS architecture — one OWS vault signing two chains" width="100%" /></p>
 
 The agent holds no keys. **The same OWS vault** that signs a Byreal swap on Solana also owns the
 agent's ERC-8004 identity NFT on Mantle and signs every decision record — so the identity, the
