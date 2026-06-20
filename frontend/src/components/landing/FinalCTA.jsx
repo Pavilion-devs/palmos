@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 import SectionFrame from './SectionFrame'
-import { WAITLIST_URL, CONSOLE_URL } from './landingData'
+import { CONSOLE_URL } from './landingData'
 
 export default function FinalCTA() {
   return (
@@ -14,9 +14,7 @@ export default function FinalCTA() {
       </p>
       <div className="scroll-fade-in flex flex-col items-center gap-3 sm:flex-row">
         <a
-          href={WAITLIST_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={CONSOLE_URL}
           className="group flex items-center gap-2 bg-lime px-8 py-4 text-sm font-medium tracking-tight text-black transition-colors hover:bg-lime-hover"
         >
           Get started
