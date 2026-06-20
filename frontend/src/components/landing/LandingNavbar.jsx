@@ -1,5 +1,5 @@
 import { ArrowUpRight } from 'lucide-react'
-import { navLinks, WAITLIST_URL, CONSOLE_URL } from './landingData'
+import { navLinks, CONSOLE_URL } from './landingData'
 
 export default function LandingNavbar() {
   return (
@@ -27,21 +27,7 @@ export default function LandingNavbar() {
 
         <div className="flex animate-blur-in stagger-4 items-center gap-3">
           <a
-            href="/docs"
-            className="hidden text-xs tracking-tight text-white/50 transition-colors hover:text-white sm:inline-flex"
-          >
-            Docs
-          </a>
-          <a
             href={CONSOLE_URL}
-            className="hidden text-xs tracking-tight text-white/50 transition-colors hover:text-white sm:inline-flex"
-          >
-            Console
-          </a>
-          <a
-            href={WAITLIST_URL}
-            target="_blank"
-            rel="noopener noreferrer"
             className="group flex items-center gap-1.5 bg-lime px-4 py-1.5 text-xs font-medium tracking-tight text-black shadow-[0_0_15px_rgba(198,249,78,0.2)] transition-colors hover:bg-lime-hover"
           >
             Get started
