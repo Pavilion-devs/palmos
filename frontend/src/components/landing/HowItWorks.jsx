@@ -1,6 +1,6 @@
 import { Check } from 'lucide-react'
 import SectionFrame from './SectionFrame'
-import { steps, settlementRails, WAITLIST_URL } from './landingData'
+import { steps, settlementRails, CONSOLE_URL } from './landingData'
 
 const TAG =
   'inline-flex w-fit border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-white/50 mb-6 scroll-fade-in'
@@ -27,9 +27,7 @@ export default function HowItWorks() {
             Every sensitive move escalates to you — and every decision is logged.
           </p>
           <a
-            href={WAITLIST_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={CONSOLE_URL}
             className="scroll-fade-in inline-flex items-center gap-2 bg-lime px-8 py-3.5 text-sm font-semibold tracking-tight text-black transition-colors hover:bg-lime-hover"
           >
             Get started

@@ -1,7 +1,7 @@
 import { ArrowRight, Play } from 'lucide-react'
 import SectionFrame from './SectionFrame'
 import ConsolePreview from './ConsolePreview'
-import { WAITLIST_URL, DEMO_URL } from './landingData'
+import { CONSOLE_URL, DEMO_URL } from './landingData'
 
 export default function LandingHero() {
   return (
@@ -38,9 +38,7 @@ export default function LandingHero() {
 
         <div className="animate-blur-in stagger-3 mb-24 flex flex-col items-center gap-3 sm:flex-row">
           <a
-            href={WAITLIST_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={CONSOLE_URL}
             className="group flex items-center gap-2 bg-lime px-6 py-3 text-sm font-medium tracking-tight text-black shadow-[0_0_20px_rgba(198,249,78,0.2)] transition-all hover:-translate-y-0.5 hover:bg-lime-hover hover:shadow-[0_0_30px_rgba(198,249,78,0.4)]"
           >
             Get started
