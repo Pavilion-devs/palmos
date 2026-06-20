@@ -6,13 +6,14 @@
 
 export const WAITLIST_URL = 'https://tally.so/r/aQva1q'
 export const DEMO_URL =
-  'https://x.com/olathepavilion/status/2054172802278682936?s=20'
+  'https://x.com/palmos_xyz/status/2066643994382078450'
 export const CONSOLE_URL = '/dashboard'
 
 export const navLinks = [
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Capabilities', href: '#capabilities' },
   { label: 'Why PalmOS', href: '#why' },
+  { label: 'Docs', href: '/docs' },
 ]
 
 /** Four-step product flow shown in the 2×2 "How it works" grid. */
